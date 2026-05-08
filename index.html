@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Rabbit's Poker Room</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=DM+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#040e07;--s1:#071510;--s2:#0b1f12;--s3:#0f2a18;
+  --gold:#c8a84b;--gold2:#e6c96a;--gold3:rgba(200,168,75,0.14);
+  --cream:#f0ead8;--c2:rgba(240,234,216,0.6);--c3:rgba(240,234,216,0.35);
+  --g:#1a8a6e;--g2:#4db89a;
+  --red:#9b2020;--r2:#e06060;
+  --amb:#d4a017;--a2:#f0c040;
+  --blue:#1c5fa0;--b2:#7ab0e0;
+  --purp:#5a2d82;--p2:#b47fe0;
+  --r:10px;--rs:7px;
+  --sh:0 8px 32px rgba(0,0,0,0.6);
+}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--cream);min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");pointer-events:none;z-index:0;}
+
+/* TOPBAR */
+.topbar{position:sticky;top:0;z-index:100;background:rgba(4,14,7,0.97);border-bottom:1px solid rgba(200,168,75,0.22);backdrop-filter:blur(12px);padding:0 20px;height:54px;display:flex;align-items:center;justify-content:space-between;}
+.logo-wrap{display:flex;align-items:center;gap:10px;}
+.logo-mark{width:34px;height:34px;background:var(--gold);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;box-shadow:0 0 14px rgba(200,168,75,0.38);}
+.logo-text h1{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--gold);letter-spacing:.06em;line-height:1;}
+.logo-text .sub{font-family:'DM Mono',monospace;font-size:9px;color:var(--c3);letter-spacing:.16em;text-transform:uppercase;}
+.tbr{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+.tb-btn{background:transparent;border:1px solid rgba(200,168,75,0.2);color:var(--c3);padding:5px 12px;border-radius:6px;font-size:11px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .2s;}
+.tb-btn:hover{border-color:var(--gold);color:var(--gold);}
+.tb-btn.act{background:var(--gold);color:var(--bg);border-color:var(--gold);font-weight:500;}
+.login-dot{background:rgba(77,184,154,0.12);border:1px solid rgba(77,184,154,0.28);border-radius:20px;padding:3px 10px;font-family:'DM Mono',monospace;font-size:10px;color:var(--g2);}
+
+/* NAV */
+.nav-bar{background:var(--s1);border-bottom:1px solid rgba(200,168,75,0.08);padding:0 20px;display:flex;gap:0;overflow-x:auto;position:relative;z-index:1;}
+.nb{background:transparent;border:none;color:var(--c3);padding:10px 13px;font-size:10px;font-family:'DM Mono',monospace;cursor:pointer;transition:all .2s;letter-spacing:.06em;text-transform:uppercase;border-bottom:2px solid transparent;white-space:nowrap;}
+.nb:hover{color:var(--c2);}
+.nb.active{color:var(--gold);border-bottom-color:var(--gold);}
+.nb.anb{color:var(--a2);}
+.nb.anb.active{border-bottom-color:var(--a2);}
+
+/* SCREENS */
+.screen{display:none;padding:20px;max-width:980px;margin:0 auto;position:relative;z-index:1;}
+.screen.active{display:block;}
+
+/* AUTH */
+.auth-wrap{min-height:calc(100vh - 54px);display:flex;align-items:center;justify-content:center;padding:22px;position:relative;z-index:1;}
+.auth-card{background:var(--s2);border:1px solid rgba(200,168,75,0.22);border-radius:var(--r);padding:34px;width:100%;max-width:440px;box-shadow:var(--sh);}
+.auth-logo{text-align:center;margin-bottom:22px;}
+.auth-logo .bi{font-size:40px;display:block;margin-bottom:6px;}
+.auth-logo h2{font-family:'Cormorant Garamond',serif;font-size:24px;color:var(--gold);}
+.auth-logo p{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.14em;text-transform:uppercase;margin-top:3px;}
+.auth-tabs{display:flex;background:var(--s1);border-radius:var(--rs);padding:3px;margin-bottom:20px;}
+.auth-tab{flex:1;padding:7px;border:none;background:transparent;color:var(--c3);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;border-radius:5px;transition:all .2s;}
+.auth-tab.active{background:var(--gold);color:var(--bg);font-weight:500;}
+
+/* FORMS */
+.fg{margin-bottom:12px;}
+.fg label{display:block;font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.12em;text-transform:uppercase;margin-bottom:4px;}
+.fg input,.fg select,.fg textarea{width:100%;background:rgba(0,0,0,.4);border:1px solid rgba(200,168,75,0.14);color:var(--cream);padding:8px 10px;border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;transition:border-color .2s;}
+.fg input:focus,.fg select:focus{border-color:var(--gold);}
+.fg select option{background:#071510;}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;}
+.btn{padding:8px 18px;border-radius:var(--rs);font-family:'DM Sans',sans-serif;font-weight:500;font-size:13px;cursor:pointer;transition:all .2s;border:none;white-space:nowrap;}
+.btn-gold{background:var(--gold);color:var(--bg);}
+.btn-gold:hover{background:var(--gold2);transform:translateY(-1px);}
+.btn-out{background:transparent;color:var(--cream);border:1px solid rgba(240,234,216,0.14);}
+.btn-out:hover{border-color:var(--c2);}
+.btn-red{background:rgba(155,32,32,0.18);color:var(--r2);border:1px solid rgba(155,32,32,0.32);}
+.btn-red:hover{background:var(--red);color:#fff;}
+.btn-amb{background:rgba(212,160,23,0.14);color:var(--a2);border:1px solid rgba(212,160,23,0.32);}
+.btn-amb:hover{background:var(--amb);color:var(--bg);}
+.btn-purp{background:rgba(90,45,130,0.2);color:var(--p2);border:1px solid rgba(90,45,130,0.4);}
+.btn-purp:hover{background:var(--purp);color:#fff;}
+.btn-blue{background:rgba(28,95,160,0.2);color:var(--b2);border:1px solid rgba(28,95,160,0.38);}
+.btn-blue:hover{background:var(--blue);color:#fff;}
+.btn-sm{padding:5px 11px;font-size:11px;}
+.btn-xs{padding:3px 8px;font-size:10px;}
+.row-btns{display:flex;gap:7px;align-items:center;flex-wrap:wrap;}
+
+/* SECTION HEADS */
+.sec-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(200,168,75,0.1);}
+.sec-head h2{font-family:'Cormorant Garamond',serif;font-size:22px;color:var(--gold2);}
+.sec-head .desc{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-top:3px;}
+
+/* BADGES */
+.badge{display:inline-block;background:var(--gold3);border:1px solid rgba(200,168,75,0.24);color:var(--gold);font-family:'DM Mono',monospace;font-size:9px;padding:3px 9px;border-radius:20px;letter-spacing:.05em;white-space:nowrap;}
+.badge.green{background:rgba(26,138,110,0.1);border-color:rgba(26,138,110,0.28);color:var(--g2);}
+.badge.red{background:rgba(155,32,32,0.1);border-color:rgba(155,32,32,0.28);color:var(--r2);}
+.badge.amb{background:rgba(212,160,23,0.1);border-color:rgba(212,160,23,0.28);color:var(--a2);}
+.badge.blue{background:rgba(28,95,160,0.12);border-color:rgba(28,95,160,0.28);color:var(--b2);}
+.badge.purp{background:rgba(90,45,130,0.15);border-color:rgba(90,45,130,0.35);color:var(--p2);}
+.badge.gray{background:rgba(255,255,255,0.06);border-color:rgba(255,255,255,0.14);color:var(--c2);}
+
+/* STAT CARDS */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;}
+.stat-card{background:var(--s2);border:1px solid rgba(200,168,75,0.09);border-radius:var(--rs);padding:11px 13px;}
+.sc-l{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px;}
+.sc-v{font-family:'DM Mono',monospace;font-size:18px;color:var(--gold);font-weight:500;}
+.sc-v.g{color:var(--g2);}.sc-v.a{color:var(--a2);}.sc-v.r{color:var(--r2);}.sc-v.p{color:var(--p2);}
+
+/* PANELS */
+.panel{background:var(--s2);border:1px solid rgba(200,168,75,0.09);border-radius:var(--r);padding:14px;}
+.panel h3{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold2);margin-bottom:10px;}
+
+/* ═══ PUCK SYSTEM ═══ */
+.puck-bar{background:linear-gradient(135deg,rgba(200,168,75,0.1),rgba(212,160,23,0.05));border:1px solid rgba(200,168,75,0.3);border-radius:var(--r);padding:14px;margin-bottom:14px;}
+.puck-bar-top{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;}
+.puck-bar-title{font-family:'Cormorant Garamond',serif;font-size:16px;color:var(--gold2);}
+.puck-center-display{text-align:center;padding:10px;background:rgba(0,0,0,.3);border:1px solid rgba(200,168,75,0.2);border-radius:var(--rs);margin-bottom:10px;}
+.puck-icon{font-size:32px;display:block;margin-bottom:4px;animation:spin 4s linear infinite;}
+@keyframes spin{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+.puck-icon.held{animation:none;}
+.puck-center-display .puck-val{font-family:'DM Mono',monospace;font-size:20px;color:var(--a2);font-weight:500;}
+.puck-center-display .puck-sub{font-size:10px;color:var(--c3);font-family:'DM Mono',monospace;margin-top:2px;}
+.puck-holder-row{display:flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:11px;color:var(--c2);}
+.puck-chip{width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,var(--gold),var(--amb));border:2px solid rgba(255,255,255,0.3);display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--bg);box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.puck-timer-bar{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:8px;}
+.puck-timer-fill{height:100%;background:var(--gold);border-radius:2px;transition:width 1s linear;}
+
+/* ═══ SHOT CLOCK ═══ */
+.shot-clock-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;background:rgba(0,0,0,.3);border:1px solid rgba(200,168,75,0.15);border-radius:var(--rs);padding:10px 13px;margin-bottom:11px;}
+.shot-clock-display{display:flex;align-items:center;gap:10px;}
+.clock-ring{position:relative;width:52px;height:52px;}
+.clock-ring svg{position:absolute;top:0;left:0;transform:rotate(-90deg);}
+.clock-ring .clock-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:16px;font-weight:500;color:var(--cream);}
+.clock-ring .clock-num.urgent{color:var(--r2);animation:pulse 0.5s infinite;}
+.clock-label{font-family:'DM Mono',monospace;font-size:9px;color:var(--c3);letter-spacing:.1em;text-transform:uppercase;}
+.clock-player{font-size:13px;font-weight:500;}
+.sc-controls{display:flex;gap:6px;flex-wrap:wrap;}
+
+/* ═══ PLAYER SEAT CARD (enhanced) ═══ */
+.seat-card{background:var(--s2);border:1px solid rgba(200,168,75,0.1);border-radius:var(--r);padding:12px;margin-bottom:8px;transition:all .2s;position:relative;}
+.seat-card:hover{border-color:rgba(200,168,75,0.25);}
+.seat-card.active-seat{border-color:var(--gold);box-shadow:0 0 10px rgba(200,168,75,0.15);}
+.seat-card.break-seat{border-color:var(--b2);background:rgba(28,95,160,0.08);}
+.seat-card.lost-seat{border-color:var(--r2);opacity:.55;}
+.seat-top{display:flex;align-items:center;gap:10px;}
+.seat-num-badge{width:28px;height:28px;border-radius:50%;background:rgba(200,168,75,0.12);border:1px solid rgba(200,168,75,0.3);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--gold);font-weight:600;flex-shrink:0;}
+.seat-puck-badge{position:absolute;top:8px;right:10px;background:linear-gradient(135deg,var(--gold),var(--amb));border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:11px;box-shadow:0 2px 6px rgba(0,0,0,.4);}
+.seat-info{flex:1;}
+.seat-nick{font-size:13px;font-weight:600;}
+.seat-meta{font-size:10px;color:var(--c3);font-family:'DM Mono',monospace;margin-top:2px;}
+.seat-stack{font-family:'DM Mono',monospace;font-size:14px;color:var(--gold);font-weight:500;}
+.seat-pnl{font-family:'DM Mono',monospace;font-size:11px;}
+.seat-actions{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px;}
+/* Break passes */
+.break-passes{display:flex;gap:4px;}
+.bp-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid rgba(28,95,160,0.5);}
+.bp-dot.used{background:var(--b2);border-color:var(--b2);}
+.bp-dot.active-break{background:var(--a2);border-color:var(--a2);animation:pulse 1s infinite;}
+/* Break countdown */
+.break-countdown{font-family:'DM Mono',monospace;font-size:11px;color:var(--a2);margin-left:8px;}
+.break-countdown.urgent{color:var(--r2);}
+
+/* ═══ HH DISPLAY ═══ */
+.hh-display{background:linear-gradient(135deg,#1a0a00,#0a1a08);border:2px solid rgba(212,160,23,0.45);border-radius:var(--r);padding:16px;position:relative;overflow:hidden;margin-bottom:13px;}
+.hh-display::before{content:'👑';position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:44px;opacity:.07;}
+.hh-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.hh-title{font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--a2);}
+.hh-status-dot{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,0.18);display:inline-block;margin-right:5px;}
+.hh-status-dot.on{background:var(--g2);box-shadow:0 0 7px rgba(77,184,154,0.6);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.45;}}
+.hh-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:center;}
+.hh-lbl{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px;}
+.hh-hand-val{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--cream);font-weight:600;}
+.hh-holder{font-size:10px;color:var(--a2);font-family:'DM Mono',monospace;margin-top:2px;}
+.hp-amt{font-family:'Cormorant Garamond',serif;font-size:28px;color:var(--a2);font-weight:700;text-align:center;}
+.hc-timer{font-family:'DM Mono',monospace;font-size:26px;color:var(--a2);font-weight:500;text-align:center;}
+.hc-timer.urgent{color:var(--r2);animation:pulse 1s infinite;}
+.hh-inactive{text-align:center;padding:10px;color:var(--c3);font-family:'DM Mono',monospace;font-size:11px;}
+
+/* ADMIN PANELS */
+.admin-only-panel{background:linear-gradient(135deg,rgba(155,32,32,0.06),rgba(200,168,75,0.03));border:1px solid rgba(155,32,32,0.22);border-radius:var(--r);padding:13px;margin-bottom:12px;}
+.aop-title{font-family:'DM Mono',monospace;font-size:9px;color:var(--r2);letter-spacing:.12em;text-transform:uppercase;margin-bottom:9px;display:flex;align-items:center;gap:8px;}
+.rake-bar-wrap{height:6px;background:rgba(255,255,255,0.06);border-radius:3px;overflow:hidden;margin-bottom:4px;}
+.rake-bar{height:100%;background:linear-gradient(90deg,var(--g),var(--gold));border-radius:3px;transition:width .4s;}
+.rake-bar.capped{background:linear-gradient(90deg,var(--gold),var(--r2));}
+.hand-log{background:rgba(0,0,0,.3);border:1px solid rgba(200,168,75,0.09);border-radius:var(--rs);padding:8px;max-height:100px;overflow-y:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--c2);line-height:1.6;}
+.hl-gold{color:var(--gold);}.hl-green{color:var(--g2);}.hl-amb{color:var(--a2);}.hl-red{color:var(--r2);}
+
+/* ROOMS */
+.rooms-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.room-card{background:linear-gradient(160deg,var(--s3),var(--s1));border:1px solid rgba(200,168,75,0.14);border-radius:var(--r);padding:15px;cursor:pointer;transition:all .22s;position:relative;overflow:hidden;}
+.room-card::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--gold),transparent);opacity:0;transition:opacity .3s;}
+.room-card:hover::after,.room-card.live::after{opacity:1;}
+.room-card:hover{border-color:rgba(200,168,75,0.38);transform:translateY(-2px);box-shadow:var(--sh);}
+.rname{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold2);margin-bottom:2px;}
+.rmeta{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.08em;margin-bottom:10px;}
+.seats-wrap{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:10px;}
+.seat-dot{width:21px;height:21px;border-radius:50%;border:1.5px solid rgba(200,168,75,0.17);display:flex;align-items:center;justify-content:center;font-size:9px;font-family:'DM Mono',monospace;color:var(--c3);}
+.seat-dot.taken{background:var(--gold);border-color:var(--gold);color:var(--bg);font-weight:600;}
+.seat-dot.rail-dot{background:rgba(28,95,160,0.28);border-color:rgba(28,95,160,0.45);color:var(--b2);}
+.seat-dot.puck-dot{background:linear-gradient(135deg,var(--gold),var(--amb));border-color:var(--amb);}
+.rpot{font-family:'DM Mono',monospace;font-size:12px;color:var(--gold);}
+.rpot .lbl{color:var(--c3);font-size:9px;}
+.enter-btn{width:100%;margin-top:10px;background:rgba(200,168,75,0.07);border:1px solid rgba(200,168,75,0.24);color:var(--gold);padding:7px;border-radius:var(--rs);font-family:'DM Mono',monospace;font-size:11px;cursor:pointer;transition:all .2s;}
+.enter-btn:hover{background:var(--gold);color:var(--bg);}
+
+/* SELFIE */
+.selfie-zone{border:2px dashed rgba(200,168,75,0.2);border-radius:var(--r);padding:18px;text-align:center;cursor:pointer;position:relative;transition:all .2s;}
+.selfie-zone:hover{border-color:var(--gold);background:rgba(200,168,75,0.04);}
+.selfie-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;}
+.selfie-zone img.prev{width:70px;height:70px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);display:block;margin:0 auto 6px;}
+.av-init{display:inline-flex;align-items:center;justify-content:center;border-radius:50%;background:var(--gold3);color:var(--gold);font-weight:600;vertical-align:middle;}
+
+/* CO BOX */
+.co-box{background:rgba(0,0,0,.34);border:1px solid rgba(200,168,75,0.16);border-radius:var(--r);padding:13px;margin-top:10px;}
+.co-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:13px;}
+.co-row:last-child{border-bottom:none;}
+.co-row .lbl{color:var(--c3);}
+.co-row .val{font-family:'DM Mono',monospace;}
+.co-row .val.g{color:var(--gold);font-size:15px;}
+.co-row .val.gr{color:var(--g2);}
+.co-row .val.r{color:var(--r2);}
+
+/* SMS */
+.nbox{background:rgba(11,31,18,.75);border:1px solid rgba(200,168,75,0.13);border-radius:var(--r);padding:12px;margin-top:10px;}
+.nbox-lbl{font-family:'DM Mono',monospace;font-size:9px;color:var(--c3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;}
+.sms-txt{background:rgba(0,0,0,.32);border:1px solid rgba(200,168,75,0.09);border-radius:var(--rs);padding:9px;font-family:'DM Mono',monospace;font-size:11px;color:var(--cream);line-height:1.6;white-space:pre-wrap;}
+.copy-btn{background:var(--gold3);border:1px solid rgba(200,168,75,0.24);color:var(--gold);padding:5px 12px;border-radius:var(--rs);font-family:'DM Mono',monospace;font-size:10px;cursor:pointer;transition:all .2s;margin-top:6px;}
+.copy-btn:hover{background:var(--gold);color:var(--bg);}
+
+/* PAY PILLS */
+.pay-pill{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:var(--rs);padding:8px 10px;display:flex;align-items:center;gap:8px;margin-bottom:6px;}
+.pp-name{font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;}
+.pp-handle{font-family:'DM Mono',monospace;font-size:13px;color:var(--gold);font-weight:500;}
+
+/* MODAL */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.78);backdrop-filter:blur(5px);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;}
+.modal-box{background:var(--s2);border:1px solid rgba(200,168,75,0.22);border-radius:var(--r);padding:24px;width:100%;max-width:520px;max-height:90vh;overflow-y:auto;box-shadow:var(--sh);}
+.modal-box h3{font-family:'Cormorant Garamond',serif;font-size:19px;color:var(--gold2);margin-bottom:14px;}
+.modal-close{float:right;background:transparent;border:none;color:var(--c3);font-size:20px;cursor:pointer;margin-top:-4px;}
+.modal-close:hover{color:var(--r2);}
+
+/* TIME EXTENSION ALERT */
+.time-alert{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,#0a1505,#150a00);border:2px solid var(--a2);border-radius:var(--r);padding:18px 24px;z-index:150;text-align:center;box-shadow:0 0 32px rgba(212,160,23,0.3);min-width:320px;display:none;}
+.time-alert h3{font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--a2);margin-bottom:5px;}
+.time-alert p{font-size:12px;color:var(--c2);font-family:'DM Mono',monospace;margin-bottom:13px;}
+
+/* HH PAYOUT ALERT */
+.hh-payout-alert{position:fixed;top:70px;right:20px;background:linear-gradient(135deg,#1a0e00,#0d1a08);border:2px solid var(--a2);border-radius:var(--r);padding:16px 20px;z-index:150;text-align:center;box-shadow:0 0 28px rgba(212,160,23,0.3);min-width:280px;display:none;}
+.hh-payout-alert h3{font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--a2);margin-bottom:4px;}
+
+/* MEMBER CARDS */
+.member-card{background:var(--s2);border:1px solid rgba(200,168,75,0.1);border-radius:var(--r);padding:12px;display:flex;align-items:center;gap:10px;margin-bottom:7px;}
+.member-card.blocked{border-color:rgba(155,32,32,0.35);opacity:.7;}
+.member-card.probation{border-color:rgba(212,160,23,0.4);}
+.mc-info{flex:1;}
+.mc-name{font-family:'Cormorant Garamond',serif;font-size:15px;color:var(--gold2);}
+.mc-sub{font-size:10px;color:var(--c3);font-family:'DM Mono',monospace;}
+.mc-actions{display:flex;gap:4px;flex-wrap:wrap;}
+
+/* UTILS */
+.err{color:var(--r2);font-size:11px;font-family:'DM Mono',monospace;margin-top:6px;display:none;}
+.empty{text-align:center;padding:26px 20px;color:var(--c3);font-size:11px;font-family:'DM Mono',monospace;letter-spacing:.06em;}
+.mt8{margin-top:8px;}.mt12{margin-top:12px;}.mt16{margin-top:16px;}
+.divider{height:1px;background:rgba(200,168,75,0.09);margin:12px 0;}
+.info-note{background:rgba(200,168,75,0.06);border:1px solid rgba(200,168,75,0.14);border-radius:var(--rs);padding:8px 10px;font-size:11px;color:var(--c2);font-family:'DM Mono',monospace;line-height:1.6;}
+.conf-note{background:rgba(155,32,32,0.06);border:1px solid rgba(155,32,32,0.18);border-radius:var(--rs);padding:8px 10px;font-size:11px;color:var(--r2);font-family:'DM Mono',monospace;margin-bottom:12px;}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--gold);color:var(--bg);padding:10px 16px;border-radius:var(--rs);font-family:'DM Mono',monospace;font-size:12px;font-weight:500;opacity:0;transform:translateY(8px);transition:all .3s;z-index:999;pointer-events:none;max-width:300px;}
+.toast.show{opacity:1;transform:translateY(0);}
+
+/* GUEST WALL */
+.guest-wall{background:var(--s2);border:1px solid rgba(200,168,75,0.18);border-radius:var(--r);padding:26px;text-align:center;margin-top:20px;}
+.guest-wall h3{font-family:'Cormorant Garamond',serif;font-size:20px;color:var(--gold2);margin-bottom:6px;}
+.guest-wall p{font-size:13px;color:var(--c3);margin-bottom:14px;}
+
+/* PASSWORD TOGGLE */
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-right:38px !important;}
+.pw-eye{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--c3);font-size:16px;line-height:1;padding:2px;transition:color .2s;}
+.pw-eye:hover{color:var(--gold);}
+
+@media(max-width:680px){
+  .rooms-grid,.hh-body{grid-template-columns:1fr;}
+  .stat-row{grid-template-columns:1fr 1fr;}
+  .two-col,.three-col{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo-wrap">
+    <div class="logo-mark">🐇</div>
+    <div class="logo-text"><h1>Rabbit's Poker Room</h1><span class="sub">Boston Poker Club · Private Hold'em</span></div>
+  </div>
+  <div class="tbr" id="tbr">
+    <button class="tb-btn" onclick="showAuth('login')">Log In</button>
+    <button class="tb-btn act" onclick="showAuth('register')">Register</button>
+  </div>
+</div>
+
+<!-- NAV -->
+<div class="nav-bar" id="nav-bar" style="display:none">
+  <button class="nb active" onclick="go('lobby')">Lobby</button>
+  <button class="nb" onclick="go('room')">Room</button>
+  <button class="nb" onclick="go('cashout')">Cash Out</button>
+  <button class="nb" onclick="go('tournament')">🏆 Turbo</button>
+  <button class="nb anb" id="admin-nb" style="display:none" onclick="go('admin')">⚙ Admin</button>
+</div>
+
+<!-- TIME EXTENSION ALERT -->
+<div class="time-alert" id="time-alert">
+  <h3>⏱ Time Called!</h3>
+  <p id="time-alert-msg">Player requests time extension.</p>
+  <div style="display:flex;gap:8px;justify-content:center">
+    <button class="btn btn-gold" onclick="grantTime()">✓ Grant Time</button>
+    <button class="btn btn-red" onclick="denyTime()">✕ Deny — Clock Runs</button>
+  </div>
+</div>
+
+<!-- HH PAYOUT ALERT -->
+<div class="hh-payout-alert" id="hh-payout-alert">
+  <h3>🏆 HH Clock Expired!</h3>
+  <p id="hh-alert-msg" style="font-size:11px;color:var(--c2);font-family:'DM Mono',monospace;margin:4px 0 12px"></p>
+  <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+    <button class="btn btn-gold btn-sm" onclick="confirmHHPayout()">✓ Confirm Payout</button>
+    <button class="btn btn-red btn-sm" onclick="holdHHPayout()">⏸ Hold</button>
+  </div>
+</div>
+
+<!-- ══════════ AUTH ══════════ -->
+<div id="auth-screen">
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo"><span class="bi">🐇</span><h2>Rabbit's Poker Room</h2><p>Boston Poker Club · Members Only</p></div>
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="tab-login" onclick="switchTab('login')">Log In</button>
+        <button class="auth-tab" id="tab-register" onclick="switchTab('register')">Register</button>
+        <button class="auth-tab" id="tab-host" onclick="switchTab('host')" style="color:var(--p2)">🎩 Host</button>
+      </div>
+      <div id="form-login">
+        <div class="fg"><label>Username</label><input type="text" id="li-u" placeholder="Username"/></div>
+        <div class="fg"><label>Password</label><div class="pw-wrap"><input type="password" id="li-p" placeholder="Password"/><button class="pw-eye" type="button" onclick="togglePW('li-p',this)" title="Show/hide password">👁</button></div></div>
+        <button class="btn btn-gold" style="width:100%;margin-top:4px" onclick="doLogin()">Log In →</button>
+        <div class="err" id="li-err"></div>
+        <div class="info-note mt8" style="text-align:center;font-size:10px">Guest? <a href="#" onclick="guestLobby();return false;" style="color:var(--gold)">Browse lobby →</a></div>
+      </div>
+      <div id="form-register" style="display:none">
+        <div class="two-col">
+          <div class="fg"><label>First Name *</label><input type="text" id="rg-fn" placeholder="First"/></div>
+          <div class="fg"><label>Last Name *</label><input type="text" id="rg-ln" placeholder="Last"/></div>
+        </div>
+        <div class="fg"><label>Nickname *</label><input type="text" id="rg-nick" placeholder="Table name"/></div>
+        <div class="two-col">
+          <div class="fg"><label>Phone *</label><input type="tel" id="rg-ph" placeholder="+1 617..."/></div>
+          <div class="fg"><label>Email *</label><input type="email" id="rg-em" placeholder="you@email.com"/></div>
+        </div>
+        <div class="fg"><label>Street Address</label><input type="text" id="rg-a1" placeholder="123 Main St"/></div>
+        <div class="three-col">
+          <div class="fg"><label>City</label><input type="text" id="rg-ci" placeholder="Boston"/></div>
+          <div class="fg"><label>State</label><input type="text" id="rg-st" placeholder="MA"/></div>
+          <div class="fg"><label>ZIP</label><input type="text" id="rg-zp" placeholder="02125"/></div>
+        </div>
+        <div class="fg"><label>Selfie / ID Photo *</label>
+          <div class="selfie-zone"><input type="file" accept="image/*" capture="user" onchange="prevSelfie(this,'rg-sprev','rg-sname','rg-sph','reg')"/>
+            <div id="rg-sph"><div style="font-size:22px;margin-bottom:4px">📸</div><p style="font-size:11px;color:var(--c3)">Selfie / ID photo</p></div>
+            <img id="rg-sprev" class="prev" style="display:none"/><p id="rg-sname" style="font-size:10px;color:var(--c3);display:none;margin-top:4px"></p>
+          </div>
+        </div>
+        <div class="conf-note">🔒 Personal info confidential — admin only.</div>
+        <button class="btn btn-gold" style="width:100%" onclick="submitReg()">Submit Registration →</button>
+        <div class="err" id="rg-err"></div>
+      </div>
+      <div id="form-host" style="display:none">
+        <div class="info-note" style="margin-bottom:12px"><strong style="color:var(--p2)">Host Requirements:</strong><br/>• Existing club member · 20% rake to admin · $20/month auto-charged · License + employer required</div>
+        <div class="fg"><label>Member Username *</label><input type="text" id="hst-un" placeholder="Your existing username"/></div>
+        <div class="two-col"><div class="fg"><label>Phone</label><input type="tel" id="hst-ph" placeholder="+1..."/></div><div class="fg"><label>Email</label><input type="email" id="hst-em" placeholder="email"/></div></div>
+        <div class="fg"><label>Mailing Address *</label><input type="text" id="hst-addr" placeholder="Full address"/></div>
+        <div class="fg"><label>Employer *</label><input type="text" id="hst-emp" placeholder="Employer &amp; address"/></div>
+        <div class="fg"><label>License Photo *</label>
+          <div class="selfie-zone"><input type="file" accept="image/*" onchange="prevSelfie(this,'hst-lprev','hst-lname','hst-lph','host')"/>
+            <div id="hst-lph"><div style="font-size:22px;margin-bottom:4px">🪪</div><p style="font-size:11px;color:var(--c3)">Upload license</p></div>
+            <img id="hst-lprev" class="prev" style="display:none"/><p id="hst-lname" style="font-size:10px;color:var(--c3);display:none;margin-top:4px"></p>
+          </div>
+        </div>
+        <div class="fg"><label>Credit Card (for $20/mo)</label><input type="text" id="hst-cc" placeholder="Card number" maxlength="19"/></div>
+        <div class="two-col"><div class="fg"><label>Expiry</label><input type="text" id="hst-exp" placeholder="MM/YY" maxlength="5"/></div><div class="fg"><label>CVV</label><input type="password" id="hst-cvv" placeholder="CVV" maxlength="4"/></div></div>
+        <div class="conf-note">$20/month auto-charged. 20% of session rake owed per game.</div>
+        <button class="btn btn-purp" style="width:100%" onclick="submitHostApp()">Submit Host Application →</button>
+        <div class="err" id="hst-err"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ APP ══════════ -->
+<div id="app" style="display:none">
+
+<!-- LOBBY -->
+<div class="screen active" id="screen-lobby">
+  <div class="sec-head" style="margin-top:4px">
+    <div><h2>The Rooms</h2><p class="desc">Select a room to enter</p></div>
+    <span class="badge" id="active-count">0 active</span>
+  </div>
+  <!-- HH display -->
+  <div class="hh-display" id="hh-lobby">
+    <div class="hh-top"><div class="hh-title"><span class="hh-status-dot" id="hh-dot-l"></span>High Hand Jackpot</div><span class="badge amb" id="hh-badge-l">Inactive</span></div>
+    <div id="hh-body-l" class="hh-inactive"><div style="font-size:26px;margin-bottom:4px">🃏</div><div>High Hand not active this session.</div></div>
+  </div>
+  <div class="rooms-grid">
+    <div class="room-card" id="rc-0" onclick="enterRoom(0)"><div class="rname">Rabbit's Den</div><div class="rmeta">1/3 NL Hold'em · 9 seats · Rake cap $8</div><div class="seats-wrap" id="seats-0"></div><div class="rpot">$<span id="pot-0">0</span> <span class="lbl">in play</span></div><div id="rl-lbl-0" style="font-size:9px;color:var(--b2);font-family:'DM Mono',monospace;margin-top:3px;display:none"></div><button class="enter-btn">Enter →</button></div>
+    <div class="room-card" id="rc-1" onclick="enterRoom(1)"><div class="rname">The Burrow</div><div class="rmeta">2/2 PLO · 9 seats · Rake cap $12</div><div class="seats-wrap" id="seats-1"></div><div class="rpot">$<span id="pot-1">0</span> <span class="lbl">in play</span></div><div id="rl-lbl-1" style="font-size:9px;color:var(--b2);font-family:'DM Mono',monospace;margin-top:3px;display:none"></div><button class="enter-btn">Enter →</button></div>
+    <div class="room-card" id="rc-2" onclick="enterRoom(2)"><div class="rname">High Stakes Hole</div><div class="rmeta">5/10 NL · 9 seats · Rake cap $15</div><div class="seats-wrap" id="seats-2"></div><div class="rpot">$<span id="pot-2">0</span> <span class="lbl">in play</span></div><div id="rl-lbl-2" style="font-size:9px;color:var(--b2);font-family:'DM Mono',monospace;margin-top:3px;display:none"></div><button class="enter-btn">Enter →</button></div>
+  </div>
+  <div class="panel mt16"><h3>Session</h3>
+    <div class="stat-row">
+      <div class="stat-card"><div class="sc-l">Seated</div><div class="sc-v" id="s-pl">0</div></div>
+      <div class="stat-card"><div class="sc-l">In Play</div><div class="sc-v" id="s-ip">$0</div></div>
+      <div class="stat-card"><div class="sc-l">HH Pot</div><div class="sc-v a" id="s-hh">$0</div></div>
+      <div class="stat-card"><div class="sc-l">Cash-outs</div><div class="sc-v" id="s-co">0</div></div>
+    </div>
+  </div>
+  <div class="guest-wall" id="guest-wall" style="display:none">
+    <h3>🔒 Members Only</h3><p>Register or log in to access rooms and features.</p>
+    <div style="display:flex;gap:10px;justify-content:center"><button class="btn btn-gold" onclick="showAuth('register')">Register</button><button class="btn btn-out" onclick="showAuth('login')">Log In</button></div>
+  </div>
+</div>
+
+<!-- ROOM -->
+<div class="screen" id="screen-room">
+  <div class="sec-head" style="margin-top:4px">
+    <div><h2 id="room-title">Rabbit's Den</h2><p class="desc" id="room-sub">1/3 NL Hold'em · Rake cap $8</p></div>
+    <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+      <select id="room-sel" onchange="switchRoom(this.value)" style="background:rgba(0,0,0,.4);border:1px solid rgba(200,168,75,0.2);color:var(--cream);padding:5px 9px;border-radius:6px;font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+        <option value="0">Rabbit's Den</option><option value="1">The Burrow</option><option value="2">High Stakes Hole</option>
+      </select>
+      <span class="badge green" id="room-cnt">0 players</span>
+      <span class="badge blue" id="rail-cnt">0 rail</span>
+    </div>
+  </div>
+
+  <!-- HH DISPLAY -->
+  <div class="hh-display" id="hh-room">
+    <div class="hh-top"><div class="hh-title"><span class="hh-status-dot" id="hh-dot-r"></span>High Hand Jackpot</div><span class="badge amb" id="hh-badge-r">Inactive</span></div>
+    <div id="hh-body-r" class="hh-inactive"><div style="font-size:22px;margin-bottom:4px">🃏</div><div>Not active this session.</div></div>
+  </div>
+
+  <!-- PUCK DISPLAY (all members see) -->
+  <div class="puck-bar" id="puck-bar">
+    <div class="puck-bar-top">
+      <div class="puck-bar-title">🪙 Dealer Puck — Cash Game Only</div>
+      <div style="display:flex;gap:6px;align-items:center" id="puck-admin-controls" style="display:none">
+        <select id="puck-drop-interval" style="background:rgba(0,0,0,.4);border:1px solid rgba(200,168,75,0.2);color:var(--cream);padding:4px 8px;border-radius:var(--rs);font-family:'DM Mono',monospace;font-size:11px;outline:none;">
+          <option value="5">Every 5 min</option><option value="10">Every 10 min</option><option value="30">Every 30 min</option><option value="0">Manual only</option>
+        </select>
+        <button class="btn btn-gold btn-sm" onclick="dropPuck()">Drop Puck 🪙</button>
+        <button class="btn btn-red btn-sm" onclick="resetPuck()">Reset</button>
+      </div>
+    </div>
+    <div id="puck-display">
+      <div class="puck-center-display" id="puck-center">
+        <span class="puck-icon" id="puck-icon">🪙</span>
+        <div class="puck-val" id="puck-val">$0.00</div>
+        <div class="puck-sub" id="puck-sub">Puck not active</div>
+      </div>
+      <div class="puck-timer-bar"><div class="puck-timer-fill" id="puck-timer-fill" style="width:100%"></div></div>
+    </div>
+    <div class="puck-holder-row mt8" id="puck-holder-row">
+      <div id="puck-holder-info" style="color:var(--c3);font-family:'DM Mono',monospace;font-size:11px">Puck not in play</div>
+    </div>
+  </div>
+
+  <!-- SHOT CLOCK -->
+  <div class="shot-clock-row" id="shot-clock-row">
+    <div class="shot-clock-display">
+      <div class="clock-ring" id="clock-ring">
+        <svg width="52" height="52" viewBox="0 0 52 52">
+          <circle cx="26" cy="26" r="22" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+          <circle id="clock-arc" cx="26" cy="26" r="22" fill="none" stroke="var(--gold)" stroke-width="3" stroke-linecap="round" stroke-dasharray="138.2" stroke-dashoffset="0"/>
+        </svg>
+        <div class="clock-num" id="clock-num">20</div>
+      </div>
+      <div>
+        <div class="clock-label">Action Clock</div>
+        <div class="clock-player" id="clock-player">— Idle —</div>
+      </div>
+    </div>
+    <div class="sc-controls" id="sc-admin-controls" style="display:none">
+      <select id="clock-seat-sel" style="background:rgba(0,0,0,.4);border:1px solid rgba(200,168,75,0.2);color:var(--cream);padding:4px 8px;border-radius:var(--rs);font-family:'DM Mono',monospace;font-size:11px;outline:none;"><option value="">Select seat</option></select>
+      <button class="btn btn-amb btn-sm" onclick="startClock()">▶ Start Clock</button>
+      <button class="btn btn-out btn-sm" onclick="stopClock()">■ Stop</button>
+    </div>
+    <div id="player-time-btn-wrap" style="display:none">
+      <button class="btn btn-amb btn-sm" onclick="callTime()" id="my-time-btn">⏱ Time!</button>
+    </div>
+  </div>
+
+  <!-- ADMIN RAKE PANEL -->
+  <div class="admin-only-panel" id="admin-rake-panel" style="display:none">
+    <div class="aop-title">🔒 Admin — Rake Control <span class="badge red">Hidden from players</span></div>
+    <div class="two-col" style="margin-bottom:9px">
+      <div>
+        <div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px">Hand Rake — Cap: <span id="rake-cap-display">$8</span></div>
+        <div class="rake-bar-wrap"><div class="rake-bar" id="rake-bar" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;margin-top:3px">
+          <span style="color:var(--g2)" id="rake-collected">$0.00</span>
+          <span style="color:var(--c3)">session: <span id="sess-rake">$0.00</span></span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px;align-items:flex-end">
+          <div class="fg" style="margin-bottom:0;flex:1"><label>Pot Size ($)</label><input type="number" id="pot-inp" value="0" min="0"/></div>
+          <button class="btn btn-amb btn-sm" onclick="collectRake()">Rake</button>
+          <button class="btn btn-out btn-sm" onclick="newHand()">New Hand</button>
+        </div>
+      </div>
+      <div>
+        <div class="hand-log" id="hand-log" style="height:80px">Events appear here...</div>
+        <div style="display:flex;justify-content:space-between;font-family:'DM Mono',monospace;font-size:10px;margin-top:5px;color:var(--c3)">
+          HH Pot: <span style="color:var(--a2)" id="sess-hh">$0.00</span> &nbsp;|&nbsp; Total: <span style="color:var(--gold)" id="sess-total">$0.00</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN HH CONTROL -->
+  <div class="admin-only-panel" id="admin-hh-panel" style="display:none;margin-bottom:12px">
+    <div class="aop-title">🏆 High Hand Control <span class="badge red">Admin Only</span></div>
+    <div class="two-col" style="gap:10px">
+      <div>
+        <div style="display:flex;gap:6px;align-items:center;margin-bottom:8px">
+          <button class="btn btn-sm" id="hh-toggle-btn" onclick="toggleHH()">Activate High Hand</button>
+        </div>
+        <div class="fg"><label>Min Qualifying Hand</label><input type="text" id="hh-min-hand" value="Aces Full of Kings"/></div>
+        <div class="fg"><label>Submit High Hand (Hand — Nickname)</label><input type="text" id="hh-hand-input" placeholder="e.g. Royal Flush — BigAl"/></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button class="btn btn-amb btn-sm" onclick="submitHighHand()">Set High Hand</button>
+          <button class="btn btn-red btn-sm" onclick="holdHHPayout()">⏸ Hold</button>
+          <button class="btn btn-gold btn-sm" onclick="manualHHPayout()">Pay Out Now</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.06em;text-transform:uppercase;margin-bottom:5px">HH Log</div>
+        <div class="hand-log" id="hh-log" style="max-height:80px">No high hands yet...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS (no rake) -->
+  <div class="stat-row">
+    <div class="stat-card"><div class="sc-l">Buy-ins</div><div class="sc-v" id="r-bi">$0</div></div>
+    <div class="stat-card"><div class="sc-l">In Play</div><div class="sc-v" id="r-ch">$0</div></div>
+    <div class="stat-card"><div class="sc-l">Players</div><div class="sc-v" id="r-pl">0</div></div>
+    <div class="stat-card"><div class="sc-l">On Rail</div><div class="sc-v a" id="r-rl">0</div></div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;flex-wrap:wrap;gap:7px">
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--c3);letter-spacing:.08em;text-transform:uppercase">Seated Players</div>
+    <button class="btn btn-sm btn-gold" id="add-p-btn" style="display:none" onclick="openAddModal()">+ Add Player</button>
+  </div>
+  <div id="room-list"><div class="empty">No players seated</div></div>
+
+  <!-- RAIL -->
+  <div class="mt16">
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--b2);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px">🚧 Rail — Waiting for Seat</div>
+    <div id="rail-list"><div class="empty" style="padding:12px">No one on the rail</div></div>
+  </div>
+</div>
+
+<!-- CASHOUT -->
+<div class="screen" id="screen-cashout">
+  <div class="sec-head" style="margin-top:4px"><div><h2>Cash Out</h2><p class="desc">Player receives full chip value — rake from pot</p></div></div>
+  <div class="two-col">
+    <div>
+      <div class="fg"><label>Select Player</label><select id="co-player" onchange="loadCO()"><option value="">— choose player —</option></select></div>
+      <div class="fg"><label>Final Chip Count ($)</label><input type="number" id="co-chips" placeholder="0" min="0" oninput="calcCO()"/></div>
+      <div class="info-note">Rake was collected from the pot — not deducted from player stack.</div>
+      <div class="co-box" id="co-summary" style="display:none">
+        <div class="co-row"><span class="lbl">Player</span><span class="val" id="co-pname">—</span></div>
+        <div class="co-row"><span class="lbl">Room</span><span class="val" id="co-proom">—</span></div>
+        <div class="co-row"><span class="lbl">Buy-in</span><span class="val" id="co-bi">$0</span></div>
+        <div class="co-row"><span class="lbl">Puck Value (held to end)</span><span class="val" id="co-puck">—</span></div>
+        <div class="co-row"><span class="lbl">Cash-out</span><span class="val" id="co-ch">$0</span></div>
+        <div class="co-row"><span class="lbl">Net Payout</span><span class="val g" id="co-net">$0</span></div>
+        <div class="co-row"><span class="lbl">P&amp;L</span><span class="val" id="co-pnl">$0</span></div>
+      </div>
+      <div class="nbox" id="co-sms-box" style="display:none">
+        <div class="nbox-lbl">📱 Text Message</div>
+        <div class="sms-txt" id="co-sms-txt"></div>
+        <div style="display:flex;gap:7px;margin-top:6px;flex-wrap:wrap">
+          <button class="copy-btn" onclick="copySMS('co-sms-txt')">Copy</button>
+          <a id="co-sms-link" href="#" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--gold2);border:1px solid rgba(200,168,75,0.22);padding:5px 10px;border-radius:var(--rs);text-decoration:none;" target="_blank">iMessage →</a>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="panel"><h3>Payment</h3>
+        <div class="pay-pill"><span style="font-size:17px">💸</span><div><div class="pp-name">CashApp</div><div class="pp-handle">$rabbsroom</div></div></div>
+        <div class="pay-pill"><span style="font-size:17px">💳</span><div><div class="pp-name">Venmo</div><div class="pp-handle">@Roger-Depina</div></div></div>
+      </div>
+      <div class="panel mt12"><h3>Alerts Sent</h3>
+        <ul style="font-size:10px;color:var(--c3);line-height:2.1;list-style:none;font-family:'DM Mono',monospace;">
+          <li>✉ Receipt → player email</li><li>✉ Alert → bostonpokerclub@amitureflops.com</li><li>📱 SMS → (508) 521-9176</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:13px;flex-wrap:wrap">
+    <button class="btn btn-gold" onclick="processCO()">✉ Send Receipts</button>
+    <button class="btn btn-out" onclick="go('lobby')">Cancel</button>
+  </div>
+  <div class="err" id="co-err"></div>
+</div>
+
+<!-- TOURNAMENT -->
+<div class="screen" id="screen-tournament">
+  <div id="t-setup">
+    <div class="sec-head" style="margin-top:4px"><div><h2>Turbo Tournament</h2><p class="desc">Configure &amp; launch</p></div><span class="badge amb">Setup</span></div>
+    <div class="info-note mt8" style="margin-bottom:12px">Tournament games do not use the Dealer Puck or Shot Clock. Those are cash game features only.</div>
+    <div style="max-width:500px;margin:0 auto" class="panel">
+      <h3>🏆 Settings</h3>
+      <div class="two-col">
+        <div class="fg"><label>Buy-in ($)</label><input type="number" id="t-bi" value="100" oninput="previewT()"/></div>
+        <div class="fg"><label>House Cut ($)</label><input type="number" id="t-hc" value="20" oninput="previewT()"/></div>
+        <div class="fg"><label>Rebuy ($)</label><input type="number" id="t-rb" value="100" oninput="previewT()"/></div>
+        <div class="fg"><label>House Rebuy Cut ($)</label><input type="number" id="t-rh" value="20" oninput="previewT()"/></div>
+        <div class="fg"><label>Rebuy Cut-off</label><input type="time" id="t-co" value="21:00"/></div>
+        <div class="fg"><label>Name</label><input type="text" id="t-tn" value="Rabbit's Turbo"/></div>
+      </div>
+      <div class="panel" style="margin-bottom:10px">
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--c3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:7px">Pool Preview · 50/30/20</div>
+        <div class="three-col" style="text-align:center">
+          <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥇 1st</div><div style="font-family:'DM Mono',monospace;font-size:19px;color:var(--gold)" id="pv1">$0</div></div>
+          <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥈 2nd</div><div style="font-family:'DM Mono',monospace;font-size:19px;color:#c8c8c8" id="pv2">$0</div></div>
+          <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥉 3rd</div><div style="font-family:'DM Mono',monospace;font-size:19px;color:#c87941" id="pv3">$0</div></div>
+        </div>
+        <div style="text-align:center;font-size:10px;color:var(--c3);font-family:'DM Mono',monospace;margin-top:5px">$<span id="pvpool">80</span> pool · $<span id="pvhouse">20</span> house per player</div>
+      </div>
+      <button class="btn btn-gold" style="width:100%" onclick="launchT()">Launch Tournament →</button>
+    </div>
+  </div>
+  <div id="t-live" style="display:none">
+    <div class="sec-head" style="margin-top:4px"><div><h2 id="t-live-title">Rabbit's Turbo</h2><p class="desc">In Progress</p></div><div style="display:flex;gap:7px"><span class="badge amb" id="t-phase">Rebuy Open</span><span class="badge green" id="t-pcnt">0 players</span></div></div>
+    <div style="background:rgba(0,0,0,.36);border:1px solid rgba(200,168,75,0.15);border-radius:var(--rs);padding:10px 13px;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">Rebuy Cut-off</div><div style="font-family:'DM Mono',monospace;font-size:20px;color:var(--gold)" id="t-timer">—</div></div>
+      <div style="text-align:right"><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px">Set For</div><div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--gold)" id="t-codisp">—</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="sc-l">Players</div><div class="sc-v a" id="ts-pl">0</div></div>
+      <div class="stat-card"><div class="sc-l">Prize Pool</div><div class="sc-v g" id="ts-pool">$0</div></div>
+      <div class="stat-card"><div class="sc-l">House Take</div><div class="sc-v" id="ts-house">$0</div></div>
+      <div class="stat-card"><div class="sc-l">Rebuys</div><div class="sc-v" id="ts-rb">0</div></div>
+    </div>
+    <div class="panel" style="margin-bottom:11px">
+      <div class="three-col" style="text-align:center">
+        <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥇 1st</div><div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--gold)" id="tp1">$0</div></div>
+        <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥈 2nd</div><div style="font-family:'DM Mono',monospace;font-size:22px;color:#c8c8c8" id="tp2">$0</div></div>
+        <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:2px">🥉 3rd</div><div style="font-family:'DM Mono',monospace;font-size:22px;color:#c87941" id="tp3">$0</div></div>
+      </div>
+    </div>
+    <div class="panel mt12"><h3>Add Player</h3>
+      <div class="three-col"><div class="fg" style="margin-bottom:0"><label>Name</label><input type="text" id="trn" placeholder="Name"/></div><div class="fg" style="margin-bottom:0"><label>Phone</label><input type="tel" id="trph" placeholder="+1..."/></div><div class="fg" style="margin-bottom:0"><label>Email</label><input type="email" id="trem" placeholder="email"/></div></div>
+      <button class="btn btn-gold mt8" onclick="addTPlayer()">+ Add · $<span id="t-bilbl">100</span></button>
+      <div class="err" id="t-rerr"></div>
+    </div>
+    <div class="mt12" id="t-plist"><div class="empty">No players yet</div></div>
+    <div class="divider"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-red" onclick="endT()">🏁 End &amp; Pay Out</button><button class="btn btn-out" onclick="resetT()">Reset</button></div>
+  </div>
+  <div id="t-results" style="display:none">
+    <div class="sec-head" style="margin-top:4px"><div><h2 id="t-res-title">Results</h2><p class="desc">Final payouts</p></div><span class="badge green">Complete</span></div>
+    <div id="t-res-content"></div>
+    <div class="nbox mt12" id="t-sms-box" style="display:none"><div class="nbox-lbl">📱 Winner SMS</div><div class="sms-txt" id="t-sms-txt"></div><button class="copy-btn mt8" onclick="copySMS('t-sms-txt')">Copy</button></div>
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="btn btn-gold" onclick="sendTEmails()">✉ Send Payout Emails</button><button class="btn btn-out" onclick="resetT()">New Tournament</button></div>
+  </div>
+</div>
+
+<!-- ADMIN -->
+<div class="screen" id="screen-admin">
+  <div class="sec-head" style="margin-top:4px"><div><h2>Admin Panel</h2><p class="desc">Financials · Members · Hosts · Controls</p></div><span class="badge red">Admin Only</span></div>
+  <div style="background:linear-gradient(135deg,rgba(26,138,110,0.08),rgba(200,168,75,0.04));border:1px solid rgba(26,138,110,0.25);border-radius:var(--r);padding:14px;margin-bottom:13px;">
+    <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--g2);letter-spacing:.12em;text-transform:uppercase;margin-bottom:9px;display:flex;justify-content:space-between;align-items:center">💰 Admin Financials <button class="btn btn-sm btn-gold" onclick="adminCashout()">Cash Out to Charity →</button></div>
+    <div class="stat-row" style="margin-bottom:0">
+      <div class="stat-card"><div class="sc-l">Session Rake</div><div class="sc-v g" id="a-rake">$0.00</div></div>
+      <div class="stat-card"><div class="sc-l">High Hand Pot</div><div class="sc-v a" id="a-hh">$0.00</div></div>
+      <div class="stat-card"><div class="sc-l">Tournament House</div><div class="sc-v" id="a-t-house">$0.00</div></div>
+      <div class="stat-card"><div class="sc-l">Total Available</div><div class="sc-v g" id="a-total">$0.00</div></div>
+    </div>
+    <div class="co-box mt8" id="admin-fin-detail" style="display:none">
+      <div class="co-row"><span class="lbl">Charitable Organization</span><input type="text" id="charity-name" placeholder="Organization name" style="background:transparent;border:none;border-bottom:1px solid rgba(200,168,75,0.2);color:var(--cream);outline:none;font-family:'DM Sans',sans-serif;font-size:13px;width:200px;padding:2px 4px;"/></div>
+      <div class="co-row"><span class="lbl">Amount</span><span class="val g" id="a-total-disp">$0.00</span></div>
+      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="btn btn-gold btn-sm" onclick="sendCharityEmail()">✉ Send Receipt</button><button class="btn btn-out btn-sm" onclick="document.getElementById('admin-fin-detail').style.display='none'">Cancel</button></div>
+    </div>
+  </div>
+  <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
+    <button class="btn btn-gold btn-sm" onclick="openAddModal()">+ Create Player Login</button>
+    <button class="btn btn-amb btn-sm" onclick="openPendingModal()">⏳ Pending <span id="pending-cnt">0</span></button>
+    <button class="btn btn-purp btn-sm" onclick="openHostAppsModal()">🎩 Host Apps <span id="host-app-cnt">0</span></button>
+  </div>
+  <div style="display:flex;gap:4px;margin-bottom:11px;flex-wrap:wrap">
+    <button class="btn btn-sm" id="tab-members-btn" onclick="showMemberTab('members')" style="background:var(--gold);color:var(--bg)">Members</button>
+    <button class="btn btn-sm btn-out" id="tab-hosts-btn" onclick="showMemberTab('hosts')">Hosts</button>
+    <button class="btn btn-sm btn-out" id="tab-blocked-btn" onclick="showMemberTab('blocked')">Blocked/Probation</button>
+  </div>
+  <div id="admin-list"><div class="empty">No members yet</div></div>
+</div>
+
+</div><!-- end app -->
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modal-add" style="display:none">
+  <div class="modal-box">
+    <h3><button class="modal-close" onclick="cm('modal-add')">×</button>Create Player Login</h3>
+    <div class="fg"><label>Select Pending Registration</label><select id="mod-sel" onchange="fillFromPending()"><option value="">— choose —</option></select></div>
+    <div class="two-col"><div class="fg"><label>Username *</label><input type="text" id="mod-un" placeholder="username"/></div><div class="fg"><label>Temp Password *</label><div class="pw-wrap"><input type="text" id="mod-pw" placeholder="temp password"/><button class="pw-eye" type="button" onclick="togglePW('mod-pw',this)" title="Show/hide">👁</button></div></div></div>
+    <div class="fg"><label>Assign to Room</label><select id="mod-room"><option value="0">Rabbit's Den — 1/3 NL</option><option value="1">The Burrow — 2/2 PLO</option><option value="2">High Stakes Hole — 5/10 NL</option><option value="rail">Wait on Rail</option></select></div>
+    <div class="fg"><label>Buy-in ($)</label><input type="number" id="mod-bi" value="100" min="1"/></div>
+    <div class="fg"><label>Seat</label><select id="mod-seat"><option value="">Auto</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option></select></div>
+    <div class="row-btns mt8"><button class="btn btn-gold" onclick="createLogin()">Create &amp; Seat</button><button class="btn btn-out" onclick="cm('modal-add')">Cancel</button></div>
+    <div class="err" id="mod-err"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-pending" style="display:none">
+  <div class="modal-box"><h3><button class="modal-close" onclick="cm('modal-pending')">×</button>Pending Registrations</h3><div id="pending-list"><div class="empty">None</div></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-host-apps" style="display:none">
+  <div class="modal-box"><h3><button class="modal-close" onclick="cm('modal-host-apps')">×</button>Host Applications</h3><div id="host-apps-list"><div class="empty">None</div></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-cpw" style="display:none">
+  <div class="modal-box"><h3><button class="modal-close" onclick="cm('modal-cpw')">×</button>Change Password</h3>
+    <div class="fg"><label>Current</label><div class="pw-wrap"><input type="password" id="cpw-old" placeholder="Current password"/><button class="pw-eye" type="button" onclick="togglePW('cpw-old',this)" title="Show/hide">👁</button></div></div>
+    <div class="fg"><label>New</label><div class="pw-wrap"><input type="password" id="cpw-new" placeholder="Min 6 chars"/><button class="pw-eye" type="button" onclick="togglePW('cpw-new',this)" title="Show/hide">👁</button></div></div>
+    <div class="fg"><label>Confirm</label><div class="pw-wrap"><input type="password" id="cpw-conf" placeholder="Confirm new"/><button class="pw-eye" type="button" onclick="togglePW('cpw-conf',this)" title="Show/hide">👁</button></div></div>
+    <button class="btn btn-gold" onclick="changePW()">Update</button>
+    <div class="err" id="cpw-err"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-profile" style="display:none">
+  <div class="modal-box"><h3><button class="modal-close" onclick="cm('modal-profile')">×</button>Profile <span class="badge red" style="vertical-align:middle;font-size:8px">Confidential</span></h3><div id="modal-profile-content"></div></div>
+</div>
+
+<div class="modal-overlay" id="modal-hh-payout" style="display:none">
+  <div class="modal-box"><h3><button class="modal-close" onclick="cm('modal-hh-payout')">×</button>🏆 High Hand Payout</h3>
+    <div id="modal-hh-content"></div>
+    <div class="row-btns mt12"><button class="btn btn-gold" onclick="confirmHHPayout()">✓ Confirm</button><button class="btn btn-red" onclick="holdHHPayout()">⏸ Hold</button><button class="btn btn-out" onclick="cm('modal-hh-payout')">Cancel</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════
+   CONSTANTS
+════════════════════════════════════════════ */
+const MY_EMAIL   = 'bostonpokerclub@amitureflops.com';
+const MY_PHONE   = '5085219176';
+const CASHAPP    = '$rabbsroom';
+const VENMO      = '@Roger-Depina';
+const ADMIN_UN   = 'admin';
+const ADMIN_PW   = 'rabbsroom';
+const ROOMS      = [
+  {name:"Rabbit's Den",    sub:"1/3 NL Hold'em",    rakeCap:8},
+  {name:"The Burrow",      sub:"2/2 PLO",            rakeCap:12},
+  {name:"High Stakes Hole",sub:"5/10 NL Hold'em",   rakeCap:15}
+];
+const HH_PER_POT  = 1;
+const HH_DURATION = 30*60;  // 30 min
+const CLOCK_MAX   = 20;      // 20 second action clock
+const BREAK_LIMIT = 3;       // 3 break passes per session
+const BREAK_DUR   = 5*60;    // 5 min break
+const PUCK_VALUE_EACH = 15;  // $15 straddle per post
+
+/* ════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════ */
+let currentUser = null;
+let pendingRegs = [];
+let hostApps    = [];
+let players     = [];
+let cashouts    = 0;
+let curRoom     = 0;
+let hhPot       = 0;
+let handRake    = 0;
+let sessionRake = 0;
+let tournHouse  = 0;
+let handLog     = [];
+let hhLog       = [];
+let hhState     = {active:false,minHand:'Aces Full of Kings',currentHand:null,holderNick:null,timeLeft:0,rolloverCount:0,onHold:false,timerInterval:null};
+let regSelfie   = null;
+let hostLicense = null;
+let memberTab   = 'members';
+let T           = {active:false,name:'',buyin:100,house:20,rebuy:100,rhouse:20,cutoff:null,players:[],tid:null};
+
+// PUCK STATE (cash games only)
+let PUCK = {
+  active: false,       // is a puck currently in play
+  holderId: null,      // player id holding it (null = in pot / center)
+  value: 0,            // accumulated value
+  inPot: false,        // true when dropped to center
+  postCount: 0,        // how many times it's been posted
+  autoInterval: null,  // auto-drop timer
+  autoSecs: 0,         // seconds remaining until auto-drop
+  autoTotal: 0         // total auto interval seconds
+};
+
+// SHOT CLOCK STATE
+let SC = {
+  running: false,
+  timeLeft: CLOCK_MAX,
+  interval: null,
+  seatId: null,
+  timeCalledBy: null,  // player id who called time
+  waiting: false       // waiting for host decision
+};
+
+/* ════════════════════════════════════════════
+   AUTH
+════════════════════════════════════════════ */
+function showAuth(tab){
+  document.getElementById('auth-screen').style.display='block';
+  document.getElementById('app').style.display='none';
+  document.getElementById('nav-bar').style.display='none';
+  document.getElementById('tbr').innerHTML=`<button class="tb-btn" onclick="showAuth('login')">Log In</button><button class="tb-btn act" onclick="showAuth('register')">Register</button>`;
+  switchTab(tab||'login');
+}
+function switchTab(t){
+  ['login','register','host'].forEach(x=>{
+    const f=document.getElementById('form-'+x);if(f)f.style.display=t===x?'block':'none';
+    const b=document.getElementById('tab-'+x);if(b)b.classList.toggle('active',t===x);
+  });
+}
+function guestLobby(){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('guest-wall').style.display='block';
+  document.getElementById('nav-bar').style.display='none';
+  renderLobby();renderHHDisplay();goScreen('lobby');
+}
+function doLogin(){
+  const u=gv('li-u').trim(),p=gv('li-p').trim();
+  const err=document.getElementById('li-err');err.style.display='none';
+  if(u===ADMIN_UN&&p===ADMIN_PW){loginOK({username:u,role:'admin',playerId:null});return;}
+  const pl=players.find(x=>x.username===u&&x.password===p);
+  if(!pl){showE(err,'Invalid username or password.');return;}
+  if(pl.status==='blocked'){showE(err,'Account blocked. Contact admin.');return;}
+  loginOK({username:u,role:pl.isHost?'host':'player',playerId:pl.id});
+}
+function loginOK(user){
+  currentUser=user;
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='block';
+  document.getElementById('nav-bar').style.display='flex';
+  document.getElementById('guest-wall').style.display='none';
+  document.getElementById('admin-nb').style.display=user.role==='admin'?'block':'none';
+  const pl=user.role!=='admin'?players.find(x=>x.id===user.playerId):null;
+  const nick=pl?pl.nick:user.username;
+  document.getElementById('tbr').innerHTML=`
+    <span class="login-dot">● ${user.role==='admin'?'Admin':nick}</span>
+    ${user.role!=='admin'?`<button class="tb-btn" onclick="om('modal-cpw')">Change PW</button>`:''}
+    <button class="tb-btn" onclick="logout()">Log Out</button>`;
+  renderLobby();renderHHDisplay();go('lobby');
+  toast('Welcome, '+nick+' 🐇');
+}
+function logout(){currentUser=null;stopClock();showAuth('login');}
+
+function submitReg(){
+  const fn=gv('rg-fn').trim(),ln=gv('rg-ln').trim(),nick=gv('rg-nick').trim();
+  const ph=gv('rg-ph').trim(),em=gv('rg-em').trim();
+  const a1=gv('rg-a1').trim(),ci=gv('rg-ci').trim(),st=gv('rg-st').trim(),zp=gv('rg-zp').trim();
+  const err=document.getElementById('rg-err');err.style.display='none';
+  if(!fn||!ln){showE(err,'First &amp; last name required.');return;}
+  if(!nick){showE(err,'Nickname required.');return;}
+  if(!ph||!em){showE(err,'Phone and email required.');return;}
+  if(!regSelfie){showE(err,'Selfie required.');return;}
+  pendingRegs.push({id:'P'+Date.now(),fn,ln,nick,ph,em,a1,ci,st,zp,photo:regSelfie,at:new Date().toLocaleString()});
+  regSelfie=null;
+  document.getElementById('rg-sph').style.display='block';
+  document.getElementById('rg-sprev').style.display='none';
+  document.getElementById('rg-sname').style.display='none';
+  ['rg-fn','rg-ln','rg-nick','rg-ph','rg-em','rg-a1','rg-ci','rg-st','rg-zp'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('pending-cnt').textContent=pendingRegs.length;
+  toast('✓ Registration submitted! Admin will send login.');
+  setTimeout(()=>showAuth('login'),2000);
+}
+
+function submitHostApp(){
+  const un=gv('hst-un').trim(),ph=gv('hst-ph').trim(),em=gv('hst-em').trim();
+  const addr=gv('hst-addr').trim(),emp=gv('hst-emp').trim();
+  const cc=gv('hst-cc').trim(),exp=gv('hst-exp').trim(),cvv=gv('hst-cvv').trim();
+  const err=document.getElementById('hst-err');err.style.display='none';
+  if(!un){showE(err,'Member username required.');return;}
+  if(!ph||!em){showE(err,'Phone and email required.');return;}
+  if(!addr||!emp){showE(err,'Address and employer required.');return;}
+  if(!hostLicense){showE(err,'License photo required.');return;}
+  if(!cc||!exp||!cvv){showE(err,'Credit card required for $20/mo billing.');return;}
+  hostApps.push({id:'H'+Date.now(),un,ph,em,addr,emp,license:hostLicense,cc:'****'+cc.slice(-4),exp,approved:false,at:new Date().toLocaleString()});
+  hostLicense=null;
+  document.getElementById('hst-lph').style.display='block';
+  document.getElementById('hst-lprev').style.display='none';
+  document.getElementById('hst-lname').style.display='none';
+  ['hst-un','hst-ph','hst-em','hst-addr','hst-emp','hst-cc','hst-exp','hst-cvv'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+  document.getElementById('host-app-cnt').textContent=hostApps.length;
+  toast('✓ Host application submitted!');
+  setTimeout(()=>showAuth('login'),2000);
+}
+
+/* ════════════════════════════════════════════
+   SELFIE
+════════════════════════════════════════════ */
+function prevSelfie(inp,prevId,nameId,phId,ctx){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=e=>{
+    const d=e.target.result;
+    if(ctx==='reg')regSelfie=d;
+    if(ctx==='host')hostLicense=d;
+    const ph=document.getElementById(phId);if(ph)ph.style.display='none';
+    const img=document.getElementById(prevId);if(img){img.src=d;img.style.display='block';}
+    const n=document.getElementById(nameId);if(n){n.textContent='✓ '+f.name;n.style.display='block';}
+  };r.readAsDataURL(f);
+}
+
+/* ════════════════════════════════════════════
+   NAV
+════════════════════════════════════════════ */
+function go(s){
+  goScreen(s);
+  document.querySelectorAll('.nb').forEach(b=>{
+    const map={lobby:'Lobby',room:'Room',cashout:'Cash Out',tournament:'Turbo',admin:'Admin'};
+    b.classList.toggle('active',b.textContent.trim().includes(map[s]||''));
+  });
+  if(s==='lobby'){renderLobby();renderHHDisplay();}
+  if(s==='room')renderRoom();
+  if(s==='cashout')fillCO();
+  if(s==='admin'){renderAdmin();updateAdminFin();}
+}
+function goScreen(s){document.querySelectorAll('.screen').forEach(e=>e.classList.remove('active'));const sc=document.getElementById('screen-'+s);if(sc)sc.classList.add('active');}
+function enterRoom(i){curRoom=i;document.getElementById('room-sel').value=i;go('room');}
+function switchRoom(v){curRoom=parseInt(v);renderRoom();}
+
+/* ════════════════════════════════════════════
+   PUCK SYSTEM
+   - Admin drops puck to center (into the pot)
+   - Winner of that pot keeps it
+   - When button comes to them: must post $15 straddle
+   - Value accumulates by $15 each post
+   - Can't cash puck until end of session
+   - If player cashes out early: puck passes LEFT
+════════════════════════════════════════════ */
+function dropPuck(){
+  const canControl=currentUser&&(currentUser.role==='admin'||currentUser.role==='host');
+  if(!canControl){toast('Admin/Host only.');return;}
+  PUCK.active=true;
+  PUCK.inPot=true;
+  PUCK.holderId=null;
+  if(PUCK.value===0)PUCK.value=PUCK_VALUE_EACH; // house seeds $15
+  renderPuck();
+  // Set up auto interval
+  const intervalMins=parseInt(document.getElementById('puck-drop-interval').value)||0;
+  if(intervalMins>0){
+    if(PUCK.autoInterval)clearInterval(PUCK.autoInterval);
+    PUCK.autoTotal=intervalMins*60;
+    PUCK.autoSecs=PUCK.autoTotal;
+    PUCK.autoInterval=setInterval(()=>{
+      PUCK.autoSecs--;
+      renderPuckTimer();
+      if(PUCK.autoSecs<=0){
+        PUCK.autoSecs=PUCK.autoTotal;
+        if(!PUCK.inPot){dropPuck();}
+      }
+    },1000);
+  }
+  toast('🪙 Puck dropped into the pot! ($'+PUCK.value.toFixed(2)+')');
+  renderLobby();
+}
+
+function puckWonBy(playerId){
+  const p=players.find(x=>x.id===playerId);if(!p)return;
+  PUCK.holderId=playerId;
+  PUCK.inPot=false;
+  renderPuck();
+  renderRoom();
+  toast('🪙 '+p.nick+' wins the puck! Hold until your dealer button to post $15 straddle.');
+}
+
+function postPuckStraddle(playerId){
+  const canControl=currentUser&&(currentUser.role==='admin'||currentUser.role==='host');
+  if(!canControl){toast('Admin/Host only.');return;}
+  const p=players.find(x=>x.id===playerId);if(!p)return;
+  if(PUCK.holderId!==playerId){toast('This player does not hold the puck.');return;}
+  PUCK.postCount++;
+  PUCK.value+=PUCK_VALUE_EACH; // +$15 each post
+  p.chips-=PUCK_VALUE_EACH;    // $15 goes to pot from their stack
+  PUCK.inPot=true;
+  PUCK.holderId=null;
+  handLog.push({t:'amb',m:'['+ts()+'] 🪙 PUCK STRADDLE: '+p.nick+' posted $15 · Puck value now $'+PUCK.value.toFixed(2)});
+  renderHLog();
+  renderPuck();renderRoom();renderLobby();
+  toast('🪙 '+p.nick+' posted $15 puck straddle — puck is in the pot ($'+PUCK.value.toFixed(2)+')');
+}
+
+function puckPassLeft(leavingPlayerId){
+  // find seat to the left (lower seat number, or wrap to highest)
+  const rp=players.filter(q=>q.room===curRoom&&!q.co&&!q.onRail&&q.id!==leavingPlayerId).sort((a,b)=>a.seat-b.seat);
+  const lp=players.find(x=>x.id===leavingPlayerId);
+  if(!lp||!rp.length)return;
+  // find next player to the left
+  const seatsBefore=rp.filter(x=>x.seat<lp.seat);
+  const nextHolder=seatsBefore.length?seatsBefore[seatsBefore.length-1]:rp[rp.length-1];
+  PUCK.holderId=nextHolder.id;
+  PUCK.inPot=false;
+  toast('🪙 Puck passes to '+nextHolder.nick+' (seat to the left)');
+  handLog.push({t:'amb',m:'['+ts()+'] 🪙 Puck passed to '+nextHolder.nick+' (seat '+nextHolder.seat+')'});
+  renderHLog();renderPuck();renderRoom();
+}
+
+function resetPuck(){
+  if(PUCK.autoInterval)clearInterval(PUCK.autoInterval);
+  PUCK={active:false,holderId:null,value:0,inPot:false,postCount:0,autoInterval:null,autoSecs:0,autoTotal:0};
+  renderPuck();toast('Puck reset.');
+}
+
+function renderPuck(){
+  const icon=document.getElementById('puck-icon');
+  const val=document.getElementById('puck-val');
+  const sub=document.getElementById('puck-sub');
+  const holder=document.getElementById('puck-holder-info');
+  if(!PUCK.active){
+    if(icon){icon.className='puck-icon held';icon.textContent='🪙';}
+    if(val)val.textContent='$0.00';
+    if(sub)sub.textContent='Puck not active';
+    if(holder)holder.innerHTML='<span style="color:var(--c3)">Puck not in play</span>';
+    return;
+  }
+  if(icon)icon.className='puck-icon'+(PUCK.inPot?'':' held');
+  if(val)val.textContent='$'+PUCK.value.toFixed(2);
+  if(PUCK.inPot){
+    if(sub)sub.textContent='🎯 IN THE POT — Winner takes the puck!';
+    if(holder)holder.innerHTML='<span style="color:var(--a2);font-family:\'DM Mono\',monospace;font-size:11px">Winner of this pot claims the puck · $'+PUCK.value.toFixed(2)+' value · Must straddle when dealer button reaches them</span>';
+  } else {
+    const p=players.find(x=>x.id===PUCK.holderId);
+    const nick=p?p.nick:'Unknown';
+    const seat=p?p.seat:'—';
+    if(sub)sub.textContent='Held by '+nick+' · Seat '+seat;
+    if(holder)holder.innerHTML=`<span class="puck-chip">D</span><span style="color:var(--a2)">${nick} holds the puck</span><span style="margin-left:auto;font-family:'DM Mono',monospace;font-size:10px;color:var(--c3)">Must post $15 straddle when button reaches them · Cannot cash out puck until end of session</span>`;
+  }
+  renderPuckTimer();
+}
+
+function renderPuckTimer(){
+  const fill=document.getElementById('puck-timer-fill');
+  if(!fill)return;
+  if(PUCK.autoTotal>0&&PUCK.autoSecs>0){
+    fill.style.width=((PUCK.autoSecs/PUCK.autoTotal)*100)+'%';
+  } else {
+    fill.style.width='100%';
+  }
+}
+
+/* ════════════════════════════════════════════
+   SHOT CLOCK SYSTEM
+   - Always visible, admin triggers countdown
+   - 20 seconds
+   - Player can call "Time" → host decides
+   - Players get 3 x 5-min break passes
+   - Lose seat (auto cash-out) if break exceeded with rail waiting
+════════════════════════════════════════════ */
+function startClock(){
+  const canControl=currentUser&&(currentUser.role==='admin'||currentUser.role==='host');
+  if(!canControl){toast('Admin/Host only.');return;}
+  const seatSel=document.getElementById('clock-seat-sel');
+  const seatId=seatSel?seatSel.value:'';
+  if(!seatId){toast('Select a seat first.');return;}
+  const p=players.find(x=>x.id===seatId&&!x.co);
+  if(!p){toast('Player not found.');return;}
+  SC.seatId=seatId;SC.timeLeft=CLOCK_MAX;SC.running=true;SC.waiting=false;
+  if(SC.interval)clearInterval(SC.interval);
+  SC.interval=setInterval(clockTick,1000);
+  setText('clock-player',p.nick+' · Seat '+p.seat);
+  renderClock();
+  // Show time button to player if it's their turn
+  const myBtn=document.getElementById('player-time-btn-wrap');
+  if(myBtn&&currentUser&&currentUser.playerId===seatId)myBtn.style.display='block';
+}
+
+function clockTick(){
+  if(!SC.running||SC.waiting)return;
+  SC.timeLeft--;
+  renderClock();
+  if(SC.timeLeft<=0){
+    clearInterval(SC.interval);SC.running=false;
+    toast('⚠ Clock expired for '+(players.find(x=>x.id===SC.seatId)||{nick:'Player'}).nick);
+    renderClock();
+  }
+}
+
+function stopClock(){
+  if(SC.interval)clearInterval(SC.interval);
+  SC.running=false;SC.timeLeft=CLOCK_MAX;SC.seatId=null;SC.waiting=false;
+  setText('clock-player','— Idle —');renderClock();
+}
+
+function callTime(){
+  if(!SC.running){toast('Clock is not running.');return;}
+  SC.waiting=true;
+  const p=currentUser&&currentUser.playerId?players.find(x=>x.id===currentUser.playerId):null;
+  SC.timeCalledBy=p?p.id:null;
+  document.getElementById('time-alert-msg').textContent=(p?p.nick:'A player')+' is calling time — grant extension?';
+  document.getElementById('time-alert').style.display='block';
+  toast('⏱ Time called — waiting for host decision...');
+}
+
+function grantTime(){
+  SC.waiting=false;SC.timeLeft=CLOCK_MAX;
+  document.getElementById('time-alert').style.display='none';
+  toast('✓ Time granted — 20 seconds reset');
+  renderClock();
+}
+
+function denyTime(){
+  SC.waiting=false;
+  document.getElementById('time-alert').style.display='none';
+  toast('Clock continues running...');
+  renderClock();
+}
+
+function renderClock(){
+  const num=document.getElementById('clock-num');
+  const arc=document.getElementById('clock-arc');
+  if(!num||!arc)return;
+  const t=SC.running||SC.timeLeft<CLOCK_MAX?SC.timeLeft:CLOCK_MAX;
+  num.textContent=t;
+  num.className='clock-num'+(t<=5&&SC.running?' urgent':'');
+  const pct=t/CLOCK_MAX;
+  const circ=2*Math.PI*22;
+  arc.style.strokeDashoffset=circ*(1-pct);
+  arc.style.stroke=t<=5?'var(--r2)':t<=10?'var(--a2)':'var(--gold)';
+}
+
+// BREAK SYSTEM
+function requestBreak(playerId){
+  const p=players.find(x=>x.id===playerId);if(!p)return;
+  if((p.breaksUsed||0)>=BREAK_LIMIT){toast(p.nick+' has used all 3 break passes!');return;}
+  if(p.onBreak){toast(p.nick+' is already on break.');return;}
+  p.onBreak=true;
+  p.breaksUsed=(p.breaksUsed||0)+1;
+  p.breakSecsLeft=BREAK_DUR;
+  handLog.push({t:'blue',m:'['+ts()+'] '+p.nick+' on break #'+p.breaksUsed+'/3 · 5 min'});
+  renderHLog();
+  p.breakInterval=setInterval(()=>{
+    if(!p.onBreak)return;
+    p.breakSecsLeft--;
+    renderRoom();
+    if(p.breakSecsLeft<=0){
+      clearInterval(p.breakInterval);
+      p.onBreak=false;
+      // Check if rail has players waiting
+      const railWaiting=players.filter(q=>q.onRail&&q.railRoom===p.room&&!q.co);
+      if(railWaiting.length>0&&p.breaksUsed>=BREAK_LIMIT){
+        // Player loses seat — auto cash-out
+        handLog.push({t:'red',m:'['+ts()+'] '+p.nick+' lost seat — break time exceeded with rail waiting. Auto cash-out.'});
+        renderHLog();
+        autoLoseSeat(p.id);
+      } else {
+        handLog.push({t:'green',m:'['+ts()+'] '+p.nick+' break ended — back at table'});
+        renderHLog();
+        renderRoom();
+        toast(p.nick+' break ended — please return to seat');
+      }
+    }
+  },1000);
+  renderRoom();
+  toast('⏸ '+p.nick+' on break #'+p.breaksUsed+' — 5 min · Seat held');
+}
+
+function autoLoseSeat(playerId){
+  const p=players.find(x=>x.id===playerId);if(!p)return;
+  // Puck passes left if they hold it
+  if(PUCK.holderId===playerId)puckPassLeft(playerId);
+  // Auto cash-out at current chip count
+  toast('⚠ '+p.nick+' loses seat — auto cash-out: $'+p.chips.toFixed(0));
+  p.co=true;cashouts++;
+  renderRoom();renderLobby();updateAdminFin();
+}
+
+function endBreak(playerId){
+  const p=players.find(x=>x.id===playerId);if(!p)return;
+  if(p.breakInterval)clearInterval(p.breakInterval);
+  p.onBreak=false;p.breakSecsLeft=0;
+  renderRoom();toast(p.nick+' break ended early.');
+}
+
+/* ════════════════════════════════════════════
+   RAKE — per room type cap
+════════════════════════════════════════════ */
+function getRakeCap(){return ROOMS[curRoom].rakeCap;}
+
+function collectRake(){
+  const pot=parseFloat(document.getElementById('pot-inp').value)||0;
+  if(pot<=0){toast('Enter pot size.');return;}
+  hhPot=parseFloat((hhPot+HH_PER_POT).toFixed(2));
+  const cap=getRakeCap();
+  const remaining=Math.max(0,cap-handRake);
+  const raw=pot*0.10;
+  const toRake=parseFloat(Math.min(raw,remaining).toFixed(2));
+  handRake=parseFloat((handRake+toRake).toFixed(2));
+  sessionRake=parseFloat((sessionRake+toRake).toFixed(2));
+  const t=ts();
+  if(toRake===0){
+    handLog.push({t:'amb',m:`[${t}] Cap $${cap} reached — $${HH_PER_POT} to HH. Pot:$${pot.toFixed(0)}`});
+  } else {
+    handLog.push({t:'green',m:`[${t}] Rake $${toRake.toFixed(2)} from $${pot.toFixed(0)} + $${HH_PER_POT}→HH ($${hhPot.toFixed(2)})`});
+    if(handRake>=cap)handLog.push({t:'amb',m:`[${t}] ★ Cap $${cap} reached`});
+  }
+  document.getElementById('pot-inp').value=0;
+  updateRakeDisplay();updateAdminFin();renderLobby();renderHHDisplay();
+  // Auto next hand if cap reached
+  if(handRake>=cap) handLog.push({t:'gold',m:`[${t}] Ready for next hand`});
+}
+
+function updateRakeDisplay(){
+  const cap=getRakeCap();
+  const pct=Math.min(100,(handRake/cap)*100);
+  const bar=document.getElementById('rake-bar');
+  if(bar){bar.style.width=pct+'%';bar.className='rake-bar'+(handRake>=cap?' capped':'');}
+  setText('rake-cap-display','$'+cap);
+  setText('rake-collected','$'+handRake.toFixed(2)+' / $'+cap);
+  setText('sess-rake','$'+sessionRake.toFixed(2));
+  setText('sess-hh','$'+hhPot.toFixed(2));
+  setText('sess-total','$'+(sessionRake+hhPot).toFixed(2));
+  renderHLog();
+  const rp=players.filter(p=>p.room===curRoom&&!p.co&&!p.onRail);
+  setText('r-bi','$'+rp.reduce((s,p)=>s+p.buyin+p.addons,0).toFixed(0));
+  setText('r-ch','$'+rp.reduce((s,p)=>s+p.chips,0).toFixed(0));
+}
+
+function renderHLog(){
+  const el=document.getElementById('hand-log');
+  if(!el)return;
+  el.innerHTML=handLog.slice(-14).map(l=>`<div class="${l.t?'hl-'+l.t:''}">${l.m}</div>`).join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+function newHand(){
+  handRake=0;handLog.push({t:'gold',m:'['+ts()+'] ── New Hand ──'});
+  document.getElementById('pot-inp').value=0;
+  updateRakeDisplay();toast('New hand — rake reset');
+}
+
+/* ════════════════════════════════════════════
+   HIGH HAND
+════════════════════════════════════════════ */
+const HH=hhState;
+function toggleHH(){
+  if(!HH.active){
+    HH.active=true;HH.currentHand=null;HH.holderNick=null;HH.timeLeft=0;HH.rolloverCount=0;HH.onHold=false;
+    HH.minHand=document.getElementById('hh-min-hand').value.trim()||'Aces Full of Kings';
+    document.getElementById('hh-toggle-btn').textContent='Deactivate High Hand';
+    document.getElementById('hh-toggle-btn').className='btn btn-sm btn-red';
+    hhLog=[];hhLog.push({t:'gold',m:'['+ts()+'] HH ACTIVATED · Min: '+HH.minHand});
+    renderHHLog();toast('🏆 High Hand activated!');
+  } else {
+    if(HH.timerInterval)clearInterval(HH.timerInterval);
+    HH.active=false;HH.currentHand=null;HH.holderNick=null;HH.timeLeft=0;
+    document.getElementById('hh-toggle-btn').textContent='Activate High Hand';
+    document.getElementById('hh-toggle-btn').className='btn btn-sm btn-amb';
+    hhLog.push({t:'red',m:'['+ts()+'] HH DEACTIVATED · Pot: $'+hhPot.toFixed(2)+' rolls over'});
+    renderHHLog();toast('High Hand deactivated.');
+  }
+  renderHHDisplay();
+}
+function submitHighHand(){
+  if(!HH.active){toast('Activate High Hand first.');return;}
+  const input=document.getElementById('hh-hand-input').value.trim();
+  if(!input){toast('Enter: Hand — Nickname');return;}
+  const parts=input.split('—').map(x=>x.trim());
+  HH.currentHand=parts[0]||input;HH.holderNick=parts[1]||'Unknown';HH.onHold=false;
+  if(HH.timerInterval)clearInterval(HH.timerInterval);
+  HH.timeLeft=HH_DURATION;
+  hhLog.push({t:'amb',m:'['+ts()+'] HIGH HAND: '+HH.currentHand+' by '+HH.holderNick+' · $'+hhPot.toFixed(2)+' · 30min clock'});
+  renderHHLog();
+  HH.timerInterval=setInterval(hhTick,1000);
+  document.getElementById('hh-hand-input').value='';
+  toast('🏆 High Hand: '+HH.currentHand+' by '+HH.holderNick);
+  renderHHDisplay();
+}
+function hhTick(){
+  if(!HH.active||HH.onHold)return;
+  HH.timeLeft--;renderHHDisplay();
+  if(HH.timeLeft<=0){
+    clearInterval(HH.timerInterval);
+    if(!HH.currentHand){
+      HH.rolloverCount++;HH.timeLeft=HH_DURATION;
+      hhLog.push({t:'amb',m:'['+ts()+'] ROLLOVER #'+HH.rolloverCount+' · No qualifying hand · Pot: $'+hhPot.toFixed(2)});
+      renderHHLog();HH.timerInterval=setInterval(hhTick,1000);renderHHDisplay();
+      toast('⏱ HH Rollover #'+HH.rolloverCount+' — Pot: $'+hhPot.toFixed(2));
+    } else {
+      hhLog.push({t:'green',m:'['+ts()+'] PAYOUT TIME: '+HH.currentHand+' by '+HH.holderNick+' · $'+hhPot.toFixed(2)});
+      renderHHLog();showHHPayoutAlert();
+    }
+  }
+}
+function showHHPayoutAlert(){
+  setText('hh-alert-msg',HH.holderNick+' — '+HH.currentHand+' · $'+hhPot.toFixed(2));
+  document.getElementById('hh-payout-alert').style.display='block';
+  document.getElementById('modal-hh-content').innerHTML=`<div style="background:rgba(26,138,110,0.1);border:1px solid rgba(26,138,110,0.25);border-radius:var(--rs);padding:10px;margin-bottom:10px">🏆 <strong>${HH.holderNick}</strong> wins <em>${HH.currentHand}</em><br/>Payout: <strong style="color:var(--a2)">$${hhPot.toFixed(2)}</strong></div><p style="font-size:11px;color:var(--c3);font-family:'DM Mono',monospace">30-min clock expired. Confirm payout or hold.</p>`;
+  om('modal-hh-payout');
+}
+function confirmHHPayout(){
+  const winner=HH.holderNick,amt=hhPot,hand=HH.currentHand;
+  const sms='🏆 HIGH HAND WINNER!\n'+winner+'\nHand: '+hand+'\nPayout: $'+amt.toFixed(2)+'\nCollect via CashApp '+CASHAPP+' or Venmo '+VENMO+'\nCongrats! 🐇';
+  navigator.clipboard&&navigator.clipboard.writeText(sms);
+  gmailOpen(MY_EMAIL,'🏆 HH Payout — '+winner+' · $'+amt.toFixed(2),'HIGH HAND PAYOUT\n\nWinner: '+winner+'\nHand: '+hand+'\nAmount: $'+amt.toFixed(2)+'\nDate: '+new Date().toLocaleString());
+  hhLog.push({t:'green',m:'['+ts()+'] PAID OUT $'+amt.toFixed(2)+' to '+winner});
+  hhPot=0;HH.currentHand=null;HH.holderNick=null;HH.timeLeft=HH_DURATION;HH.rolloverCount=0;HH.onHold=false;
+  renderHHLog();
+  document.getElementById('hh-payout-alert').style.display='none';
+  cm('modal-hh-payout');renderHHDisplay();renderLobby();updateAdminFin();
+  toast('✓ $'+amt.toFixed(2)+' HH paid · SMS copied!');
+  if(HH.timerInterval)clearInterval(HH.timerInterval);
+  HH.timerInterval=setInterval(hhTick,1000);
+}
+function holdHHPayout(){HH.onHold=true;document.getElementById('hh-payout-alert').style.display='none';cm('modal-hh-payout');hhLog.push({t:'red',m:'['+ts()+'] HOLD placed by admin'});renderHHLog();toast('⏸ HH payout on hold.');renderHHDisplay();}
+function manualHHPayout(){if(!HH.currentHand){toast('No current high hand.');return;}HH.onHold=false;showHHPayoutAlert();}
+function renderHHDisplay(){
+  const isOn=HH.active;
+  const mins=Math.floor(HH.timeLeft/60),secs=HH.timeLeft%60;
+  const timerStr=HH.currentHand?pad(mins)+':'+pad(secs):'—';
+  const isUrgent=HH.currentHand&&HH.timeLeft>0&&HH.timeLeft<300;
+  ['l','r'].forEach(sfx=>{
+    const body=document.getElementById('hh-body-'+sfx);
+    const badge=document.getElementById('hh-badge-'+sfx);
+    const dot=document.getElementById('hh-dot-'+sfx);
+    if(!body)return;
+    if(!isOn){
+      body.innerHTML='<div class="hh-inactive"><div style="font-size:22px;margin-bottom:4px">🃏</div><div>High Hand not active.</div></div>';
+      if(badge)badge.textContent='Inactive';if(dot)dot.className='hh-status-dot';return;
+    }
+    body.innerHTML=`<div class="hh-body">
+      <div><div class="hh-lbl">Current High Hand</div><div class="hh-hand-val">${HH.currentHand||'Awaiting qualifying hand'}</div><div class="hh-holder">${HH.holderNick?'By '+HH.holderNick:HH.rolloverCount>0?'🔄 Rollover #'+HH.rolloverCount:'Min: '+HH.minHand}</div></div>
+      <div style="text-align:center"><div class="hh-lbl">Jackpot</div><div class="hp-amt">$${hhPot.toFixed(2)}</div><div style="font-size:9px;color:rgba(212,160,23,0.55);font-family:'DM Mono',monospace;margin-top:2px">${HH.rolloverCount>0?'🔄 '+HH.rolloverCount+' rollover'+(HH.rolloverCount>1?'s':''):'$1 per pot accruing'}</div></div>
+      <div style="text-align:center"><div class="hh-lbl">${HH.onHold?'⏸ HOLD':HH.currentHand?'Time Remaining':'Status'}</div><div class="hc-timer${isUrgent?' urgent':''}">${timerStr}</div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-top:2px">${HH.currentHand?'30-min clock':HH.active?'Active — awaiting hand':'—'}</div></div>
+    </div>`;
+    if(badge)badge.textContent=HH.currentHand?'🏆 Active':'Active';
+    if(dot)dot.className='hh-status-dot on';
+  });
+  setText('s-hh','$'+hhPot.toFixed(2));updateAdminFin();
+}
+function renderHHLog(){const el=document.getElementById('hh-log');if(!el)return;el.innerHTML=hhLog.slice(-10).map(l=>`<div class="${l.t?'hl-'+l.t:''}">${l.m}</div>`).join('');el.scrollTop=el.scrollHeight;}
+
+/* ════════════════════════════════════════════
+   LOBBY
+════════════════════════════════════════════ */
+function renderLobby(){
+  const act=players.filter(p=>!p.co&&!p.onRail&&p.status!=='blocked');
+  const ar=[0,1,2].filter(r=>act.find(p=>p.room===r)).length;
+  setText('active-count',ar+' active');setText('s-pl',act.length);
+  setText('s-ip','$'+act.reduce((s,p)=>s+p.chips,0).toFixed(0));
+  setText('s-hh','$'+hhPot.toFixed(2));setText('s-co',cashouts);
+  [0,1,2].forEach(r=>{
+    const rp=act.filter(p=>p.room===r);
+    const rail=players.filter(p=>p.onRail&&p.railRoom===r&&p.status!=='blocked');
+    const el=document.getElementById('seats-'+r);if(!el)return;
+    el.innerHTML='';
+    for(let i=1;i<=9;i++){
+      const p=rp.find(x=>x.seat===i);
+      const d=document.createElement('div');
+      const isPuck=PUCK.holderId&&p&&p.id===PUCK.holderId;
+      d.className='seat-dot'+(p?' taken':'')+(isPuck?' puck-dot':'');
+      d.textContent=p?(isPuck?'🪙':p.nick[0]||i):i;
+      d.title=p?p.nick+(isPuck?' 🪙 Puck holder':''):'Seat '+i;
+      el.appendChild(d);
+    }
+    rail.slice(0,3).forEach(()=>{const d=document.createElement('div');d.className='seat-dot rail-dot';d.textContent='R';el.appendChild(d);});
+    setText('pot-'+r,rp.reduce((s,p)=>s+p.chips,0).toFixed(0));
+    document.getElementById('rc-'+r).classList.toggle('live',rp.length>0);
+    const rl=document.getElementById('rl-lbl-'+r);
+    if(rl){rl.style.display=rail.length?'block':'none';rl.textContent=rail.length+' on rail';}
+  });
+}
+
+/* ════════════════════════════════════════════
+   ROOM
+════════════════════════════════════════════ */
+function renderRoom(){
+  const isAdmin=currentUser&&currentUser.role==='admin';
+  const isHost=currentUser&&currentUser.role==='host';
+  const canControl=isAdmin||isHost;
+  const r=curRoom;
+  document.getElementById('room-title').textContent=ROOMS[r].name;
+  document.getElementById('room-sub').textContent=ROOMS[r].sub+' · Rake cap $'+ROOMS[r].rakeCap;
+  const rp=players.filter(p=>p.room===r&&!p.co&&!p.onRail&&p.status!=='blocked');
+  const rail=players.filter(p=>p.onRail&&p.railRoom===r&&p.status!=='blocked');
+  setText('room-cnt',rp.length+' player'+(rp.length!==1?'s':''));
+  setText('rail-cnt',rail.length+' rail');
+  setText('r-pl',rp.length);setText('r-rl',rail.length);
+  setText('r-bi','$'+rp.reduce((s,p)=>s+p.buyin+p.addons,0).toFixed(0));
+  setText('r-ch','$'+rp.reduce((s,p)=>s+p.chips,0).toFixed(0));
+  document.getElementById('admin-rake-panel').style.display=isAdmin?'block':'none';
+  document.getElementById('admin-hh-panel').style.display=isAdmin?'block':'none';
+  document.getElementById('add-p-btn').style.display=canControl?'inline-block':'none';
+  // Puck admin controls
+  const pac=document.getElementById('puck-admin-controls');if(pac)pac.style.display=canControl?'flex':'none';
+  // Shot clock admin controls
+  const scac=document.getElementById('sc-admin-controls');if(scac)scac.style.display=canControl?'flex':'none';
+  // Populate seat selector for shot clock
+  const seatSel=document.getElementById('clock-seat-sel');
+  if(seatSel&&canControl){
+    const prev=seatSel.value;
+    seatSel.innerHTML='<option value="">Select seat</option>';
+    rp.sort((a,b)=>a.seat-b.seat).forEach(p=>{seatSel.innerHTML+=`<option value="${p.id}">${p.seat} — ${p.nick}</option>`;});
+    if(prev)seatSel.value=prev;
+  }
+  // Show time button for logged-in player
+  const tbw=document.getElementById('player-time-btn-wrap');
+  const isMyTurn=currentUser&&currentUser.role==='player'&&SC.seatId===currentUser.playerId&&SC.running;
+  if(tbw)tbw.style.display=isMyTurn?'block':'none';
+  if(isAdmin)updateRakeDisplay();
+  renderPuck();
+  // Player seat cards
+  const el=document.getElementById('room-list');
+  if(!rp.length){el.innerHTML='<div class="empty">No players seated</div>';return;}
+  let h='';
+  rp.sort((a,b)=>a.seat-b.seat).forEach(p=>{
+    const pnl=p.chips-(p.buyin+p.addons);
+    const pnlColor=pnl>0?'var(--g2)':pnl<0?'var(--r2)':'var(--c3)';
+    const isPuck=PUCK.holderId===p.id;
+    const isOnBreak=p.onBreak;
+    const breaksUsed=p.breaksUsed||0;
+    const breaksLeft=BREAK_LIMIT-breaksUsed;
+    const av=p.photo?`<img src="${p.photo}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1.5px solid ${isPuck?'var(--gold)':'rgba(200,168,75,0.28)'};" />`:`<div class="av-init" style="width:36px;height:36px;font-size:13px;font-weight:700;${isPuck?'background:rgba(200,168,75,0.25);color:var(--gold);':''}">${(p.nick[0]||'?').toUpperCase()}</div>`;
+    const breakDotsHtml=Array.from({length:BREAK_LIMIT},(_,i)=>`<div class="bp-dot${i<breaksUsed?' used':''}${isOnBreak&&i===breaksUsed-1?' active-break':''}"></div>`).join('');
+    const breakCountdownHtml=isOnBreak?`<span class="break-countdown${p.breakSecsLeft<60?' urgent':''}">${pad(Math.floor(p.breakSecsLeft/60))}:${pad(p.breakSecsLeft%60)} break</span>`:'';
+    h+=`<div class="seat-card${p.id===SC.seatId&&SC.running?' active-seat':''}${isOnBreak?' break-seat':''}${p.status==='probation'?' probation-seat':''}">
+      ${isPuck?`<div class="seat-puck-badge" title="Puck holder — must post $15 straddle on dealer button">🪙</div>`:''}
+      <div class="seat-top">
+        ${av}
+        <div style="width:28px;height:28px;border-radius:50%;background:rgba(200,168,75,0.12);border:1px solid rgba(200,168,75,0.3);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:12px;color:var(--gold);font-weight:600;flex-shrink:0;">${p.seat}</div>
+        <div class="seat-info">
+          <div class="seat-nick">${p.nick}${p.status==='probation'?'<span class="badge amb" style="margin-left:5px;font-size:7px">Probation</span>':''}</div>
+          <div class="seat-meta">
+            <div class="break-passes">${breakDotsHtml}</div>${breakCountdownHtml}
+            ${isPuck?`<span style="color:var(--a2);font-family:'DM Mono',monospace;font-size:9px;margin-left:6px">🪙 Puck $${PUCK.value.toFixed(0)}</span>`:''}
+          </div>
+        </div>
+        <div style="text-align:right">
+          <div class="seat-stack">$${p.chips.toFixed(0)}</div>
+          <div class="seat-pnl" style="color:${pnlColor}">${(pnl>=0?'+':'')}$${Math.abs(pnl).toFixed(0)}</div>
+        </div>
+      </div>
+      <div class="seat-actions">
+        ${canControl?`<input class="cinp" type="number" value="${p.chips.toFixed(0)}" min="0" onchange="upChips('${p.id}',this.value)" style="width:80px;background:rgba(0,0,0,.4);border:1px solid rgba(200,168,75,0.14);color:var(--cream);padding:3px 7px;border-radius:5px;font-family:'DM Mono',monospace;font-size:12px;outline:none;"/>`:'' }
+        ${canControl?`<button class="btn btn-xs btn-amb" onclick="addAddon('${p.id}')">+$100</button>`:''}
+        ${isPuck&&PUCK.inPot&&canControl?`<button class="btn btn-xs" style="background:rgba(200,168,75,0.15);border:1px solid var(--gold);color:var(--gold);font-size:10px;padding:3px 8px;border-radius:5px;cursor:pointer" onclick="puckWonBy('${p.id}')">🪙 Wins Puck</button>`:''}
+        ${isPuck&&!PUCK.inPot&&canControl?`<button class="btn btn-xs btn-amb" onclick="postPuckStraddle('${p.id}')">🪙 Post $15 Straddle</button>`:''}
+        ${!isOnBreak&&breaksLeft>0?`<button class="btn btn-xs btn-blue" onclick="requestBreak('${p.id}')">⏸ Break (${breaksLeft} left)</button>`:''}
+        ${isOnBreak&&canControl?`<button class="btn btn-xs btn-out" onclick="endBreak('${p.id}')">↩ End Break</button>`:''}
+        ${canControl?`<button class="btn btn-xs btn-out" onclick="coRedir('${p.id}')">CO</button>`:''}
+        ${isAdmin?`<button class="btn btn-xs btn-red" onclick="removeP('${p.id}')">✕</button>`:''}
+      </div>
+    </div>`;
+  });
+  el.innerHTML=h;
+  // Rail
+  const rEl=document.getElementById('rail-list');
+  if(!rail.length){rEl.innerHTML='<div class="empty" style="padding:12px">No one on the rail</div>';return;}
+  let rh='';
+  rail.forEach((p,i)=>{
+    const av=p.photo?`<img src="${p.photo}" style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:1px solid rgba(28,95,160,0.35);" />`:`<div class="av-init" style="width:28px;height:28px;font-size:10px;background:rgba(28,95,160,0.18);color:var(--b2);">${(p.nick[0]||'?').toUpperCase()}</div>`;
+    rh+=`<div style="display:flex;align-items:center;gap:9px;background:var(--s2);border:1px solid rgba(28,95,160,0.18);border-radius:var(--rs);padding:8px 12px;margin-bottom:5px;">${av}<div style="font-family:'DM Mono',monospace;font-size:16px;color:rgba(28,95,160,0.5);font-weight:700;width:24px">#${i+1}</div><div style="flex:1"><div style="font-weight:500;font-size:13px">${p.nick}</div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace">${ROOMS[p.railRoom].name}</div></div>${canControl?`<button class="btn btn-xs btn-gold" onclick="seatFromRail('${p.id}')">Seat →</button>`:''}</div>`;
+  });
+  rEl.innerHTML=rh;
+}
+
+function upChips(id,v){const p=players.find(x=>x.id===id);if(p){p.chips=parseFloat(v)||0;renderRoom();renderLobby();}}
+function addAddon(id){const p=players.find(x=>x.id===id);if(p){p.addons+=100;p.chips+=100;renderRoom();renderLobby();toast(p.nick+' → +$100');}}
+function removeP(id){
+  const p=players.find(x=>x.id===id);
+  if(p&&PUCK.holderId===id)puckPassLeft(id);
+  players=players.filter(x=>x.id!==id);renderRoom();renderLobby();
+}
+function coRedir(id){fillCO(id);go('cashout');}
+function seatFromRail(id){
+  const p=players.find(x=>x.id===id);if(!p)return;
+  const rp=players.filter(q=>q.room===p.railRoom&&!q.co&&!q.onRail);
+  if(rp.length>=9){toast('Room still full.');return;}
+  let seat=null;for(let i=1;i<=9;i++){if(!rp.find(q=>q.seat===i)){seat=i;break;}}
+  if(!seat){toast('No seat.');return;}
+  p.onRail=false;p.room=p.railRoom;p.seat=seat;p.railRoom=null;
+  renderRoom();renderLobby();toast('✓ '+p.nick+' → Seat '+seat);
+}
+
+/* ════════════════════════════════════════════
+   ADD PLAYER / CREATE LOGIN
+════════════════════════════════════════════ */
+function openAddModal(){
+  const canControl=currentUser&&(currentUser.role==='admin'||currentUser.role==='host');
+  if(!canControl){toast('Admin/Host only.');return;}
+  const sel=document.getElementById('mod-sel');
+  sel.innerHTML='<option value="">— choose —</option>';
+  pendingRegs.forEach(pr=>{const o=document.createElement('option');o.value=pr.id;o.textContent=pr.nick+' — '+pr.fn+' '+pr.ln;sel.appendChild(o);});
+  om('modal-add');
+}
+function fillFromPending(){const id=gv('mod-sel');const pr=pendingRegs.find(x=>x.id===id);if(!pr)return;document.getElementById('mod-un').value=pr.nick.toLowerCase().replace(/\s+/g,'_');}
+function createLogin(){
+  const prId=gv('mod-sel'),uname=gv('mod-un').trim(),pw=gv('mod-pw').trim();
+  const room=gv('mod-room'),buyin=parseFloat(document.getElementById('mod-bi').value)||100;
+  const seatV=gv('mod-seat');
+  const err=document.getElementById('mod-err');err.style.display='none';
+  if(!uname){showE(err,'Username required.');return;}
+  if(!pw){showE(err,'Password required.');return;}
+  if(players.find(x=>x.username===uname)){showE(err,'Username taken.');return;}
+  const pr=pendingRegs.find(x=>x.id===prId);
+  const onRail=room==='rail';const roomIdx=onRail?0:parseInt(room);
+  let seat=null;
+  if(!onRail){const sn=seatV?parseInt(seatV):null;const rp=players.filter(p=>p.room===roomIdx&&!p.co&&!p.onRail);if(sn&&rp.find(p=>p.seat===sn)){showE(err,'Seat taken.');return;}if(sn)seat=sn;else{for(let i=1;i<=9;i++){if(!rp.find(p=>p.seat===i)){seat=i;break;}}}}
+  const np={id:'PL'+Date.now(),username:uname,password:pw,mustChangePw:true,fn:pr?pr.fn:'',ln:pr?pr.ln:'',nick:pr?pr.nick:uname,ph:pr?pr.ph:'',em:pr?pr.em:'',a1:pr?pr.a1:'',ci:pr?pr.ci:'',st:pr?pr.st:'',zp:pr?pr.zp:'',photo:pr?pr.photo:null,room:roomIdx,seat,buyin,chips:buyin,addons:0,co:false,onRail:onRail,railRoom:onRail?roomIdx:null,status:'active',isHost:false,breaksUsed:0,onBreak:false,breakSecsLeft:0,createdAt:new Date().toLocaleString()};
+  players.push(np);
+  if(pr)pendingRegs=pendingRegs.filter(x=>x.id!==prId);
+  document.getElementById('pending-cnt').textContent=pendingRegs.length;
+  cm('modal-add');renderLobby();renderRoom();renderAdmin();
+  if(np.em)gmailOpen(np.em,"Your Rabbit's Poker Room Login","Hi "+np.nick+",\n\nUsername: "+uname+"\nTemp Password: "+pw+"\n\nLogin at bostonpokerclub.amitureflops.com\n\nSee you at the table 🐇");
+  toast('✓ '+np.nick+' created');
+}
+
+/* ════════════════════════════════════════════
+   ADMIN
+════════════════════════════════════════════ */
+function updateAdminFin(){
+  const total=sessionRake+hhPot+tournHouse;
+  setText('a-rake','$'+sessionRake.toFixed(2));setText('a-hh','$'+hhPot.toFixed(2));
+  setText('a-t-house','$'+tournHouse.toFixed(2));setText('a-total','$'+total.toFixed(2));
+  setText('a-total-disp','$'+total.toFixed(2));
+}
+function adminCashout(){document.getElementById('admin-fin-detail').style.display='block';}
+function sendCharityEmail(){
+  const org=document.getElementById('charity-name').value.trim()||'[Organization]';
+  const total=sessionRake+hhPot+tournHouse;
+  const body='CHARITABLE DONATION\nBoston Poker Club\n══════════\n\nOrg: '+org+'\nDate: '+new Date().toLocaleString()+'\n\nSession Rake: $'+sessionRake.toFixed(2)+'\nHigh Hand: $'+hhPot.toFixed(2)+'\nTournament House: $'+tournHouse.toFixed(2)+'\nTotal: $'+total.toFixed(2)+'\n\nPaid via '+CASHAPP+' or '+VENMO;
+  gmailOpen(MY_EMAIL,'Charity Distribution — $'+total.toFixed(2),body);
+  toast('✉ Charity receipt email opened!');
+  document.getElementById('admin-fin-detail').style.display='none';
+}
+function showMemberTab(tab){
+  memberTab=tab;
+  document.getElementById('tab-members-btn').style.cssText='background:'+( tab==='members'?'var(--gold);color:var(--bg)':'transparent;color:var(--cream)')+';';
+  document.getElementById('tab-hosts-btn').style.cssText='background:'+(tab==='hosts'?'var(--p2);color:var(--bg)':'transparent;color:var(--cream)')+';';
+  document.getElementById('tab-blocked-btn').style.cssText='background:'+(tab==='blocked'?'var(--r2);color:#fff':'transparent;color:var(--cream)')+';';
+  renderAdmin();
+}
+function renderAdmin(){
+  if(!currentUser||currentUser.role!=='admin')return;
+  document.getElementById('pending-cnt').textContent=pendingRegs.length;
+  document.getElementById('host-app-cnt').textContent=hostApps.length;
+  updateAdminFin();
+  let list=[];
+  if(memberTab==='members')list=players.filter(p=>!p.isHost&&p.status!=='blocked'&&p.status!=='probation');
+  else if(memberTab==='hosts')list=players.filter(p=>p.isHost);
+  else list=players.filter(p=>p.status==='blocked'||p.status==='probation');
+  const el=document.getElementById('admin-list');
+  if(!list.length){el.innerHTML='<div class="empty">None in this category</div>';return;}
+  let h='<div style="display:grid;gap:7px;">';
+  list.forEach(p=>{
+    const status=p.co?'Cashed Out':p.onRail?'On Rail':p.status==='blocked'?'Blocked':p.status==='probation'?'Probation':p.isHost?'Host':'Seated';
+    const scls=p.status==='blocked'?'red':p.status==='probation'?'amb':p.isHost?'purp':p.co?'gray':'green';
+    const av=p.photo?`<img src="${p.photo}" style="width:42px;height:42px;border-radius:50%;object-fit:cover;border:2px solid rgba(200,168,75,0.28);flex-shrink:0;" />`:`<div class="av-init" style="width:42px;height:42px;font-size:15px;font-weight:700;flex-shrink:0;">${(p.nick[0]||'?').toUpperCase()}</div>`;
+    h+=`<div class="member-card${p.status==='blocked'?' blocked':p.status==='probation'?' probation':''}">${av}<div class="mc-info"><div class="mc-name">${p.nick} <span style="font-size:10px;color:var(--c3);font-family:'DM Mono',monospace">@${p.username}</span></div><div class="mc-sub">${ROOMS[p.room]?ROOMS[p.room].name:''} · Seat ${p.seat||'—'} · $${p.chips.toFixed(0)} · Breaks: ${p.breaksUsed||0}/${BREAK_LIMIT}</div></div><span class="badge ${scls}">${status}</span><div class="mc-actions">
+      <button class="btn btn-xs btn-gold" onclick="viewProfile('${p.id}')">Profile</button>
+      ${p.status!=='blocked'?`<button class="btn btn-xs btn-red" onclick="setStatus('${p.id}','blocked')">Block</button>`:`<button class="btn btn-xs btn-amb" onclick="setStatus('${p.id}','active')">Unblock</button>`}
+      ${p.status!=='probation'?`<button class="btn btn-xs btn-amb" onclick="setStatus('${p.id}','probation')">Probation</button>`:`<button class="btn btn-xs btn-gold" onclick="setStatus('${p.id}','active')">Remove Prob.</button>`}
+      ${p.isHost?`<button class="btn btn-xs btn-red" onclick="cancelHostSub('${p.id}')">Cancel Sub</button>`:''}
+      <button class="btn btn-xs btn-red" onclick="removeP('${p.id}');renderAdmin()">Remove</button>
+    </div></div>`;
+  });
+  el.innerHTML=h+'</div>';
+}
+function setStatus(id,status){const p=players.find(x=>x.id===id);if(!p)return;p.status=status;renderAdmin();renderRoom();renderLobby();toast('✓ '+p.nick+' → '+status);}
+function cancelHostSub(id){const p=players.find(x=>x.id===id);if(!p)return;p.isHost=false;p.status='active';toast('Host sub cancelled: '+p.nick);renderAdmin();}
+function viewProfile(id){
+  const p=players.find(x=>x.id===id);if(!p)return;
+  const av=p.photo?`<img src="${p.photo}" style="width:68px;height:68px;border-radius:50%;object-fit:cover;border:2px solid var(--gold);" />`:`<div class="av-init" style="width:68px;height:68px;font-size:22px;font-weight:700;">${(p.nick[0]||'?').toUpperCase()}</div>`;
+  document.getElementById('modal-profile-content').innerHTML=`<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:12px">${av}<div><div style="font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--gold2)">${p.nick}</div><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--c3)">@${p.username}</div><div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap"><span class="badge ${p.status==='blocked'?'red':p.status==='probation'?'amb':'green'}">${p.status||'active'}</span>${p.isHost?'<span class="badge purp">Host</span>':''}</div></div></div>
+  <div class="conf-note">🔒 CONFIDENTIAL — Admin only</div>
+  <div class="two-col" style="gap:8px">
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Full Name</div><div style="font-size:13px">${p.fn} ${p.ln}</div></div>
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Phone</div><div style="font-size:13px;font-family:'DM Mono',monospace">${p.ph}</div></div>
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Email</div><div style="font-size:13px;font-family:'DM Mono',monospace">${p.em}</div></div>
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Address</div><div style="font-size:12px">${p.a1||'—'} ${p.ci?p.ci+', '+p.st+' '+p.zp:''}</div></div>
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Stack</div><div style="font-family:'DM Mono',monospace;font-size:13px">$${p.chips.toFixed(0)}</div></div>
+    <div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px">Breaks Used</div><div style="font-family:'DM Mono',monospace;font-size:13px">${p.breaksUsed||0} / ${BREAK_LIMIT}</div></div>
+  </div>
+  <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
+    ${p.status!=='blocked'?`<button class="btn btn-xs btn-red" onclick="setStatus('${p.id}','blocked');cm('modal-profile')">Block</button>`:`<button class="btn btn-xs btn-amb" onclick="setStatus('${p.id}','active');cm('modal-profile')">Unblock</button>`}
+    ${p.status!=='probation'?`<button class="btn btn-xs btn-amb" onclick="setStatus('${p.id}','probation');cm('modal-profile')">Probation</button>`:`<button class="btn btn-xs btn-gold" onclick="setStatus('${p.id}','active');cm('modal-profile')">Remove Prob.</button>`}
+  </div>`;
+  om('modal-profile');
+}
+function openPendingModal(){
+  const el=document.getElementById('pending-list');
+  if(!pendingRegs.length){el.innerHTML='<div class="empty">None</div>';}
+  else{let h='';pendingRegs.forEach(pr=>{const av=pr.photo?`<img src="${pr.photo}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid rgba(200,168,75,0.28);" />`:`<div class="av-init" style="width:34px;height:34px;font-size:12px;">${(pr.nick[0]||'?').toUpperCase()}</div>`;h+=`<div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--s1);border:1px solid rgba(200,168,75,0.09);border-radius:var(--rs);margin-bottom:5px;">${av}<div style="flex:1"><div style="font-weight:500">${pr.nick}</div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace">${pr.fn} ${pr.ln} · ${pr.ph} · ${pr.at}</div></div><button class="btn btn-xs btn-gold" onclick="cm('modal-pending');openAddModal()">Create Login</button></div>`;});el.innerHTML=h;}
+  om('modal-pending');
+}
+function openHostAppsModal(){
+  const el=document.getElementById('host-apps-list');
+  if(!hostApps.length){el.innerHTML='<div class="empty">None</div>';}
+  else{let h='';hostApps.forEach(app=>{h+=`<div style="background:var(--s1);border:1px solid rgba(90,45,130,0.2);border-radius:var(--rs);padding:10px;margin-bottom:7px;"><div style="display:flex;align-items:center;gap:7px;margin-bottom:6px;">${app.license?`<img src="${app.license}" style="width:34px;height:22px;object-fit:cover;border-radius:3px;border:1px solid rgba(90,45,130,0.4);" />`:'🪪'}<div><div style="font-weight:500">${app.un}</div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace">${app.ph} · ${app.em}</div></div><span class="badge purp" style="margin-left:auto">$20/mo</span></div><div style="font-size:9px;color:var(--c3);font-family:'DM Mono',monospace;margin-bottom:7px">Addr: ${app.addr} · Employer: ${app.emp} · Card: ${app.cc}</div><div style="display:flex;gap:6px"><button class="btn btn-xs btn-purp" onclick="approveHost('${app.id}')">✓ Approve</button><button class="btn btn-xs btn-red" onclick="denyHost('${app.id}')">✕ Deny</button></div></div>`;});el.innerHTML=h;}
+  om('modal-host-apps');
+}
+function approveHost(id){
+  const app=hostApps.find(x=>x.id===id);if(!app)return;
+  const pl=players.find(x=>x.username===app.un);
+  if(pl){pl.isHost=true;pl.status='active';}
+  hostApps=hostApps.filter(x=>x.id!==id);
+  document.getElementById('host-app-cnt').textContent=hostApps.length;
+  if(pl&&pl.em)gmailOpen(pl.em,'🎩 Host Application Approved','Congrats '+pl.nick+'!\n\nYour Visiting Host application is approved.\n20% of game rakes owed to admin per session.\n$20/month charged to card on file.\n\nSee you at the table! 🐇');
+  cm('modal-host-apps');renderAdmin();toast('✓ Host approved: '+app.un);
+}
+function denyHost(id){hostApps=hostApps.filter(x=>x.id!==id);document.getElementById('host-app-cnt').textContent=hostApps.length;renderAdmin();toast('Host application denied.');}
+
+/* ════════════════════════════════════════════
+   CHANGE PASSWORD
+════════════════════════════════════════════ */
+function changePW(){
+  if(!currentUser||currentUser.role==='admin')return;
+  const old=gv('cpw-old'),nw=gv('cpw-new'),conf=gv('cpw-conf');
+  const err=document.getElementById('cpw-err');err.style.display='none';
+  const pl=players.find(x=>x.id===currentUser.playerId);
+  if(!pl){showE(err,'Not found.');return;}
+  if(pl.password!==old){showE(err,'Current password incorrect.');return;}
+  if(nw.length<6){showE(err,'Min 6 characters.');return;}
+  if(nw!==conf){showE(err,'Passwords do not match.');return;}
+  pl.password=nw;pl.mustChangePw=false;cm('modal-cpw');toast('✓ Password updated!');
+}
+
+/* ════════════════════════════════════════════
+   CASHOUT
+════════════════════════════════════════════ */
+function fillCO(selId){
+  const sel=document.getElementById('co-player');
+  sel.innerHTML='<option value="">— choose player —</option>';
+  players.filter(p=>!p.co&&!p.onRail&&p.status!=='blocked').forEach(p=>{
+    const o=document.createElement('option');o.value=p.id;
+    o.textContent=p.nick+' ('+ROOMS[p.room].name+') · $'+p.chips.toFixed(0)+(PUCK.holderId===p.id?' 🪙':'');
+    sel.appendChild(o);
+  });
+  if(selId){sel.value=selId;loadCO();}
+}
+function loadCO(){
+  const id=gv('co-player'),p=players.find(x=>x.id===id);
+  if(!p){document.getElementById('co-summary').style.display='none';document.getElementById('co-sms-box').style.display='none';return;}
+  document.getElementById('co-chips').value=p.chips.toFixed(0);
+  document.getElementById('co-summary').style.display='block';
+  setText('co-pname',p.nick);setText('co-proom',ROOMS[p.room].name);
+  calcCO();
+}
+function calcCO(){
+  const id=gv('co-player'),p=players.find(x=>x.id===id);if(!p)return;
+  const chips=parseFloat(gv('co-chips'))||0;
+  const buyin=p.buyin+p.addons,pnl=chips-buyin;
+  const hasPuck=PUCK.holderId===p.id;
+  setText('co-bi','$'+buyin.toFixed(0));
+  setText('co-ch','$'+chips.toFixed(2));
+  setText('co-net','$'+chips.toFixed(2));
+  setText('co-puck',hasPuck?'$'+PUCK.value.toFixed(2)+' (paid at session end)':'N/A');
+  const pnlEl=document.getElementById('co-pnl');
+  pnlEl.textContent=(pnl>=0?'+':'')+pnl.toFixed(2);
+  pnlEl.className='val '+(pnl>=0?'gr':'r');
+  // If they hold puck and cashing out early — pass puck left
+  if(hasPuck){
+    document.getElementById('co-puck').style.color='var(--a2)';
+  }
+  const sms=['Hey '+p.nick+'! 🃏 Rabbit\'s Poker Room','─────────────','Room: '+ROOMS[p.room].name,'Buy-in: $'+buyin.toFixed(0),'Cash-out: $'+chips.toFixed(2),'P&L: '+(pnl>=0?'+':'')+pnl.toFixed(2),hasPuck?'Puck ($'+PUCK.value.toFixed(2)+') paid at session end':'','─────────────','Pay: CashApp '+CASHAPP,'or Venmo: '+VENMO,'GG! Come back soon 🐇'].filter(x=>x!=='').join('\n');
+  document.getElementById('co-sms-txt').textContent=sms;
+  document.getElementById('co-sms-box').style.display='block';
+  document.getElementById('co-sms-link').href='sms:'+(p.ph||'')+'?body='+encodeURIComponent(sms);
+}
+function processCO(){
+  const id=gv('co-player'),p=players.find(x=>x.id===id);
+  const err=document.getElementById('co-err');err.style.display='none';
+  if(!p){showE(err,'Select a player.');return;}
+  const chips=parseFloat(gv('co-chips'))||0,buyin=p.buyin+p.addons,pnl=chips-buyin,date=new Date().toLocaleString();
+  const hasPuck=PUCK.holderId===p.id;
+  // If puck holder leaving early — pass puck left
+  if(hasPuck)puckPassLeft(p.id);
+  const rec="RABBIT'S POKER ROOM — CASH-OUT\n"+MY_EMAIL+"\n══════════\n\nPlayer: "+p.nick+"\nRoom: "+ROOMS[p.room].name+"\nDate: "+date+"\nBuy-in: $"+buyin.toFixed(2)+"\nCash-out: $"+chips.toFixed(2)+"\nP&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+(hasPuck?"\n\nNote: Puck value ($"+PUCK.value.toFixed(2)+") passed to next player — paid at session end.":"")+"\n\nRake collected from pot. Pay: "+CASHAPP+" · "+VENMO;
+  if(p.em)gmailOpen(p.em,"Rabbit's Poker Room — Cash-Out",rec);
+  setTimeout(()=>gmailOpen(MY_EMAIL,"🐇 Cash-Out — "+p.nick+" · $"+chips.toFixed(2),"ALERT\n\n"+p.nick+" cashed out $"+chips.toFixed(2)+"\nP&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+(hasPuck?"\n⚠ Was puck holder — puck passed left":"")+"\n\n"+rec),600);
+  setTimeout(()=>window.open("sms:+1"+MY_PHONE+"?body="+encodeURIComponent("🐇 CO: "+p.nick+" $"+chips.toFixed(2)+(hasPuck?" 🪙→passed left":"")),  "_blank"),1200);
+  p.co=true;cashouts++;
+  if(p.breakInterval)clearInterval(p.breakInterval);
+  renderLobby();updateAdminFin();
+  toast('✓ '+p.nick+' cashed out'+(hasPuck?' · Puck passed left':''));
+}
+
+/* ════════════════════════════════════════════
+   TOURNAMENT
+════════════════════════════════════════════ */
+function previewT(){const bi=parseFloat(document.getElementById('t-bi').value)||100;const hc=parseFloat(document.getElementById('t-hc').value)||20;const pp=Math.max(0,bi-hc);setText('pvpool',pp.toFixed(0));setText('pvhouse',hc.toFixed(0));setText('pv1','$'+(pp*.5).toFixed(0));setText('pv2','$'+(pp*.3).toFixed(0));setText('pv3','$'+(pp*.2).toFixed(0));}
+function launchT(){const bi=parseFloat(document.getElementById('t-bi').value)||100;const hc=parseFloat(document.getElementById('t-hc').value)||20;const rb=parseFloat(document.getElementById('t-rb').value)||100;const rh=parseFloat(document.getElementById('t-rh').value)||20;const cov=document.getElementById('t-co').value;const nm=document.getElementById('t-tn').value.trim()||"Rabbit's Turbo";let cutoff=null;if(cov){const[h,m]=cov.split(':').map(Number),now=new Date();cutoff=new Date(now);cutoff.setHours(h,m,0,0);if(cutoff<now)cutoff.setDate(cutoff.getDate()+1);}T={active:true,name:nm,buyin:bi,house:hc,rebuy:rb,rhouse:rh,cutoff,players:[],tid:null};setText('t-bilbl',bi);setText('t-live-title',nm);setText('t-codisp',cov||'No cut-off');document.getElementById('t-setup').style.display='none';document.getElementById('t-live').style.display='block';document.getElementById('t-results').style.display='none';if(T.tid)clearInterval(T.tid);T.tid=setInterval(tickT,1000);tickT();renderTPlayers();toast('🏆 '+nm+' launched!');}
+function tickT(){if(!T.active||!T.cutoff)return;const diff=T.cutoff-new Date(),el=document.getElementById('t-timer'),badge=document.getElementById('t-phase');if(!el)return;if(diff<=0){el.textContent='CLOSED';el.style.color='var(--r2)';if(badge){badge.textContent='Rebuy Closed';badge.className='badge red';}}else{const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000),s=Math.floor((diff%60000)/1000);el.textContent=(h?h+'h ':'')+pad(m)+'m '+pad(s)+'s';el.style.color='var(--gold)';}}
+const canRebuy=()=>!T.cutoff||new Date()<T.cutoff;
+function addTPlayer(){const nm=gv('trn').trim(),ph=gv('trph').trim(),em=gv('trem').trim();const err=document.getElementById('t-rerr');err.style.display='none';if(!nm){showE(err,'Name required.');return;}T.players.push({id:Date.now(),name:nm,phone:ph,email:em,buyin:T.buyin,rebuys:0,pool:T.buyin-T.house,house:T.house,place:null,out:false});document.getElementById('trn').value='';document.getElementById('trph').value='';document.getElementById('trem').value='';renderTPlayers();toast('✓ '+nm+' registered');}
+function addRebuy(id){if(!canRebuy()){toast('⛔ Rebuy closed.');return;}const p=T.players.find(x=>x.id===id);if(p){p.rebuys++;p.pool+=T.rebuy-T.rhouse;p.house+=T.rhouse;renderTPlayers();toast(p.name+' → Rebuy #'+p.rebuys);}}
+function toggleOut(id){const p=T.players.find(x=>x.id===id);if(p){p.out=!p.out;renderTPlayers();}}
+function setPlace(id,pl){T.players.forEach(p=>{if(p.place===pl)p.place=null;});const p=T.players.find(x=>x.id===id);if(p)p.place=pl;renderTPlayers();}
+function getPool(){return T.players.reduce((s,p)=>s+p.pool,0);}
+function renderTPlayers(){const pool=getPool(),house=T.players.reduce((s,p)=>s+p.house,0),rb=T.players.reduce((s,p)=>s+p.rebuys,0);setText('ts-pl',T.players.length);setText('ts-pool','$'+pool.toFixed(0));setText('ts-house','$'+house.toFixed(0));setText('ts-rb',rb);setText('t-pcnt',T.players.length+' player'+(T.players.length!==1?'s':''));setText('tp1','$'+(pool*.5).toFixed(0));setText('tp2','$'+(pool*.3).toFixed(0));setText('tp3','$'+(pool*.2).toFixed(0));tournHouse=house;updateAdminFin();const el=document.getElementById('t-plist');if(!T.players.length){el.innerHTML='<div class="empty">No players yet</div>';return;}let h='';T.players.forEach((p,i)=>{const ti=p.buyin+p.rebuys*T.rebuy;h+=`<div style="display:flex;align-items:center;gap:7px;padding:7px 10px;background:rgba(0,0,0,.17);border:1px solid rgba(200,168,75,0.07);border-radius:var(--rs);margin-bottom:5px;${p.out?'opacity:.35':''}"><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--c3);width:18px">${i+1}</div><div style="flex:1;font-size:13px;${p.out?'text-decoration:line-through':''}">${p.name}</div><div style="font-family:'DM Mono',monospace;font-size:10px;color:var(--c3)">$${ti.toFixed(0)}${p.rebuys?' ('+p.rebuys+'R)':''}</div><div style="display:flex;gap:3px">${canRebuy()?`<button class="btn btn-xs btn-amb" onclick="addRebuy(${p.id})">Rebuy</button>`:''}<button class="btn btn-xs ${p.out?'btn-gold':'btn-red'}" onclick="toggleOut(${p.id})">${p.out?'In':'Out'}</button><button class="btn btn-xs ${p.place===1?'btn-gold':'btn-out'}" onclick="setPlace(${p.id},1)">🥇</button><button class="btn btn-xs ${p.place===2?'btn-amb':'btn-out'}" onclick="setPlace(${p.id},2)">🥈</button><button class="btn btn-xs ${p.place===3?'btn-red':'btn-out'}" onclick="setPlace(${p.id},3)">🥉</button></div></div>`;});el.innerHTML=h;}
+function endT(){const pool=getPool(),p1=T.players.find(x=>x.place===1),p2=T.players.find(x=>x.place===2),p3=T.players.find(x=>x.place===3);if(!p1&&!p2&&!p3){toast('⚠ Assign placements.');return;}clearInterval(T.tid);const pay1=pool*.5,pay2=pool*.3,pay3=pool*.2,date=new Date().toLocaleString(),house=T.players.reduce((s,p)=>s+p.house,0);let html=`<div style="background:var(--s2);border:1px solid rgba(200,168,75,0.18);border-radius:var(--r);padding:13px;margin-bottom:11px;"><div style="font-family:'Cormorant Garamond',serif;font-size:17px;color:var(--gold2)">${T.name} — Results</div><div style="font-size:10px;color:var(--c3);font-family:'DM Mono',monospace;margin-top:2px">${date} · ${T.players.length} players · $${pool.toFixed(0)} pool</div></div>`;[[p1,pay1,'🥇'],[p2,pay2,'🥈'],[p3,pay3,'🥉']].forEach(([p,pay,lbl])=>{if(!p)return;const ti=p.buyin+p.rebuys*T.rebuy,pnl=pay-ti;html+=`<div style="display:flex;align-items:center;gap:9px;padding:9px;background:var(--s2);border:1px solid rgba(200,168,75,0.1);border-radius:var(--rs);margin-bottom:6px;"><div style="font-size:18px">${lbl}</div><div style="flex:1"><div style="font-weight:500;font-size:13px">${p.name}</div><div style="font-size:10px;color:var(--c3);font-family:'DM Mono',monospace">In: $${ti.toFixed(0)} · P&L: ${pnl>=0?'+':''}$${pnl.toFixed(0)}</div></div><div style="font-family:'DM Mono',monospace;font-size:16px;color:var(--gold);font-weight:600">$${pay.toFixed(0)}</div></div>`;});document.getElementById('t-res-content').innerHTML=html;let sms=['🏆 '+T.name,'─────────'];if(p1)sms.push('🥇 '+p1.name+' — $'+pay1.toFixed(0));if(p2)sms.push('🥈 '+p2.name+' — $'+pay2.toFixed(0));if(p3)sms.push('🥉 '+p3.name+' — $'+pay3.toFixed(0));sms.push('Pool: $'+pool.toFixed(0),'Pay: '+CASHAPP+' or '+VENMO,'GG 🐇');document.getElementById('t-sms-txt').textContent=sms.join('\n');document.getElementById('t-sms-box').style.display='block';setText('t-res-title',T.name+' — Results');document.getElementById('t-live').style.display='none';document.getElementById('t-results').style.display='block';T.active=false;updateAdminFin();}
+function sendTEmails(){const pool=getPool(),p1=T.players.find(x=>x.place===1),p2=T.players.find(x=>x.place===2),p3=T.players.find(x=>x.place===3);const pay1=pool*.5,pay2=pool*.3,pay3=pool*.2,house=T.players.reduce((s,p)=>s+p.house,0);const mk=(p,pay,pl)=>{const ti=p.buyin+p.rebuys*T.rebuy,pnl=pay-ti;return T.name+" FINAL\n"+MY_EMAIL+"\n\nCongrats "+p.name+"!\nPlace: "+pl+"\nPayout: $"+pay.toFixed(2)+"\nBuy-in: $"+ti.toFixed(2)+"\nP&L: "+(pnl>=0?"+":"")+"$"+pnl.toFixed(2)+"\n\nPay: "+CASHAPP+" · "+VENMO;};let d=0;[[p1,pay1,'1st 🥇'],[p2,pay2,'2nd 🥈'],[p3,pay3,'3rd 🥉']].forEach(([p,pay,pl])=>{if(!p||!p.email)return;setTimeout(()=>gmailOpen(p.email,T.name+' — You placed '+pl+'!',mk(p,pay,pl)),d);d+=700;});setTimeout(()=>{let b=T.name+" COMPLETE · Pool: $"+pool.toFixed(0)+" House: $"+house.toFixed(0)+"\n";if(p1)b+="1st: "+p1.name+" $"+pay1.toFixed(0)+"\n";if(p2)b+="2nd: "+p2.name+" $"+pay2.toFixed(0)+"\n";if(p3)b+="3rd: "+p3.name+" $"+pay3.toFixed(0)+"\n";gmailOpen(MY_EMAIL,"🏆 "+T.name+" Complete",b);},d);toast('✉ Emails sent!');}
+function resetT(){if(T.tid)clearInterval(T.tid);T={active:false,name:'',buyin:100,house:20,rebuy:100,rhouse:20,cutoff:null,players:[],tid:null};document.getElementById('t-setup').style.display='block';document.getElementById('t-live').style.display='none';document.getElementById('t-results').style.display='none';document.getElementById('t-timer').textContent='—';previewT();toast('Tournament reset.');}
+
+/* ════════════════════════════════════════════
+   MODALS / UTILS
+════════════════════════════════════════════ */
+function om(id){document.getElementById(id).style.display='flex';}
+function cm(id){document.getElementById(id).style.display='none';}
+function gv(id){const e=document.getElementById(id);return e?e.value:'';}
+function setText(id,v){const e=document.getElementById(id);if(e)e.textContent=v;}
+function showE(el,msg){el.textContent=msg;el.style.display='block';}
+function gmailOpen(to,sub,body){window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+encodeURIComponent(sub)+"&body="+encodeURIComponent(body),"_blank");}
+function copySMS(id){const txt=document.getElementById(id).textContent;if(navigator.clipboard){navigator.clipboard.writeText(txt).then(()=>toast('✓ Copied!'));}else{const t=document.createElement('textarea');t.value=txt;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t);toast('✓ Copied!');}}
+function toast(msg,dur=3400){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),dur);}
+function pad(n){return String(n).padStart(2,'0');}
+function ts(){return new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});}
+
+/* INIT */
+renderLobby();previewT();renderClock();
+</script>
+</body>
+</html>
