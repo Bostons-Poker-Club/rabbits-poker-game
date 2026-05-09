@@ -508,6 +508,23 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
   </div>
 </div>
 
+<!-- ADMIN CHANGE PASSWORD -->
+<div class="modal-overlay" id="modal-admin-pw" style="display:none">
+  <div class="modal-box">
+    <h3><button class="modal-close" onclick="cm('modal-admin-pw')">×</button>🔑 Change Admin Password <span class="badge red" style="vertical-align:middle;font-size:8px">Admin Only</span></h3>
+    <div class="info-note" style="margin-bottom:14px">This changes the master admin login password. Write it down — if you forget it the only way to reset it is to update the code.</div>
+    <div class="fg"><label>Current Admin Password</label><div class="pw-wrap"><input type="password" id="apw-old" placeholder="Current password"/><button class="pw-eye" onclick="togglePW('apw-old',this)">👁</button></div></div>
+    <div class="fg"><label>New Admin Password</label><div class="pw-wrap"><input type="password" id="apw-new" placeholder="Min 6 characters"/><button class="pw-eye" onclick="togglePW('apw-new',this)">👁</button></div></div>
+    <div class="fg"><label>Confirm New Password</label><div class="pw-wrap"><input type="password" id="apw-conf" placeholder="Confirm new"/><button class="pw-eye" onclick="togglePW('apw-conf',this)">👁</button></div></div>
+    <div class="success-note mt8" id="apw-success" style="display:none">✓ Admin password updated for this session!</div>
+    <div class="row-btns mt8">
+      <button class="btn btn-gold" onclick="changeAdminPW()">Update Admin Password</button>
+      <button class="btn btn-out" onclick="cm('modal-admin-pw')">Cancel</button>
+    </div>
+    <div class="err" id="apw-err"></div>
+  </div>
+</div>
+
 <!-- ADMIN RESET PLAYER PASSWORD -->
 <div class="modal-overlay" id="modal-reset-pw" style="display:none">
   <div class="modal-box">
@@ -570,7 +587,8 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
 <div class="toast" id="toast"></div>
 
 <script>
-const MY_EMAIL='bostonpokerclub@amitureflops.com',MY_PHONE='5085219176',CASHAPP='$rabbsroom',VENMO='@Roger-Depina',ADMIN_UN='admin',ADMIN_PW='rabbsroom';
+const MY_EMAIL='bostonspokerclub.amitureflops@gmail.com',MY_PHONE='5085219176',CASHAPP='$rabbsroom',VENMO='@Roger-Depina',ADMIN_UN='admin',ADMIN_PW='rabbsroom';
+let currentAdminPW=ADMIN_PW;
 const ROOMS=[{name:"Rabbit's Den",sub:"1/3 NL Hold'em",rakeCap:8},{name:"The Burrow",sub:"2/2 PLO",rakeCap:12},{name:"High Stakes Hole",sub:"5/10 NL Hold'em",rakeCap:15}];
 const HH_PER_POT=1,HH_DURATION=30*60,CLOCK_MAX=20,BREAK_LIMIT=3,BREAK_DUR=5*60,PUCK_STRADDLE=15;
 
@@ -594,7 +612,7 @@ function guestLobby(){document.getElementById('auth-screen').style.display='none
 function doLogin(){
   const u=gv('li-u').trim(),p=gv('li-p').trim();
   const err=document.getElementById('li-err');err.style.display='none';
-  if(u===ADMIN_UN&&p===ADMIN_PW){loginOK({username:u,role:'admin',playerId:null});return;}
+  if(u===ADMIN_UN&&p===currentAdminPW){loginOK({username:u,role:'admin',playerId:null});return;}
   const pl=players.find(x=>x.username===u&&x.password===p);
   if(!pl){showE(err,'Invalid username or password.');return;}
   if(pl.status==='blocked'){showE(err,'Account blocked. Contact admin.');return;}
@@ -610,7 +628,7 @@ function loginOK(user){
   const pl=user.role!=='admin'?players.find(x=>x.id===user.playerId):null;
   const nick=pl?pl.nick:user.username;
   const hlBtn=document.getElementById('hl-admin-add-btn');if(hlBtn)hlBtn.style.display=user.role==='admin'?'inline-block':'none';
-  document.getElementById('tbr').innerHTML=`<span class="login-dot">● ${user.role==='admin'?'Admin':nick}</span>${user.role!=='admin'?`<button class="tb-btn" onclick="om('modal-cpw')">Change PW</button>`:''}<button class="tb-btn" onclick="logout()">Log Out</button>`;
+  document.getElementById('tbr').innerHTML=`<span class="login-dot">● ${user.role==='admin'?'Admin':nick}</span><button class="tb-btn" onclick="${user.role==='admin'?'om(\'modal-admin-pw\')':'om(\'modal-cpw\')'}">🔑 Change PW</button><button class="tb-btn" onclick="logout()">Log Out</button>`;
   renderLobby();renderHHDisplay();go('lobby');
   if(pl&&pl.mustChangePw)setTimeout(()=>{om('modal-cpw');toast('⚠ Please change your temporary password.');},800);
   toast('Welcome, '+nick+' 🐇');
@@ -710,6 +728,22 @@ function changePW(){
   if(nw!==conf){showE(err,'Passwords do not match.');return;}
   pl.password=nw;pl.mustChangePw=false;
   cm('modal-cpw');toast('✓ Password updated!');
+}
+
+function changeAdminPW(){
+  const old=gv('apw-old'),nw=gv('apw-new'),conf=gv('apw-conf');
+  const err=document.getElementById('apw-err');err.style.display='none';
+  const suc=document.getElementById('apw-success');suc.style.display='none';
+  if(!old){showE(err,'Enter your current password.');return;}
+  if(old!==currentAdminPW){showE(err,'Current password is incorrect.');return;}
+  if(nw.length<6){showE(err,'New password must be at least 6 characters.');return;}
+  if(nw!==conf){showE(err,'Passwords do not match.');return;}
+  currentAdminPW=nw;
+  suc.style.display='block';
+  document.getElementById('apw-old').value='';
+  document.getElementById('apw-new').value='';
+  document.getElementById('apw-conf').value='';
+  toast('✓ Admin password updated for this session!');
 }
 
 /* ══ HIGHLIGHTS ══ */
