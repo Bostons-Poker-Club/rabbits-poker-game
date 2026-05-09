@@ -283,20 +283,14 @@ body::before{content:'';position:fixed;inset:0;background-image:url("data:image/
         <div class="info-note mt8" style="font-size:10px;text-align:center">Admin: <strong style="color:var(--gold)">admin</strong> / <strong style="color:var(--gold)">rabbsroom</strong></div>
       </div>
       <div id="form-register" style="display:none">
-        <div class="two-col"><div class="fg"><label>First Name *</label><input type="text" id="rg-fn" placeholder="First"/></div><div class="fg"><label>Last Name *</label><input type="text" id="rg-ln" placeholder="Last"/></div></div>
-        <div class="fg"><label>Nickname *</label><input type="text" id="rg-nick" placeholder="Table name"/></div>
-        <div class="two-col"><div class="fg"><label>Phone *</label><input type="tel" id="rg-ph" placeholder="+1 617..."/></div><div class="fg"><label>Email *</label><input type="email" id="rg-em" placeholder="you@email.com"/></div></div>
-        <div class="fg"><label>Street Address</label><input type="text" id="rg-a1" placeholder="123 Main St"/></div>
-        <div class="three-col"><div class="fg"><label>City</label><input type="text" id="rg-ci" placeholder="Boston"/></div><div class="fg"><label>State</label><input type="text" id="rg-st" placeholder="MA"/></div><div class="fg"><label>ZIP</label><input type="text" id="rg-zp" placeholder="02125"/></div></div>
-        <div class="fg"><label>Selfie / ID Photo *</label>
-          <div class="selfie-zone"><input type="file" accept="image/*" capture="user" onchange="prevSelfie(this,'rg-sprev','rg-sname','rg-sph','reg')"/>
-            <div id="rg-sph"><div style="font-size:22px;margin-bottom:4px">📸</div><p style="font-size:11px;color:var(--c3)">Tap to capture selfie</p></div>
-            <img id="rg-sprev" class="prev" style="display:none"/><p id="rg-sname" style="font-size:10px;color:var(--c3);display:none;margin-top:4px"></p>
-          </div>
+        <div class="info-note" style="margin-bottom:10px;text-align:center">
+          Fill out the form below. Admin will review and send your login credentials.
         </div>
-        <div class="conf-note">🔒 Personal info confidential — admin only.</div>
-        <button class="btn btn-gold" style="width:100%" onclick="submitReg()">Submit Registration →</button>
-        <div class="err" id="rg-err"></div>
+        <div style="background:rgba(0,0,0,.3);border:1px solid rgba(200,168,75,0.18);border-radius:var(--r);overflow:hidden;margin-bottom:10px;">
+          <iframe src="https://docs.google.com/forms/d/e/1FAIpQLSfEt_04l8-f-qc0OTCHVNOP0RZe54ZFosC3nb1qH2_uwforgg/viewform?embedded=true" width="100%" height="600" frameborder="0" marginheight="0" marginwidth="0" style="display:block;background:transparent;">Loading registration form...</iframe>
+        </div>
+        <div class="conf-note">🔒 Your information is confidential and stored securely.</div>
+        <div class="info-note mt8" style="text-align:center;font-size:10px">After submitting, admin will review your application and send login credentials to your email.</div>
       </div>
       <div id="form-host" style="display:none">
         <div class="info-note" style="margin-bottom:12px"><strong style="color:var(--p2)">Host Requirements:</strong><br/>• Existing member · 20% rake to admin · $20/month · License + employer required</div>
