@@ -67,7 +67,22 @@ router.post('/auth/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
-  // Local admin bypass — works without Supabase
+  // Try Supabase first
+  const { data: user, error } = await supabaseAdmin
+    .from('users')
+    .select('*')
+    .eq('username', username)
+    .single();
+
+  if (user) {
+    if (user.is_banned) return res.status(403).json({ error: 'Account is banned' });
+    const valid = await bcrypt.compare(password, user.password_hash);
+    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin } });
+  }
+
+  // Supabase unavailable or user not found — fall back to local admin bypass
   if (username === LOCAL_ADMIN.username) {
     const valid = await bcrypt.compare(password, LOCAL_ADMIN.passwordHash);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
@@ -75,20 +90,7 @@ router.post('/auth/login', async (req, res) => {
     return res.json({ token, user: { id: LOCAL_ADMIN.id, username: LOCAL_ADMIN.username, email: LOCAL_ADMIN.email, chips: LOCAL_ADMIN.chips, isAdmin: true } });
   }
 
-  const { data: user, error } = await supabaseAdmin
-    .from('users')
-    .select('*')
-    .eq('username', username)
-    .single();
-
-  if (error || !user) return res.status(401).json({ error: 'Invalid credentials' });
-  if (user.is_banned) return res.status(403).json({ error: 'Account is banned' });
-
-  const valid = await bcrypt.compare(password, user.password_hash);
-  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
-
-  const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
-  res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin } });
+  return res.status(401).json({ error: 'Invalid credentials' });
 });
 
 // ─── Profile ────────────────────────────────────────────────────────────────
