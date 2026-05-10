@@ -30,6 +30,6 @@ app.get('*', (req, res) => {
 setupSocketHandlers(io);
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`🃏 Rabbits Poker running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🃏 Rabbits Poker running on port ${PORT}`);
 });
