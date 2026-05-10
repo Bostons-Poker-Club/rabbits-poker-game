@@ -163,22 +163,58 @@ async function closeTable(id) {
 
 // ─── Jackpot ──────────────────────────────────────────────────────────────
 
+let countdownDeadline = null;
+let countdownInterval = null;
+
 async function loadJackpot() {
   try {
     const data = await apiFetch('/api/jackpot');
     document.getElementById('jp-amount').textContent = `$${fmt(data.current_amount)}`;
     document.getElementById('stat-jackpot').textContent = `$${fmt(data.current_amount)}`;
-    const highRank = data.highest_hand_rank;
-    const handNames = ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
-    document.getElementById('jp-info').textContent =
-      highRank >= 0 ? `Current high hand: ${handNames[highRank] || 'Unknown'} (rank ${highRank})` : 'No high hand recorded yet';
 
-    const timerStart = new Date(data.timer_started_at).getTime();
-    const remaining = Math.max(0, timerStart + 30 * 60 * 1000 - Date.now());
-    const min = Math.floor(remaining / 60000);
-    const sec = Math.floor((remaining % 60000) / 1000);
-    document.getElementById('jp-timer').textContent = `Timer: ${min}:${sec.toString().padStart(2, '0')} remaining`;
+    if (data.high_hand_description) {
+      document.getElementById('jp-info').textContent = `High hand: ${data.high_hand_description}`;
+      document.getElementById('jp-holder').textContent = `Held by: ${data.high_hand_holder}`;
+    } else {
+      document.getElementById('jp-info').textContent = 'No high hand recorded yet';
+      document.getElementById('jp-holder').textContent = '';
+    }
+
+    const timerStart = data.high_hand_set_at || data.timer_started_at;
+    countdownDeadline = timerStart ? new Date(timerStart).getTime() + 30 * 60 * 1000 : null;
+    startCountdown();
   } catch {}
+}
+
+function startCountdown() {
+  if (countdownInterval) clearInterval(countdownInterval);
+  tickCountdown();
+  countdownInterval = setInterval(tickCountdown, 1000);
+}
+
+function tickCountdown() {
+  const el = document.getElementById('jp-countdown');
+  if (!el) return;
+  if (!countdownDeadline) { el.textContent = '30:00'; return; }
+  const remaining = Math.max(0, countdownDeadline - Date.now());
+  const min = Math.floor(remaining / 60000);
+  const sec = Math.floor((remaining % 60000) / 1000);
+  el.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  el.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : 'var(--gold)';
+}
+
+async function setHighHand() {
+  const description = document.getElementById('hh-description').value.trim();
+  const holder = document.getElementById('hh-holder').value.trim();
+  if (!description) return toast('Enter a hand description', 'error');
+  if (!holder) return toast('Enter a player nickname', 'error');
+  try {
+    await apiFetch('/api/jackpot/high-hand', { method: 'POST', body: { description, holder } });
+    toast(`High hand set: ${description} — ${holder}`);
+    document.getElementById('hh-description').value = '';
+    document.getElementById('hh-holder').value = '';
+    loadJackpot();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function awardJackpot() {
@@ -193,7 +229,6 @@ async function awardJackpot() {
 async function resetJackpot() {
   if (!confirm('Reset jackpot timer and high hand?')) return;
   toast('Jackpot reset (via admin socket action)');
-  // This is handled via socket in a real session; for now show message
 }
 
 // ─── Rake Report ──────────────────────────────────────────────────────────

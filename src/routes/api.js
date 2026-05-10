@@ -8,6 +8,9 @@ const { supabaseAdmin } = require('../db/supabase');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
+// In-memory high hand state — survives within a deployment, resets on restart
+let highHandState = { description: '', holder: '', setAt: null };
+
 // Local admin fallback — works without Supabase
 // Hash is bcrypt of 'admin123' — verified correct
 const LOCAL_ADMIN = {
@@ -250,7 +253,15 @@ router.get('/jackpot', authMiddleware, async (req, res) => {
     .eq('id', 1)
     .single();
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json({ ...data, high_hand_description: highHandState.description, high_hand_holder: highHandState.holder, high_hand_set_at: highHandState.setAt });
+});
+
+router.post('/jackpot/high-hand', authMiddleware, adminMiddleware, async (req, res) => {
+  const { description, holder } = req.body;
+  if (!description || !holder) return res.status(400).json({ error: 'description and holder required' });
+  highHandState = { description: String(description).slice(0, 120), holder: String(holder).slice(0, 60), setAt: new Date().toISOString() };
+  await supabaseAdmin.from('jackpot').update({ timer_started_at: highHandState.setAt }).eq('id', 1);
+  res.json({ success: true, ...highHandState });
 });
 
 router.post('/jackpot/award', authMiddleware, adminMiddleware, async (req, res) => {

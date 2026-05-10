@@ -46,12 +46,36 @@
         <h3>🏆 High Hand Jackpot</h3>
         <div class="jackpot-admin-amount" id="jp-amount">$0</div>
         <div class="jackpot-admin-info" id="jp-info">No high hand recorded yet</div>
-        <div class="jackpot-admin-info" id="jp-timer">Timer: –</div>
+        <div class="jackpot-admin-info" id="jp-holder" style="color:var(--gold);font-weight:600"></div>
       </div>
       <div class="jackpot-admin-actions">
         <button class="btn btn-gold" onclick="awardJackpot()">Award Now</button>
         <button class="btn btn-outline" onclick="resetJackpot()">Reset Timer</button>
       </div>
+    </div>
+
+    <!-- Countdown clock -->
+    <div style="text-align:center;margin:20px 0 24px">
+      <div style="font-size:.75rem;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Next jackpot reset in</div>
+      <div id="jp-countdown" style="font-size:3rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;letter-spacing:.04em">30:00</div>
+    </div>
+
+    <!-- Set High Hand form -->
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:28px">
+      <h3 style="color:var(--gold);margin:0 0 16px">Set Current High Hand</h3>
+      <div class="form-group">
+        <label>Hand Description</label>
+        <input type="text" id="hh-description" placeholder="e.g. Aces Full of Deuces"
+          maxlength="120"
+          style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;box-sizing:border-box">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Player Nickname</label>
+        <input type="text" id="hh-holder" placeholder="e.g. Maverick"
+          maxlength="60"
+          style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;box-sizing:border-box">
+      </div>
+      <button class="btn btn-gold" style="margin-top:14px;width:100%" onclick="setHighHand()">Set High Hand &amp; Reset Timer</button>
     </div>
 
     <h2 style="color:var(--gold);margin-bottom:14px">Hand Rank Reference</h2>
