@@ -1,0 +1,242 @@
+'use strict';
+
+requireAuth();
+const user = getUser();
+if (!user.isAdmin) { window.location.href = '/lobby.html'; }
+
+let allPlayers = [];
+let allTables = [];
+
+// ─── Init ─────────────────────────────────────────────────────────────────
+
+loadAll();
+
+async function loadAll() {
+  await Promise.all([loadPlayers(), loadTables(), loadJackpot(), loadRake()]);
+  updateStats();
+}
+
+// ─── Panel Navigation ─────────────────────────────────────────────────────
+
+function showPanel(name) {
+  document.querySelectorAll('.admin-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`panel-${name}`)?.classList.add('active');
+  event.currentTarget.classList.add('active');
+}
+
+// ─── Players ──────────────────────────────────────────────────────────────
+
+async function loadPlayers() {
+  try {
+    allPlayers = await apiFetch('/api/admin/players');
+    renderPlayers(allPlayers);
+    document.getElementById('stat-players').textContent = allPlayers.length;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderPlayers(list) {
+  const tbody = document.getElementById('players-body');
+  tbody.innerHTML = list.map(p => `
+    <tr>
+      <td>${esc(p.username)}</td>
+      <td style="color:var(--text-dim)">${esc(p.email)}</td>
+      <td style="color:var(--gold)">${fmt(p.chips)}</td>
+      <td>${p.is_admin ? '✓' : ''}</td>
+      <td><span style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></td>
+      <td><div class="actions">
+        <button class="btn btn-sm btn-outline" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Chips</button>
+        <button class="btn btn-sm ${p.is_banned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${p.id}',${!p.is_banned})">
+          ${p.is_banned ? 'Unban' : 'Ban'}
+        </button>
+      </div></td>
+    </tr>
+  `).join('');
+}
+
+function filterPlayers() {
+  const q = document.getElementById('player-search').value.toLowerCase();
+  renderPlayers(allPlayers.filter(p => p.username.toLowerCase().includes(q) || p.email.toLowerCase().includes(q)));
+}
+
+function openChipsModal(id, name) {
+  document.getElementById('chips-player-id').value = id;
+  document.getElementById('chips-player-name').textContent = `Player: ${name}`;
+  openModal('chips-modal');
+}
+
+async function submitChips() {
+  const id = document.getElementById('chips-player-id').value;
+  const amount = parseInt(document.getElementById('chips-amount').value);
+  try {
+    await apiFetch(`/api/admin/players/${id}/chips`, { method: 'POST', body: { amount } });
+    closeModal('chips-modal');
+    toast('Chips updated');
+    loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function toggleBan(id, banned) {
+  try {
+    await apiFetch(`/api/admin/players/${id}/ban`, { method: 'POST', body: { banned } });
+    toast(banned ? 'Player banned' : 'Player unbanned');
+    loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Tables ───────────────────────────────────────────────────────────────
+
+async function loadTables() {
+  try {
+    allTables = await apiFetch('/api/tables');
+    renderTablesAdmin(allTables);
+    renderOverviewTables(allTables);
+    document.getElementById('stat-tables').textContent = allTables.filter(t => t.status !== 'closed').length;
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function renderTablesAdmin(list) {
+  const tbody = document.getElementById('tables-body');
+  tbody.innerHTML = list.map(t => `
+    <tr>
+      <td>${esc(t.name)}</td>
+      <td>${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</td>
+      <td>$${t.stakes_small_blind}/$${t.stakes_big_blind}</td>
+      <td>${t.max_players}</td>
+      <td>${t.rake_percent}%</td>
+      <td><span style="color:${t.status === 'closed' ? '#888' : 'var(--chip-green)'}">${t.status}</span></td>
+      <td><div class="actions">
+        ${t.status !== 'closed' ? `<button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">Close</button>` : ''}
+      </div></td>
+    </tr>
+  `).join('');
+}
+
+function renderOverviewTables(list) {
+  const tbody = document.getElementById('active-tables-body');
+  const active = list.filter(t => t.status !== 'closed');
+  tbody.innerHTML = active.map(t => {
+    const seated = t.table_seats?.[0]?.count || 0;
+    return `
+    <tr>
+      <td>${esc(t.name)}</td>
+      <td>${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</td>
+      <td>$${t.stakes_small_blind}/$${t.stakes_big_blind}</td>
+      <td>${seated}/${t.max_players}</td>
+      <td><div class="actions">
+        <a href="/table.html?tableId=${t.id}&buyIn=${t.stakes_big_blind * 20}"><button class="btn btn-sm btn-outline">View</button></a>
+        <button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">Close</button>
+      </div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">No active tables</td></tr>';
+}
+
+async function createTable() {
+  const name = document.getElementById('ct-name').value.trim();
+  if (!name) return toast('Name required', 'error');
+  try {
+    await apiFetch('/api/tables', {
+      method: 'POST',
+      body: {
+        name,
+        game_type: document.getElementById('ct-type').value,
+        stakes_small_blind: parseInt(document.getElementById('ct-sb').value),
+        stakes_big_blind: parseInt(document.getElementById('ct-bb').value),
+        max_players: parseInt(document.getElementById('ct-max').value),
+        rake_percent: parseFloat(document.getElementById('ct-rake').value)
+      }
+    });
+    closeModal('create-table-modal');
+    toast('Table created');
+    loadTables();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function closeTable(id) {
+  if (!confirm('Close this table?')) return;
+  try {
+    await apiFetch(`/api/tables/${id}`, { method: 'DELETE' });
+    toast('Table closed');
+    loadTables();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Jackpot ──────────────────────────────────────────────────────────────
+
+async function loadJackpot() {
+  try {
+    const data = await apiFetch('/api/jackpot');
+    document.getElementById('jp-amount').textContent = `$${fmt(data.current_amount)}`;
+    document.getElementById('stat-jackpot').textContent = `$${fmt(data.current_amount)}`;
+    const highRank = data.highest_hand_rank;
+    const handNames = ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'];
+    document.getElementById('jp-info').textContent =
+      highRank >= 0 ? `Current high hand: ${handNames[highRank] || 'Unknown'} (rank ${highRank})` : 'No high hand recorded yet';
+
+    const timerStart = new Date(data.timer_started_at).getTime();
+    const remaining = Math.max(0, timerStart + 30 * 60 * 1000 - Date.now());
+    const min = Math.floor(remaining / 60000);
+    const sec = Math.floor((remaining % 60000) / 1000);
+    document.getElementById('jp-timer').textContent = `Timer: ${min}:${sec.toString().padStart(2, '0')} remaining`;
+  } catch {}
+}
+
+async function awardJackpot() {
+  if (!confirm('Award jackpot to current high hand holder?')) return;
+  try {
+    const r = await apiFetch('/api/jackpot/award', { method: 'POST' });
+    toast(`Jackpot of $${fmt(r.awarded)} awarded!`);
+    loadJackpot();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function resetJackpot() {
+  if (!confirm('Reset jackpot timer and high hand?')) return;
+  toast('Jackpot reset (via admin socket action)');
+  // This is handled via socket in a real session; for now show message
+}
+
+// ─── Rake Report ──────────────────────────────────────────────────────────
+
+async function loadRake() {
+  try {
+    const data = await apiFetch('/api/admin/rake-report');
+    document.getElementById('rake-total').textContent = `$${fmt(data.totalRake)}`;
+    document.getElementById('rake-jackpot').textContent = `$${fmt(data.totalJackpot)}`;
+    document.getElementById('stat-rake').textContent = `$${fmt(data.totalRake)}`;
+
+    const tbody = document.getElementById('rake-body');
+    tbody.innerHTML = (data.hands || []).map(h => `
+      <tr>
+        <td style="font-size:.8rem;color:var(--text-dim)">${h.table_id?.slice(0,8)}…</td>
+        <td style="color:var(--chip-green)">$${fmt(h.rake_collected)}</td>
+        <td style="color:var(--gold)">$${fmt(h.jackpot_contribution)}</td>
+        <td style="color:var(--text-dim);font-size:.8rem">${new Date(h.started_at).toLocaleString()}</td>
+      </tr>
+    `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">No hands yet</td></tr>';
+  } catch {}
+}
+
+// ─── Stats ────────────────────────────────────────────────────────────────
+
+function updateStats() {}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────
+
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+function fmt(n) { return Number(n || 0).toLocaleString(); }
+function esc(s) { return String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
+const toastContainer = document.getElementById('toast-container');
+function toast(msg, type = '') {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  toastContainer.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.add('hidden'); });
+});

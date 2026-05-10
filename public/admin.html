@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rabbits Poker – Admin</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="admin-page">
+
+<nav class="admin-nav">
+  <span class="logo">🐇 Admin Panel</span>
+  <button class="admin-tab-btn active" onclick="showPanel('overview')">Overview</button>
+  <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
+  <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
+  <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
+  <button class="admin-tab-btn" onclick="showPanel('rake')">Rake Report</button>
+  <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
+  <button class="admin-tab-btn" onclick="logout()">Logout</button>
+</nav>
+
+<div class="admin-body">
+
+  <!-- Overview -->
+  <div class="admin-panel active" id="panel-overview">
+    <div class="stats-grid" id="stats-grid">
+      <div class="stat-card"><div class="stat-value" id="stat-players">–</div><div class="stat-label">Total Players</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-tables">–</div><div class="stat-label">Active Tables</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-jackpot">–</div><div class="stat-label">Jackpot Amount</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-rake">–</div><div class="stat-label">Total Rake</div></div>
+    </div>
+
+    <h2 style="color:var(--gold);margin-bottom:14px">Active Tables</h2>
+    <div class="table-wrap">
+      <table class="data-table" id="active-tables-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Players</th><th>Actions</th></tr></thead>
+        <tbody id="active-tables-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Jackpot -->
+  <div class="admin-panel" id="panel-jackpot">
+    <div class="jackpot-admin-card">
+      <div>
+        <h3>🏆 High Hand Jackpot</h3>
+        <div class="jackpot-admin-amount" id="jp-amount">$0</div>
+        <div class="jackpot-admin-info" id="jp-info">No high hand recorded yet</div>
+        <div class="jackpot-admin-info" id="jp-timer">Timer: –</div>
+      </div>
+      <div class="jackpot-admin-actions">
+        <button class="btn btn-gold" onclick="awardJackpot()">Award Now</button>
+        <button class="btn btn-outline" onclick="resetJackpot()">Reset Timer</button>
+      </div>
+    </div>
+
+    <h2 style="color:var(--gold);margin-bottom:14px">Hand Rank Reference</h2>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Rank</th><th>Hand</th></tr></thead>
+        <tbody>
+          <tr><td>9</td><td>Royal Flush</td></tr>
+          <tr><td>8</td><td>Straight Flush</td></tr>
+          <tr><td>7</td><td>Four of a Kind</td></tr>
+          <tr><td>6</td><td>Full House</td></tr>
+          <tr><td>5</td><td>Flush</td></tr>
+          <tr><td>4</td><td>Straight</td></tr>
+          <tr><td>3</td><td>Three of a Kind</td></tr>
+          <tr><td>2</td><td>Two Pair</td></tr>
+          <tr><td>1</td><td>One Pair</td></tr>
+          <tr><td>0</td><td>High Card</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Players -->
+  <div class="admin-panel" id="panel-players">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--gold)">Players</h2>
+      <input type="text" id="player-search" placeholder="Search username…" oninput="filterPlayers()"
+        style="padding:8px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;width:220px">
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Username</th><th>Email</th><th>Chips</th><th>Admin</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="players-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tables -->
+  <div class="admin-panel" id="panel-tables">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--gold)">Tables</h2>
+      <button class="btn btn-gold btn-sm" onclick="openModal('create-table-modal')">+ Create Table</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Max</th><th>Rake</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody id="tables-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Rake Report -->
+  <div class="admin-panel" id="panel-rake">
+    <h2 style="color:var(--gold);margin-bottom:16px">Rake Report</h2>
+    <div class="stats-grid" style="margin-bottom:24px">
+      <div class="stat-card"><div class="stat-value" id="rake-total">$0</div><div class="stat-label">Total Rake Collected</div></div>
+      <div class="stat-card"><div class="stat-value" id="rake-jackpot">$0</div><div class="stat-label">Jackpot Contributions</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Table</th><th>Rake</th><th>Jackpot</th><th>Date</th></tr></thead>
+        <tbody id="rake-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Create Table Modal -->
+<div class="modal-overlay hidden" id="create-table-modal">
+  <div class="modal">
+    <h2>Create Table</h2>
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="ct-name" placeholder="High Roller Room" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Game Type</label>
+      <select id="ct-type" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="holdem">Texas Hold'em</option>
+        <option value="plo">PLO</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Blinds (SB / BB)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="ct-sb" value="5" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="number" id="ct-bb" value="10" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Max Players</label>
+      <select id="ct-max" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="2">2</option><option value="6">6</option><option value="9" selected>9</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Rake %</label>
+      <input type="number" id="ct-rake" value="5" min="0" max="10" step="0.5" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('create-table-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="createTable()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Chips Modal -->
+<div class="modal-overlay hidden" id="chips-modal">
+  <div class="modal">
+    <h2>Adjust Chips</h2>
+    <input type="hidden" id="chips-player-id">
+    <p id="chips-player-name" style="color:var(--text-dim);margin-bottom:14px"></p>
+    <div class="form-group">
+      <label>Amount (positive to add, negative to deduct)</label>
+      <input type="number" id="chips-amount" value="1000" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('chips-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="submitChips()">Apply</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/admin.js"></script>
+</body>
+</html>

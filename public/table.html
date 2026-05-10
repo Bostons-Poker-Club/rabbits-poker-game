@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rabbits Poker – Table</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="table-page">
+
+<!-- Header -->
+<header class="table-header">
+  <div class="table-info-bar">
+    <span><a href="/lobby.html" style="color:var(--gold)">← Lobby</a></span>
+    <span id="hdr-table-name" style="color:var(--text)">Loading…</span>
+    <span id="hdr-blinds" style="color:var(--text-dim)"></span>
+    <span id="hdr-street" style="color:var(--chip-green)"></span>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <span class="jackpot-mini" id="hdr-jackpot">🏆 $0</span>
+    <span style="color:var(--text-dim);font-size:.8rem" id="hdr-jackpot-timer"></span>
+    <span style="color:var(--gold);font-size:.9rem">🪙 <strong id="hdr-chips">–</strong></span>
+    <button class="btn btn-sm btn-outline" onclick="toggleChat()" id="chat-toggle">Chat</button>
+  </div>
+</header>
+
+<!-- Main area: table + chat -->
+<div class="table-main">
+  <!-- Poker Table -->
+  <div class="poker-area" id="poker-area">
+    <div class="poker-table-wrap" id="table-wrap">
+      <div class="poker-table-oval" id="poker-oval">
+        <!-- Community cards + pot -->
+        <div class="community-area">
+          <div class="community-cards" id="community-cards"></div>
+          <div class="pot-display">
+            <div class="pot-amount" id="pot-amount">$0</div>
+            <div class="pot-label">POT</div>
+          </div>
+        </div>
+        <!-- Player seats injected by JS around the oval -->
+        <div class="seats-container" id="seats-container"></div>
+      </div>
+    </div>
+
+    <!-- Hand result overlay -->
+    <div class="hand-result-overlay hidden" id="hand-result-overlay">
+      <div class="hand-result-box">
+        <div id="hr-winner-name" class="winner-name"></div>
+        <div id="hr-hand-name" class="hand-name"></div>
+        <div id="hr-amount" class="won-amount"></div>
+        <div id="hr-cards" class="winner-cards"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chat Panel -->
+  <div class="chat-panel" id="chat-panel">
+    <div class="chat-header">Table Chat</div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chat-input" placeholder="Say something…" maxlength="200">
+      <button onclick="sendChat()">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- My Cards + Actions -->
+<div class="my-cards-area" id="my-cards-area">
+  <!-- Shot clock -->
+  <div class="shot-clock" id="shot-clock" style="display:none">
+    <svg width="44" height="44" viewBox="0 0 44 44">
+      <circle class="shot-clock-track" cx="22" cy="22" r="18"/>
+      <circle class="shot-clock-fill" id="sc-fill" cx="22" cy="22" r="18"/>
+    </svg>
+    <div class="shot-clock-number" id="sc-number">30</div>
+  </div>
+
+  <!-- My hole cards -->
+  <div class="my-hole-cards" id="my-hole-cards">
+    <div style="color:var(--text-dim);font-size:.85rem;align-self:center">Waiting for hand…</div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="action-area" id="action-area">
+    <button class="action-btn btn-fold" id="btn-fold" onclick="act('fold')" disabled>
+      FOLD
+    </button>
+    <button class="action-btn btn-check" id="btn-check" onclick="act('check')" disabled>
+      CHECK
+    </button>
+    <button class="action-btn btn-call" id="btn-call" onclick="act('call')" disabled>
+      CALL<span class="sub" id="call-amount"></span>
+    </button>
+    <div class="raise-controls">
+      <button class="action-btn btn-raise" id="btn-raise" onclick="act('raise')" disabled>
+        RAISE<span class="sub" id="raise-display">–</span>
+      </button>
+      <input type="range" id="raise-slider" min="0" max="1000" value="0" oninput="onRaiseSlider()">
+      <input type="number" id="raise-input" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
+    </div>
+    <button class="break-btn" id="btn-break" onclick="requestBreak()">☕ Break (3)</button>
+    <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/table.js"></script>
+</body>
+</html>

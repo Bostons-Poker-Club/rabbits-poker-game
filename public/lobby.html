@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rabbits Poker – Lobby</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="lobby-page">
+
+<!-- Header -->
+<header class="lobby-header">
+  <div class="logo">🐇 Rabbits Poker</div>
+  <div class="player-info">
+    <div class="chip-count">
+      <span class="chip-icon">🪙</span>
+      <span id="header-chips">–</span>
+    </div>
+    <span id="header-username" style="color:var(--text-dim)"></span>
+    <a href="/admin.html" id="admin-link" style="display:none">
+      <button class="btn btn-sm btn-outline">Admin</button>
+    </a>
+    <button class="btn btn-sm btn-outline" onclick="logout()">Logout</button>
+  </div>
+</header>
+
+<!-- Jackpot Banner -->
+<div class="jackpot-banner">
+  <span>🏆 HIGH HAND JACKPOT:</span>
+  <span class="jackpot-amount" id="jackpot-amount">$0</span>
+  <span class="jackpot-timer" id="jackpot-timer">Resets in –</span>
+</div>
+
+<!-- Body -->
+<div class="lobby-body">
+  <!-- Cash Game Tables -->
+  <div class="section-header">
+    <h2>🃏 Cash Games</h2>
+    <button class="btn btn-gold btn-sm" id="create-table-btn" style="display:none" onclick="openCreateTable()">+ Create Table</button>
+  </div>
+  <div id="tables-grid" class="tables-grid">
+    <div class="empty-state">Loading tables…</div>
+  </div>
+
+  <!-- Sit & Go / Tournaments -->
+  <div class="section-header" style="margin-top:32px">
+    <h2>🏆 Tournaments & Sit &amp; Go</h2>
+    <button class="btn btn-sm btn-outline" id="create-tournament-btn" style="display:none" onclick="openCreateTournament()">+ Create</button>
+  </div>
+  <div id="tournaments-grid" class="tables-grid">
+    <div class="empty-state">Loading tournaments…</div>
+  </div>
+</div>
+
+<!-- Create Table Modal -->
+<div class="modal-overlay hidden" id="create-table-modal">
+  <div class="modal">
+    <h2>Create Table</h2>
+    <div class="form-group">
+      <label>Table Name</label>
+      <input type="text" id="ct-name" placeholder="VIP Table 1" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Game Type</label>
+      <select id="ct-type" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="holdem">Texas Hold'em</option>
+        <option value="plo">PLO (Pot Limit Omaha)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Blinds (Small / Big)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="ct-sb" value="5" min="1" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="number" id="ct-bb" value="10" min="2" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Max Players</label>
+      <select id="ct-max" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="2">2 (Heads Up)</option>
+        <option value="6">6</option>
+        <option value="9" selected>9</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Rake %</label>
+      <input type="number" id="ct-rake" value="5" min="0" max="10" step="0.5" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('create-table-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="createTable()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Create Tournament Modal -->
+<div class="modal-overlay hidden" id="create-tournament-modal">
+  <div class="modal">
+    <h2>Create Tournament</h2>
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="tn-name" placeholder="Sunday Special" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Buy-In (chips)</label>
+      <input type="number" id="tn-buyin" value="100" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="form-group">
+      <label>Starting Chips</label>
+      <input type="number" id="tn-chips" value="10000" min="1000" step="1000" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('create-tournament-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="createTournament()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Join Table Modal -->
+<div class="modal-overlay hidden" id="join-table-modal">
+  <div class="modal">
+    <h2>Join Table</h2>
+    <input type="hidden" id="join-table-id">
+    <input type="hidden" id="join-table-bb">
+    <div class="form-group">
+      <label>Buy-In Amount (chips)</label>
+      <input type="number" id="join-buyin" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-top:6px" id="join-balance-info"></p>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('join-table-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="joinTable()">Join</button>
+    </div>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/lobby.js"></script>
+</body>
+</html>
