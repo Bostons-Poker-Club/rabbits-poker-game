@@ -34,12 +34,56 @@ let jackpotIo = null;
 // byTable: Map<tableId, { tableName, total, hands[] }>
 const sessionRake = { total: 0, byTable: new Map() };
 
+// Money puck state: tableId -> { holderId, holderSeat, holderName, value, autoDropMs, autoDropTimer, straddleTimeout }
+const tablePucks = new Map();
+
 function getAdminSockets(io) {
   const sids = [];
   for (const [sid, info] of socketUsers) {
     if (info.isAdmin) sids.push(sid);
   }
   return sids;
+}
+
+function broadcastPuckState(io, tableId) {
+  const puck = tablePucks.get(tableId);
+  io.to(tableId).emit('puck:state', puck
+    ? { tableId, holderId: puck.holderId, holderSeat: puck.holderSeat, holderName: puck.holderName, value: puck.value }
+    : { tableId, holderId: null }
+  );
+}
+
+function passMoneyPuck(io, tableId, game) {
+  const puck = tablePucks.get(tableId);
+  if (!puck) return;
+
+  // Clear any pending timers
+  if (puck.straddleTimeout) { clearTimeout(puck.straddleTimeout); puck.straddleTimeout = null; }
+  if (puck.autoDropTimer)   { clearInterval(puck.autoDropTimer);  puck.autoDropTimer = null; }
+
+  // Find next player to the left (next seat number, wrapping around)
+  const sortedSeats = Array.from(game.seats.entries())
+    .sort((a, b) => a[0] - b[0])
+    .map(([seat, uid]) => ({ seat, uid }));
+
+  if (!sortedSeats.length) { tablePucks.delete(tableId); broadcastPuckState(io, tableId); return; }
+
+  const idx = sortedSeats.findIndex(s => s.seat === puck.holderSeat);
+  const nextIdx = idx === -1 || idx === sortedSeats.length - 1 ? 0 : idx + 1;
+  const next = sortedSeats[nextIdx];
+  const nextPlayer = game.players.get(next.uid);
+  if (!nextPlayer) { tablePucks.delete(tableId); broadcastPuckState(io, tableId); return; }
+
+  puck.holderId   = nextPlayer.userId;
+  puck.holderSeat = nextPlayer.seatNumber;
+  puck.holderName = nextPlayer.username;
+  broadcastPuckState(io, tableId);
+  io.to(tableId).emit('chat', { username: 'system', message: `💰 Money Puck passed to ${nextPlayer.username}` });
+
+  // Restart auto-drop timer if configured
+  if (puck.autoDropMs > 0) {
+    puck.autoDropTimer = setInterval(() => passMoneyPuck(io, tableId, game), puck.autoDropMs);
+  }
 }
 
 function setupSocketHandlers(io) {
@@ -192,6 +236,8 @@ function setupSocketHandlers(io) {
 
         socket.emit('joined_table', { tableId, seatNumber: finalSeat, chips });
         broadcastGameState(io, tableId, game);
+        // Send current puck state to joining player
+        broadcastPuckState(io, tableId);
 
         // Auto-start hand if enough players and no active hand
         if (!game.handActive && game.canStartHand()) {
@@ -313,6 +359,95 @@ function setupSocketHandlers(io) {
       if (targetSid) io.to(targetSid).emit('chips_received', { amount, from: username });
     });
 
+    // ─── Money Puck Events ────────────────────────────────────────────────
+
+    socket.on('puck:drop', ({ tableId: tId, startValue, autoDropMinutes }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = activeGames.get(tIdFinal);
+      if (!game) return socket.emit('error', { message: 'No active game at this table' });
+
+      const seatedPlayers = Array.from(game.players.values()).sort((a, b) => a.seatNumber - b.seatNumber);
+      if (!seatedPlayers.length) return socket.emit('error', { message: 'No players seated' });
+
+      // Assign to current dealer or first player
+      const dealerPlayer = game.getPlayerBySeat(game.dealerSeat) || seatedPlayers[0];
+
+      // Clear existing puck for this table
+      const existing = tablePucks.get(tIdFinal);
+      if (existing) {
+        if (existing.straddleTimeout) clearTimeout(existing.straddleTimeout);
+        if (existing.autoDropTimer)   clearInterval(existing.autoDropTimer);
+      }
+
+      const autoDropMs = (autoDropMinutes || 0) * 60 * 1000;
+      const puck = {
+        holderId: dealerPlayer.userId,
+        holderSeat: dealerPlayer.seatNumber,
+        holderName: dealerPlayer.username,
+        value: Math.max(1, startValue || 15),
+        autoDropMs,
+        autoDropTimer: null,
+        straddleTimeout: null
+      };
+      tablePucks.set(tIdFinal, puck);
+
+      if (autoDropMs > 0) {
+        puck.autoDropTimer = setInterval(() => passMoneyPuck(io, tIdFinal, game), autoDropMs);
+      }
+
+      broadcastPuckState(io, tIdFinal);
+      io.to(tIdFinal).emit('chat', { username: 'system', message: `💰 Money Puck dropped to ${dealerPlayer.username} (value: $${puck.value})` });
+    });
+
+    socket.on('puck:straddle_response', ({ tableId: tId, accepted }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      const puck = tablePucks.get(tIdFinal);
+      if (!puck || puck.holderId !== userId) return;
+
+      if (puck.straddleTimeout) { clearTimeout(puck.straddleTimeout); puck.straddleTimeout = null; }
+
+      const game = activeGames.get(tIdFinal);
+      if (!game) return;
+
+      if (accepted) {
+        const player = game.getPlayer(userId);
+        if (player && player.chips >= puck.value) {
+          player.chips -= puck.value;
+          game.pot += puck.value;
+          puck.value += 15;
+          broadcastGameState(io, tIdFinal, game);
+          broadcastPuckState(io, tIdFinal);
+          io.to(tIdFinal).emit('chat', { username: 'system', message: `💰 ${player.username} posted $${puck.value - 15} straddle! Puck value now $${puck.value}` });
+        } else {
+          // Can't afford — pass it
+          passMoneyPuck(io, tIdFinal, game);
+        }
+      } else {
+        passMoneyPuck(io, tIdFinal, game);
+      }
+    });
+
+    socket.on('puck:pass', ({ tableId: tId }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = activeGames.get(tIdFinal);
+      if (game) passMoneyPuck(io, tIdFinal, game);
+    });
+
+    socket.on('puck:clear', ({ tableId: tId }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const puck = tablePucks.get(tIdFinal);
+      if (puck) {
+        if (puck.straddleTimeout) clearTimeout(puck.straddleTimeout);
+        if (puck.autoDropTimer)   clearInterval(puck.autoDropTimer);
+      }
+      tablePucks.delete(tIdFinal);
+      broadcastPuckState(io, tIdFinal);
+      io.to(tIdFinal).emit('chat', { username: 'system', message: '💰 Money Puck removed' });
+    });
+
     socket.on('lobby:join', () => {
       // Player is in the lobby — notify admins
       for (const sid of getAdminSockets(io)) {
@@ -417,11 +552,18 @@ function setupSocketHandlers(io) {
       socketUsers.delete(socket.id);
       userSockets.delete(userId);
       if (socket.currentTableId) {
-        const game = activeGames.get(socket.currentTableId);
+        const tId = socket.currentTableId;
+        const game = activeGames.get(tId);
         if (game) {
           const player = game.getPlayer(userId);
           if (player) player.isConnected = false;
-          broadcastGameState(io, socket.currentTableId, game);
+          broadcastGameState(io, tId, game);
+
+          // If this player held the money puck, pass it left
+          const puck = tablePucks.get(tId);
+          if (puck && puck.holderId === userId) {
+            passMoneyPuck(io, tId, game);
+          }
         }
       }
     });
@@ -491,6 +633,22 @@ async function startNewHand(io, tableId, game) {
     dealerSeat: game.dealerSeat,
     street: game.currentStreet
   });
+
+  // Money puck: if dealer button is at puck holder, prompt straddle
+  const puck = tablePucks.get(tableId);
+  if (puck && puck.holderSeat === game.dealerSeat) {
+    const holderSid = userSockets.get(puck.holderId);
+    if (holderSid) {
+      io.to(holderSid).emit('puck:straddle_required', {
+        value: puck.value,
+        deadline: Date.now() + 15000
+      });
+      puck.straddleTimeout = setTimeout(() => {
+        puck.straddleTimeout = null;
+        passMoneyPuck(io, tableId, game);
+      }, 15000);
+    }
+  }
 
   io.to(tableId).emit('action_required', {
     seatNumber: game.currentPlayerSeat,
@@ -710,6 +868,12 @@ async function leaveTable(socket, io, tableId, userId) {
   if (!tableId) return;
   const game = activeGames.get(tableId);
   if (game) {
+    // Pass money puck before removing player so we can still find next seat
+    const puck = tablePucks.get(tableId);
+    if (puck && puck.holderId === userId) {
+      passMoneyPuck(io, tableId, game);
+    }
+
     const player = game.getPlayer(userId);
     if (player) {
       const chipsToReturn = player.chips;

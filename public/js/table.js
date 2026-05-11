@@ -17,6 +17,8 @@ let shotClockEnd = 0;
 let chatOpen = false;
 let prevBets = {};       // seatNumber -> last known currentBet
 let seatTimerInterval = null;
+let moneyPuck = null;    // current puck state for this table
+let straddleCountdown = null;
 
 // WebRTC PTT state
 let pttStream = null;
@@ -169,6 +171,17 @@ function connect() {
     if (result.winners?.length) {
       chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
     }
+  });
+
+  // ─── Money Puck ───────────────────────────────────────────────────────────
+
+  socket.on('puck:state', (state) => {
+    moneyPuck = state?.holderId ? state : null;
+    if (gameState) { renderSeats(gameState); renderHostControls(gameState); }
+  });
+
+  socket.on('puck:straddle_required', ({ value, deadline }) => {
+    showStraddlePrompt(value, deadline);
   });
 
   socket.on('jackpot_state', (data) => {
@@ -343,22 +356,97 @@ function renderHostControls(state) {
   const src = state || gameState;
   if (!src) return;
 
-  const others = (src.players || []).filter(p => p.userId !== user.id);
-  if (!others.length) { panel.style.display = 'none'; return; }
+  const allPlayers = src.players || [];
+  if (!allPlayers.length) { panel.style.display = 'none'; return; }
   panel.style.display = '';
 
+  const others = allPlayers.filter(p => p.userId !== user.id);
+
+  // Player chip controls
   document.getElementById('host-player-list').innerHTML = others.map(p => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.07)">
       <span style="color:var(--text)">${esc(p.username)}</span>
       <span style="color:var(--chip-green);font-size:.7rem">${fmt(p.chips)}</span>
       <button class="btn btn-sm btn-gold" style="padding:2px 7px;font-size:.7rem" onclick="hostAddChips('${p.userId}','${esc(p.username)}')">+Chips</button>
-    </div>`).join('');
+    </div>`).join('') +
+    // Money puck controls
+    `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)">
+      <div style="color:var(--gold);font-size:.72rem;font-weight:700;margin-bottom:6px">💰 MONEY PUCK${moneyPuck ? ` — $${fmt(moneyPuck.value)} held by ${esc(moneyPuck.holderName)}` : ' — inactive'}</div>
+      ${!moneyPuck
+        ? `<div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-gold" style="font-size:.68rem;padding:3px 7px" onclick="dropPuck(0)">Drop Puck</button>
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="dropPuck(5)">Auto 5m</button>
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="dropPuck(10)">Auto 10m</button>
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="dropPuck(30)">Auto 30m</button>
+           </div>`
+        : `<div style="display:flex;gap:4px">
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="passPuck()">Pass</button>
+            <button class="btn btn-sm btn-red" style="font-size:.68rem;padding:3px 7px" onclick="clearPuck()">Remove</button>
+           </div>`
+      }
+    </div>`;
 }
 
 function hostAddChips(targetUserId, username) {
   const amt = parseInt(prompt(`Add chips for ${username}:`, '500'));
   if (!amt || amt <= 0) return;
   socket.emit('host:add_chips', { targetUserId, amount: amt });
+}
+
+function dropPuck(autoDropMinutes) {
+  socket.emit('puck:drop', { tableId, startValue: 15, autoDropMinutes });
+}
+
+function passPuck() {
+  socket.emit('puck:pass', { tableId });
+}
+
+function clearPuck() {
+  if (!confirm('Remove the money puck from the table?')) return;
+  socket.emit('puck:clear', { tableId });
+}
+
+let straddlePromptEl = null;
+
+function showStraddlePrompt(value, deadline) {
+  dismissStraddlePrompt();
+
+  const el = document.createElement('div');
+  el.className = 'straddle-prompt';
+  el.id = 'straddle-prompt';
+  el.innerHTML = `
+    <h4>💰 Money Puck — Straddle Required</h4>
+    <p>Dealer button is yours. Post $${fmt(value)} straddle?</p>
+    <div class="countdown" id="straddle-cd">15</div>
+    <div class="btn-row">
+      <button class="btn btn-gold" onclick="respondStraddle(true)">Post Straddle ($${fmt(value)})</button>
+      <button class="btn btn-outline" onclick="respondStraddle(false)">Pass Puck</button>
+    </div>`;
+  document.body.appendChild(el);
+  straddlePromptEl = el;
+
+  const endTime = deadline;
+  straddleCountdown = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    const cd = document.getElementById('straddle-cd');
+    if (cd) cd.textContent = remaining;
+    if (remaining <= 0) {
+      dismissStraddlePrompt();
+      socket.emit('puck:straddle_response', { tableId, accepted: false });
+    }
+  }, 500);
+}
+
+function dismissStraddlePrompt() {
+  if (straddleCountdown) { clearInterval(straddleCountdown); straddleCountdown = null; }
+  if (straddlePromptEl) { straddlePromptEl.remove(); straddlePromptEl = null; }
+  const existing = document.getElementById('straddle-prompt');
+  if (existing) existing.remove();
+}
+
+function respondStraddle(accepted) {
+  dismissStraddlePrompt();
+  socket.emit('puck:straddle_response', { tableId, accepted });
 }
 
 function renderCommunityCards(cards) {
@@ -398,6 +486,7 @@ function renderSeats(state) {
 
     if (player) {
       const isMe = player.userId === user.id;
+      const hasPuck = moneyPuck?.holderSeat === seatNum;
       const holeCardsHtml = player.holeCards?.length
         ? player.holeCards.map(c => c.rank === '?' ? '<div class="card back"></div>' : cardHtml(c)).join('')
         : '';
@@ -406,6 +495,7 @@ function renderSeats(state) {
         <div class="seat" data-seat="${seatNum}" style="left:${pos.x}%;top:${pos.y}%">
           <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}" data-user-id="${player.userId}">
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
+            ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">🪙 ${fmt(player.chips)}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
