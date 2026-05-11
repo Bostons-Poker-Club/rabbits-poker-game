@@ -810,3 +810,68 @@ input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.5); }
+
+/* ─── Seat Timer Badge ───────────────────────────────────────────────────── */
+.seat-timer {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  background: var(--gold);
+  color: #000;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 24px;
+  text-align: center;
+  z-index: 10;
+  pointer-events: none;
+}
+.seat-timer.urgent {
+  background: var(--red);
+  color: #fff;
+  animation: pulse 0.5s ease-in-out infinite alternate;
+}
+@keyframes pulse {
+  from { transform: scale(1); }
+  to { transform: scale(1.18); }
+}
+
+/* ─── Chip Animation ─────────────────────────────────────────────────────── */
+.chip-animate {
+  position: fixed;
+  font-size: 1.2rem;
+  z-index: 9998;
+  pointer-events: none;
+  transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.6s ease;
+  transform: translate(0, 0);
+}
+
+/* ─── Chip Stack in Seat ─────────────────────────────────────────────────── */
+.seat-chips {
+  font-size: 0.75rem;
+  color: var(--chip-green);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.seat-chips::before { content: none; }
+
+/* ─── PTT Speaking State ─────────────────────────────────────────────────── */
+.ptt-btn.speaking {
+  background: var(--red) !important;
+  color: #fff !important;
+  animation: ptt-pulse 0.8s ease-in-out infinite alternate;
+}
+@keyframes ptt-pulse {
+  from { box-shadow: 0 0 0 0 rgba(230,57,70,.7); }
+  to   { box-shadow: 0 0 0 10px rgba(230,57,70,0); }
+}
+.ptt-speaking {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--red);
+  border-radius: 50%;
+  margin-left: 3px;
+  animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+}

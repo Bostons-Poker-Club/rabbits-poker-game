@@ -15,12 +15,18 @@ let myState = null;
 let shotClockInterval = null;
 let shotClockEnd = 0;
 let chatOpen = false;
+let prevBets = {};       // seatNumber -> last known currentBet
+let seatTimerInterval = null;
 
 // WebRTC PTT state
 let pttStream = null;
-const pttPeers = new Map();   // userId -> RTCPeerConnection
+const pttPeers = new Map();    // userId -> { pc: RTCPeerConnection, pendingIce: [] }
 const pttAudioEls = new Map(); // userId -> HTMLAudioElement
-const STUN_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+const STUN_CFG = { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' }
+] };
 
 // ─── Seat Layout (positions as % of oval width/height offset from center) ──
 
@@ -42,6 +48,7 @@ function connect() {
 
   socket.on('connect', () => {
     socket.emit('join_table', { tableId, buyInChips: buyIn });
+    checkMicPermission();
   });
 
   socket.on('connect_error', (err) => {
@@ -54,6 +61,16 @@ function connect() {
   });
 
   socket.on('game_state', (state) => {
+    // Detect new bets for chip animation before re-render
+    if (state.players) {
+      for (const p of state.players) {
+        const prev = prevBets[p.seatNumber] || 0;
+        if (p.currentBet > prev && !p.hasFolded) {
+          animateChipToPot(p.seatNumber);
+        }
+        prevBets[p.seatNumber] = p.currentBet;
+      }
+    }
     gameState = state;
     renderTable(state);
     updateHeader(state);
@@ -81,6 +98,7 @@ function connect() {
 
   socket.on('shot_clock_start', ({ userId, seconds, seatNumber }) => {
     if (userId === user.id) startShotClock(seconds);
+    startSeatTimer(seatNumber, seconds);
   });
 
   socket.on('shot_clock_warning', ({ secondsLeft }) => {
@@ -100,6 +118,8 @@ function connect() {
 
   socket.on('hand_ended', (result) => {
     stopShotClock();
+    clearSeatTimer();
+    prevBets = {};
     showHandResult(result);
     if (result.winners?.length) {
       chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}`);
@@ -157,48 +177,92 @@ function connect() {
     if (!pttStream) return;
     for (const peer of peers) {
       const pc = new RTCPeerConnection(STUN_CFG);
-      pttPeers.set(peer.userId, pc);
+      const peerData = { pc, pendingIce: [] };
+      pttPeers.set(peer.userId, peerData);
+
       pttStream.getTracks().forEach(t => pc.addTrack(t, pttStream));
+
       pc.onicecandidate = e => {
-        if (e.candidate) socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'ice', candidate: e.candidate } });
+        if (e.candidate) {
+          socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'ice', candidate: e.candidate } });
+        }
       };
+
       try {
-        const offer = await pc.createOffer();
+        const offer = await pc.createOffer({ offerToReceiveAudio: false });
         await pc.setLocalDescription(offer);
         socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'offer', sdp: offer.sdp } });
-      } catch {}
+      } catch (err) {
+        console.warn('[PTT] offer error:', err);
+      }
     }
   });
 
   // Receive WebRTC signaling messages
   socket.on('ptt:signal', async ({ fromUserId, signal }) => {
     if (signal.type === 'offer') {
-      // We are a listener — someone is sending us audio
+      // We are a listener — create PC, answer the offer, receive audio
       const pc = new RTCPeerConnection(STUN_CFG);
-      pttPeers.set(fromUserId, pc);
-      const audio = new Audio();
+      const peerData = { pc, pendingIce: [] };
+      pttPeers.set(fromUserId, peerData);
+
+      const audio = document.createElement('audio');
       audio.autoplay = true;
+      audio.playsInline = true;
       document.body.appendChild(audio);
       pttAudioEls.set(fromUserId, audio);
-      pc.ontrack = e => { audio.srcObject = e.streams[0]; };
-      pc.onicecandidate = e => {
-        if (e.candidate) socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'ice', candidate: e.candidate } });
+
+      pc.ontrack = e => {
+        audio.srcObject = e.streams[0];
+        audio.play().catch(() => {});
       };
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'ice', candidate: e.candidate } });
+        }
+      };
+
       try {
         await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
+        // Flush buffered ICE candidates
+        for (const ice of peerData.pendingIce) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch {}
+        }
+        peerData.pendingIce = [];
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
         socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'answer', sdp: answer.sdp } });
-      } catch {}
-    } else if (signal.type === 'answer') {
-      const pc = pttPeers.get(fromUserId);
-      if (pc && pc.signalingState !== 'stable') {
-        try { await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp }); } catch {}
+      } catch (err) {
+        console.warn('[PTT] answer error:', err);
       }
+
+    } else if (signal.type === 'answer') {
+      const peerData = pttPeers.get(fromUserId);
+      if (!peerData) return;
+      const { pc } = peerData;
+      if (pc.signalingState === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
+          // Flush buffered ICE candidates
+          for (const ice of peerData.pendingIce) {
+            try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch {}
+          }
+          peerData.pendingIce = [];
+        } catch (err) {
+          console.warn('[PTT] setRemoteDescription (answer) error:', err);
+        }
+      }
+
     } else if (signal.type === 'ice') {
-      const pc = pttPeers.get(fromUserId);
-      if (pc && signal.candidate) {
+      const peerData = pttPeers.get(fromUserId);
+      if (!peerData) return;
+      const { pc, pendingIce } = peerData;
+      if (pc.remoteDescription && pc.remoteDescription.type) {
         try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch {}
+      } else {
+        pendingIce.push(signal.candidate);
       }
     }
   });
@@ -209,8 +273,8 @@ function connect() {
   });
 
   socket.on('ptt:speaker_stopped', ({ userId: speakerId }) => {
-    const pc = pttPeers.get(speakerId);
-    if (pc) { pc.close(); pttPeers.delete(speakerId); }
+    const peerData = pttPeers.get(speakerId);
+    if (peerData) { peerData.pc.close(); pttPeers.delete(speakerId); }
     const audio = pttAudioEls.get(speakerId);
     if (audio) { audio.srcObject = null; audio.remove(); pttAudioEls.delete(speakerId); }
     setSpeakingIndicator(speakerId, false);
@@ -267,12 +331,12 @@ function renderSeats(state) {
         : '';
 
       html += `
-        <div class="seat" style="left:${pos.x}%;top:${pos.y}%">
+        <div class="seat" data-seat="${seatNum}" style="left:${pos.x}%;top:${pos.y}%">
           <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}" data-user-id="${player.userId}">
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
-            <div class="seat-chips">${fmt(player.chips)}</div>
-            <div class="seat-bet">${player.currentBet ? '+$' + fmt(player.currentBet) : ''}</div>
+            <div class="seat-chips">🪙 ${fmt(player.chips)}</div>
+            ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}
             ${player.isSittingOut ? '<div style="color:#888;font-size:.65rem">away</div>' : ''}
             ${player.isAllIn ? '<div style="color:var(--red);font-size:.65rem;font-weight:bold">ALL IN</div>' : ''}
@@ -280,7 +344,7 @@ function renderSeats(state) {
         </div>`;
     } else {
       html += `
-        <div class="seat" style="left:${pos.x}%;top:${pos.y}%">
+        <div class="seat" data-seat="${seatNum}" style="left:${pos.x}%;top:${pos.y}%">
           <div class="seat-box empty" onclick="takeSeat(${seatNum})">
             <div style="font-size:.75rem">Seat ${seatNum}</div>
             <div style="font-size:.7rem">Click to sit</div>
@@ -513,11 +577,46 @@ async function startPTT(e) {
   if (e) e.preventDefault();
   if (pttStream) return;
   try {
-    pttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    document.getElementById('ptt-btn').classList.add('speaking');
+    pttStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    const btn = document.getElementById('ptt-btn');
+    btn.classList.add('speaking');
+    btn.textContent = '🔴 Talking…';
     socket.emit('ptt:join');
+  } catch (err) {
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      toast('Microphone blocked — allow access in browser settings', 'error');
+      showMicDeniedBanner();
+    } else {
+      toast('Microphone error: ' + err.message, 'error');
+    }
+  }
+}
+
+async function checkMicPermission() {
+  try {
+    const status = await navigator.permissions.query({ name: 'microphone' });
+    if (status.state === 'denied') showMicDeniedBanner();
+  } catch {}
+}
+
+function showMicDeniedBanner() {
+  if (document.getElementById('mic-denied-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'mic-denied-banner';
+  banner.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);background:#e63946;color:#fff;padding:10px 18px;border-radius:8px;z-index:9999;font-size:.9rem;text-align:center';
+  banner.textContent = '🎙 Microphone access denied. Click the camera/mic icon in your browser address bar to allow.';
+  document.body.appendChild(banner);
+  setTimeout(() => banner.remove(), 8000);
+}
+
+async function testMic() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    toast('✅ Microphone working!');
+    stream.getTracks().forEach(t => t.stop());
   } catch {
-    toast('Microphone access denied', 'error');
+    toast('Microphone not available — check browser permissions', 'error');
+    showMicDeniedBanner();
   }
 }
 
@@ -525,8 +624,10 @@ function stopPTT() {
   if (!pttStream) return;
   pttStream.getTracks().forEach(t => t.stop());
   pttStream = null;
-  document.getElementById('ptt-btn').classList.remove('speaking');
-  pttPeers.forEach(pc => pc.close());
+  const btn = document.getElementById('ptt-btn');
+  btn.classList.remove('speaking');
+  btn.textContent = '🎙 Hold to Talk';
+  pttPeers.forEach(({ pc }) => pc.close());
   pttPeers.clear();
   pttAudioEls.forEach(a => { a.srcObject = null; a.remove(); });
   pttAudioEls.clear();
@@ -535,21 +636,73 @@ function stopPTT() {
 }
 
 function setSpeakingIndicator(userId, active, username) {
-  // Try to find the seat for this user
   const seatBox = document.querySelector(`.seat-box[data-user-id="${userId}"]`);
   if (!seatBox) {
     if (active) toast(`🎙 ${username || 'Player'} is talking`);
     return;
   }
+  const nameEl = seatBox.querySelector('.seat-name');
   const existing = seatBox.querySelector('.ptt-speaking');
   if (active && !existing) {
     const dot = document.createElement('span');
     dot.className = 'ptt-speaking';
-    dot.textContent = '🎙';
-    seatBox.appendChild(dot);
+    dot.title = 'Speaking';
+    if (nameEl) nameEl.appendChild(dot);
+    else seatBox.appendChild(dot);
   } else if (!active && existing) {
     existing.remove();
   }
+}
+
+// ─── Seat Timer ───────────────────────────────────────────────────────────
+
+function startSeatTimer(seatNumber, seconds) {
+  clearSeatTimer();
+  const endTime = Date.now() + seconds * 1000;
+  seatTimerInterval = setInterval(() => {
+    const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    const seatEl = document.querySelector(`.seat[data-seat="${seatNumber}"]`);
+    if (!seatEl) return;
+    let badge = seatEl.querySelector('.seat-timer');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'seat-timer';
+      seatEl.appendChild(badge);
+    }
+    badge.textContent = remaining + 's';
+    badge.classList.toggle('urgent', remaining <= 5);
+    if (remaining <= 0) clearSeatTimer();
+  }, 200);
+}
+
+function clearSeatTimer() {
+  if (seatTimerInterval) { clearInterval(seatTimerInterval); seatTimerInterval = null; }
+  document.querySelectorAll('.seat-timer').forEach(el => el.remove());
+}
+
+// ─── Chip Animation ───────────────────────────────────────────────────────
+
+function animateChipToPot(seatNumber) {
+  const seatEl = document.querySelector(`.seat[data-seat="${seatNumber}"]`);
+  const potEl = document.getElementById('pot-amount');
+  if (!seatEl || !potEl) return;
+
+  const seatRect = seatEl.getBoundingClientRect();
+  const potRect = potEl.getBoundingClientRect();
+
+  const chip = document.createElement('div');
+  chip.className = 'chip-animate';
+  chip.textContent = '🪙';
+  chip.style.left = (seatRect.left + seatRect.width / 2) + 'px';
+  chip.style.top = (seatRect.top + seatRect.height / 2) + 'px';
+  document.body.appendChild(chip);
+
+  requestAnimationFrame(() => {
+    chip.style.transform = `translate(${potRect.left + potRect.width / 2 - (seatRect.left + seatRect.width / 2)}px, ${potRect.top + potRect.height / 2 - (seatRect.top + seatRect.height / 2)}px)`;
+    chip.style.opacity = '0';
+  });
+
+  setTimeout(() => chip.remove(), 700);
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────

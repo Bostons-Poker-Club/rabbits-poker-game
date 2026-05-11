@@ -256,9 +256,8 @@ class PokerGame {
     this.currentPlayerSeat = orderedPlayers[firstToActIndex].seatNumber;
     this.lastAggressorSeat = bbPlayer.seatNumber;
 
-    // BB and SB have acted
-    this.playersActedThisStreet.add(bbPlayer.userId);
-    this.playersActedThisStreet.add(sbPlayer.userId);
+    // Do NOT mark SB/BB as acted — they must voluntarily act.
+    // BB gets the "option" to raise even if everyone just calls.
   }
 
   // ─── Action Processing ──────────────────────────────────────────────────
@@ -407,9 +406,11 @@ class PokerGame {
 
     if (handPlayers.length === 0) return;
 
-    const currentIndex = handPlayers.findIndex(p => p.seatNumber === this.currentPlayerSeat);
-    const nextIndex = (currentIndex + 1) % handPlayers.length;
-    this.currentPlayerSeat = handPlayers[nextIndex].seatNumber;
+    // Find first seat numerically greater than current (works even if current player folded)
+    const afterCurrent = handPlayers.filter(p => p.seatNumber > this.currentPlayerSeat);
+    this.currentPlayerSeat = afterCurrent.length > 0
+      ? afterCurrent[0].seatNumber
+      : handPlayers[0].seatNumber;
   }
 
   // ─── Street Advancement ─────────────────────────────────────────────────

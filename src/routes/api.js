@@ -4,6 +4,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { supabaseAdmin } = require('../db/supabase');
+const appEvents = require('../events');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -66,7 +67,7 @@ router.post('/auth/register', async (req, res) => {
   let data, error;
   ({ data, error } = await supabaseAdmin
     .from('users')
-    .insert({ username, email, password_hash: passwordHash, chips: 1000,
+    .insert({ username, email, password_hash: passwordHash, chips: 0,
               full_name: full_name || null, nickname: nickname || null, phone: phone || null })
     .select('id, username, email, chips, is_admin')
     .single());
@@ -87,6 +88,7 @@ router.post('/auth/register', async (req, res) => {
   }
 
   const token = jwt.sign({ id: data.id, username: data.username, isAdmin: data.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+  appEvents.emit('player:registered', { userId: data.id, username: data.username });
   res.json({ token, user: { id: data.id, username: data.username, email: data.email, chips: data.chips, isAdmin: data.is_admin } });
 });
 
@@ -394,6 +396,17 @@ router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (
     .update({ chips: newChips })
     .eq('id', req.params.id);
 
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true, newChips });
+});
+
+router.post('/admin/players/:id/seat', authMiddleware, adminMiddleware, async (req, res) => {
+  const { amount } = req.body;
+  if (typeof amount !== 'number' || amount <= 0) return res.status(400).json({ error: 'Positive amount required' });
+
+  const { data: user } = await supabaseAdmin.from('users').select('chips').eq('id', req.params.id).single();
+  const newChips = (user?.chips || 0) + amount;
+  const { error } = await supabaseAdmin.from('users').update({ chips: newChips }).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, newChips });
 });

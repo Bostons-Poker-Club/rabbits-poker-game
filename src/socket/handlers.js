@@ -5,12 +5,14 @@ const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
 const { supabaseAdmin } = require('../db/supabase');
 
+const appEvents = require('../events');
+
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JACKPOT_INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
 const RAKE_PERCENT = parseFloat(process.env.RAKE_PERCENT) || 5;
 const RAKE_CAP = parseInt(process.env.RAKE_CAP) || 500;
 const JACKPOT_CONTRIB = parseFloat(process.env.JACKPOT_CONTRIBUTION_PERCENT) || 1;
-const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 30;
+const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 20;
 
 // In-memory state
 const activeGames = new Map();       // tableId -> PokerGame
@@ -22,10 +24,25 @@ const userSockets = new Map();       // userId -> socketId
 let jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
 let jackpotIo = null;
 
+function getAdminSockets(io) {
+  const sids = [];
+  for (const [sid, info] of socketUsers) {
+    if (info.isAdmin) sids.push(sid);
+  }
+  return sids;
+}
+
 function setupSocketHandlers(io) {
   jackpotIo = io;
   loadJackpotFromDB();
   startJackpotTimer(io);
+
+  // Forward app-level events to admin sockets
+  appEvents.on('player:registered', ({ userId, username }) => {
+    for (const sid of getAdminSockets(io)) {
+      io.to(sid).emit('admin:new_player', { userId, username });
+    }
+  });
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -236,6 +253,13 @@ function setupSocketHandlers(io) {
     socket.on('ptt:stop', () => {
       const tId = socket.currentTableId;
       if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
+    });
+
+    socket.on('lobby:join', () => {
+      // Player is in the lobby — notify admins
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:player_in_lobby', { userId, username });
+      }
     });
 
     socket.on('get_table_state', ({ tableId }) => {
