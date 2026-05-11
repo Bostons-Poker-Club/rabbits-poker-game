@@ -18,13 +18,15 @@ if (typeof io !== 'undefined') {
   const adminSocket = io({ auth: { token: localStorage.getItem('rp_token') } });
   adminSocket.on('connect', () => adminSocket.emit('lobby:join'));
 
-  adminSocket.on('admin:new_player', ({ userId, username }) => {
-    showAdminNotification('🔔 New Registration', `${username} just registered`, userId, username);
+  adminSocket.on('admin:new_player', ({ username }) => {
+    toast(`🔔 New registration: ${username}`, 'success');
     loadPlayers();
+    loadPendingPlayers();
   });
 
-  adminSocket.on('admin:player_in_lobby', ({ userId, username }) => {
-    showAdminNotification('🎯 Player in Lobby', `${username} is in the lobby`, userId, username);
+  adminSocket.on('admin:player_in_lobby', ({ username }) => {
+    toast(`🎯 ${username} is in the lobby`);
+    loadPendingPlayers();
   });
 
   adminSocket.on('admin:rake_update', ({ sessionTotal, hand }) => {
@@ -32,45 +34,53 @@ if (typeof io !== 'undefined') {
   });
 }
 
-function showAdminNotification(title, body, userId, username) {
-  const popup = document.getElementById('admin-notify-popup');
-  if (!popup) return;
-  document.getElementById('notify-title').textContent = title;
-  document.getElementById('notify-body').textContent = body;
-
-  const seatBtn = document.getElementById('notify-seat-btn');
-  seatBtn.onclick = async () => {
-    const amt = parseInt(prompt(`Add chips for ${username}:`, '1000'));
-    if (!amt || amt <= 0) return;
-    try {
-      await apiFetch(`/api/admin/players/${userId}/seat`, { method: 'POST', body: { amount: amt } });
-      toast(`Added ${amt.toLocaleString()} chips to ${username}`);
-      popup.style.display = 'none';
-      loadPlayers();
-    } catch (e) {
-      toast(e.message || 'Failed', 'error');
-    }
-  };
-
-  popup.style.display = '';
-
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    osc.start(); osc.stop(ctx.currentTime + 0.4);
-  } catch {}
-
-  clearTimeout(popup._dismissTimer);
-  popup._dismissTimer = setTimeout(() => { popup.style.display = 'none'; }, 15000);
+async function loadAll() {
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake()]);
 }
 
-async function loadAll() {
-  await Promise.all([loadPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake()]);
+async function loadPendingPlayers() {
+  try {
+    const list = await apiFetch('/api/admin/pending-players');
+    renderPendingPlayers(list);
+  } catch { renderPendingPlayers([]); }
+}
+
+function renderPendingPlayers(list) {
+  const section = document.getElementById('pending-players-section');
+  const body = document.getElementById('pending-players-body');
+  const count = document.getElementById('pending-count');
+  if (!body) return;
+
+  if (!list.length) {
+    count.textContent = '';
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = '';
+  count.textContent = `(${list.length})`;
+  body.innerHTML = list.map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div>
+        <strong style="color:var(--text)">${esc(p.username)}</strong>
+        ${p.nickname ? `<span style="color:var(--chip-green);margin-left:6px">"${esc(p.nickname)}"</span>` : ''}
+        ${p.full_name ? `<div style="font-size:.75rem;color:var(--text-dim)">${esc(p.full_name)}</div>` : ''}
+        ${p.phone ? `<div style="font-size:.75rem;color:var(--text-dim)">📞 ${esc(p.phone)}</div>` : ''}
+      </div>
+      <button class="btn btn-sm btn-gold" onclick="quickAddChips('${p.id}','${esc(p.username)}')">Add Chips</button>
+    </div>
+  `).join('');
+}
+
+async function quickAddChips(id, username) {
+  const amt = parseInt(prompt(`Add chips for ${username}:`, '1000'));
+  if (!amt || amt <= 0) return;
+  try {
+    await apiFetch(`/api/admin/players/${id}/chips`, { method: 'POST', body: { amount: amt } });
+    toast(`Added ${fmt(amt)} chips to ${username}`, 'success');
+    loadPendingPlayers();
+    loadPlayers();
+  } catch (e) { toast(e.message || 'Failed', 'error'); }
 }
 
 async function loadSessionRake() {

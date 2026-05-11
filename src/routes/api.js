@@ -87,9 +87,13 @@ router.post('/auth/register', async (req, res) => {
     }
   }
 
+  // Force chips to 0 regardless of DB default — belt-and-suspenders
+  await supabaseAdmin.from('users').update({ chips: 0 }).eq('id', data.id);
+
   const token = jwt.sign({ id: data.id, username: data.username, isAdmin: data.is_admin }, JWT_SECRET, { expiresIn: '7d' });
-  appEvents.emit('player:registered', { userId: data.id, username: data.username });
-  res.json({ token, user: { id: data.id, username: data.username, email: data.email, chips: data.chips, isAdmin: data.is_admin } });
+  appEvents.emit('player:registered', { userId: data.id, username: data.username, nickname: nickname || null, phone: phone || null });
+  // Always return chips: 0 to the client — do not echo what the DB returned
+  res.json({ token, user: { id: data.id, username: data.username, email: data.email, chips: 0, isAdmin: data.is_admin } });
 });
 
 router.post('/auth/login', async (req, res) => {
@@ -340,6 +344,28 @@ router.post('/jackpot/award', authMiddleware, adminMiddleware, async (req, res) 
 });
 
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
+
+router.get('/admin/pending-players', authMiddleware, adminMiddleware, async (req, res) => {
+  // Players with 0 chips who haven't been seated yet
+  let { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, username, email, chips, created_at, full_name, nickname, phone')
+    .eq('chips', 0)
+    .eq('is_admin', false)
+    .order('created_at', { ascending: false });
+
+  if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
+    ({ data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, email, chips, created_at')
+      .eq('chips', 0)
+      .eq('is_admin', false)
+      .order('created_at', { ascending: false }));
+  }
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
 
 router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) => {
   // Try with extended profile columns; fall back to base columns if migration not yet applied

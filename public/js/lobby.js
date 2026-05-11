@@ -51,14 +51,11 @@ if (typeof io !== 'undefined') {
 
   // Admin-only events
   if (user.isAdmin) {
-    lobbySocket.on('admin:new_player', ({ userId, username }) => {
-      showAdminNotification(`New registration: ${username}`, userId, username, 'registered');
+    lobbySocket.on('admin:new_player', ({ username }) => {
+      showToast(`🔔 New registration: ${username} — check Pending Players in Admin`, 'success');
     });
-    lobbySocket.on('admin:player_in_lobby', ({ userId, username }) => {
-      showAdminNotification(`${username} is in the lobby`, userId, username, 'lobby');
-    });
-    lobbySocket.on('admin:rake_update', ({ sessionTotal }) => {
-      document.getElementById('header-chips').textContent = '♛ Admin';
+    lobbySocket.on('admin:player_in_lobby', ({ username }) => {
+      showToast(`🎯 ${username} is in the lobby`);
     });
   }
 
@@ -75,46 +72,6 @@ if (typeof io !== 'undefined') {
     showToast(`🪙 ${fmtChips(amount)} chips added by ${from}`);
     setTimeout(refreshChips, 500);
   });
-}
-
-function showAdminNotification(bodyText, userId, username, type) {
-  const popup = document.getElementById('admin-notify-popup');
-  if (!popup) return;
-
-  document.getElementById('notify-title').textContent = type === 'registered' ? '🔔 New Registration' : '🎯 Player in Lobby';
-  document.getElementById('notify-body').textContent = bodyText;
-
-  // "Add Chips & Seat" button
-  const seatBtn = document.getElementById('notify-seat-btn');
-  seatBtn.onclick = async () => {
-    const amt = parseInt(prompt(`Add chips for ${username}:`, '1000'));
-    if (!amt || amt <= 0) return;
-    try {
-      await apiFetch(`/api/admin/players/${userId}/seat`, { method: 'POST', body: { amount: amt } });
-      showToast(`Added ${fmtChips(amt)} chips to ${username}`);
-      popup.style.display = 'none';
-    } catch (e) {
-      showToast(e.message || 'Failed to add chips', 'error');
-    }
-  };
-
-  popup.style.display = '';
-
-  // Play a soft notification sound
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.3, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-    osc.start(); osc.stop(ctx.currentTime + 0.4);
-  } catch {}
-
-  // Auto-dismiss after 15 seconds
-  clearTimeout(popup._dismissTimer);
-  popup._dismissTimer = setTimeout(() => { popup.style.display = 'none'; }, 15000);
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────
