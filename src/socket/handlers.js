@@ -9,10 +9,16 @@ const appEvents = require('../events');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JACKPOT_INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
-const RAKE_PERCENT = parseFloat(process.env.RAKE_PERCENT) || 5;
-const RAKE_CAP = parseInt(process.env.RAKE_CAP) || 500;
 const JACKPOT_CONTRIB = parseFloat(process.env.JACKPOT_CONTRIBUTION_PERCENT) || 1;
 const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 20;
+
+// Tiered rake: keyed by big blind thresholds
+function getRakeConfig(bigBlind) {
+  if (bigBlind <= 3)  return { rakePercent: 5, rakeCap: 8 };
+  if (bigBlind <= 5)  return { rakePercent: 5, rakeCap: 12 };
+  if (bigBlind <= 10) return { rakePercent: 5, rakeCap: 15 };
+  return { rakePercent: 4, rakeCap: 20 };  // $10/$20+
+}
 
 // In-memory state
 const activeGames = new Map();       // tableId -> PokerGame
@@ -25,7 +31,8 @@ let jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: D
 let jackpotIo = null;
 
 // Session rake tracking (resets on server restart)
-const sessionRake = { total: 0, hands: [] };
+// byTable: Map<tableId, { tableName, total, hands[] }>
+const sessionRake = { total: 0, byTable: new Map() };
 
 function getAdminSockets(io) {
   const sids = [];
@@ -140,17 +147,19 @@ function setupSocketHandlers(io) {
         // Get or create game
         let game = activeGames.get(tableId);
         if (!game) {
+          const { rakePercent, rakeCap } = getRakeConfig(table.stakes_big_blind);
           game = new PokerGame({
             tableId,
             gameType: table.game_type,
             smallBlind: table.stakes_small_blind,
             bigBlind: table.stakes_big_blind,
             maxPlayers: table.max_players,
-            rakePercent: table.rake_percent || RAKE_PERCENT,
-            rakeCap: RAKE_CAP,
+            rakePercent,
+            rakeCap,
             jackpotContributionPercent: JACKPOT_CONTRIB,
             shotClockSeconds: SHOT_CLOCK
           });
+          game.tableName = table.name || tableId;
 
           game.onBroadcast = (event, data) => io.to(tableId).emit(event, data);
           game.onPrivate = (uid, event, data) => {
@@ -641,16 +650,30 @@ async function persistHandResult(tableId, result) {
     const jackpotContrib = result.jackpotContribution || 0;
     const rakeAmount = result.rakeCollected || 0;
 
-    // Track session rake and notify admins
+    // Track session rake per-table and notify admins
     if (rakeAmount > 0) {
+      const game = activeGames.get(tableId);
+      const tableName = game?.tableName || tableId.slice(0, 8);
+
       sessionRake.total += rakeAmount;
-      sessionRake.hands.push({ tableId, rake: rakeAmount, pot: result.pot, ts: Date.now() });
-      if (sessionRake.hands.length > 200) sessionRake.hands.shift(); // keep last 200
+      if (!sessionRake.byTable.has(tableId)) {
+        sessionRake.byTable.set(tableId, { tableName, total: 0, hands: [] });
+      }
+      const tableEntry = sessionRake.byTable.get(tableId);
+      tableEntry.tableName = tableName;
+      tableEntry.total += rakeAmount;
+      tableEntry.hands.push({ rake: rakeAmount, pot: result.pot, ts: Date.now() });
+      if (tableEntry.hands.length > 100) tableEntry.hands.shift();
+
       if (jackpotIo) {
+        const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => ({
+          tableId: id, tableName: t.tableName, total: t.total, handCount: t.hands.length
+        }));
         for (const sid of getAdminSockets(jackpotIo)) {
           jackpotIo.to(sid).emit('admin:rake_update', {
             sessionTotal: sessionRake.total,
-            hand: { tableId, rake: rakeAmount, pot: result.pot }
+            hand: { tableId, tableName, rake: rakeAmount, pot: result.pot },
+            byTable
           });
         }
       }

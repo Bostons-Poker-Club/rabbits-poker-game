@@ -144,9 +144,30 @@ function connect() {
     stopShotClock();
     clearSeatTimer();
     prevBets = {};
-    showHandResult(result);
+
+    // Flash rake in pot display before showing winner overlay
+    if (result.rakeCollected > 0) {
+      const potEl = document.getElementById('pot-amount');
+      const potLabel = potEl?.nextElementSibling; // .pot-label
+      const origPot = potEl?.textContent;
+      if (potEl) {
+        potEl.textContent = `🏦 -$${fmt(result.rakeCollected)}`;
+        potEl.style.color = 'var(--red)';
+        if (potLabel) potLabel.textContent = 'RAKE';
+        setTimeout(() => {
+          potEl.style.color = '';
+          if (potLabel) potLabel.textContent = 'POT';
+          showHandResult(result);
+        }, 1200);
+      } else {
+        showHandResult(result);
+      }
+    } else {
+      showHandResult(result);
+    }
+
     if (result.winners?.length) {
-      chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}`);
+      chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
     }
   });
 

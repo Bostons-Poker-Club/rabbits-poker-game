@@ -32,6 +32,18 @@
       <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="stat-session-rake">$0</div><div class="stat-label">Session Rake</div></div>
     </div>
 
+    <!-- Per-table rake breakdown -->
+    <div id="rake-by-table-overview" style="margin:16px 0;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+      <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.9rem">🎰 Rake by Table — Session</h3>
+      <div id="rake-by-table-body" style="font-size:.82rem">
+        <div style="text-align:center;padding:8px;color:var(--text-dim)">No hands yet</div>
+      </div>
+      <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1);display:flex;justify-content:space-between;font-size:.85rem">
+        <span style="color:var(--text-dim)">Grand Total (all tables)</span>
+        <strong style="color:var(--gold)" id="rake-grand-total">$0</strong>
+      </div>
+    </div>
+
     <!-- Live rake feed -->
     <div style="margin:20px 0;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
       <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.95rem">📊 Live Rake Feed <span id="rake-session-total" style="color:var(--gold);font-size:.85rem;margin-left:8px">Session total: $0</span></h3>
@@ -171,9 +183,24 @@
   <div class="admin-panel" id="panel-rake">
     <h2 style="color:var(--gold);margin-bottom:16px">Rake Report</h2>
     <div class="stats-grid" style="margin-bottom:24px">
-      <div class="stat-card"><div class="stat-value" id="rake-total">$0</div><div class="stat-label">Total Rake Collected</div></div>
+      <div class="stat-card"><div class="stat-value" id="rake-total">$0</div><div class="stat-label">All-Time Rake</div></div>
       <div class="stat-card"><div class="stat-value" id="rake-jackpot">$0</div><div class="stat-label">Jackpot Contributions</div></div>
+      <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="rake-session-total-panel">$0</div><div class="stat-label">Session Rake</div></div>
     </div>
+
+    <!-- Per-table session rake -->
+    <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.9rem">🎰 Session Rake by Table</h3>
+    <div class="table-wrap" style="margin-bottom:24px">
+      <table class="data-table" id="rake-by-table-panel-table">
+        <thead><tr><th>Table</th><th>Hands</th><th>Session Rake</th></tr></thead>
+        <tbody id="rake-by-table-panel-body">
+          <tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- All-time hands -->
+    <h3 style="color:var(--gold);margin-bottom:10px;font-size:.9rem">All-Time Hands</h3>
     <div class="table-wrap">
       <table class="data-table">
         <thead><tr><th>Table</th><th>Rake</th><th>Jackpot</th><th>Date</th></tr></thead>

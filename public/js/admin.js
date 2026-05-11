@@ -29,8 +29,8 @@ if (typeof io !== 'undefined') {
     loadPendingPlayers();
   });
 
-  adminSocket.on('admin:rake_update', ({ sessionTotal, hand }) => {
-    updateRakeFeed(sessionTotal, hand);
+  adminSocket.on('admin:rake_update', ({ sessionTotal, hand, byTable }) => {
+    updateRakeFeed(sessionTotal, hand, byTable);
   });
 }
 
@@ -86,29 +86,80 @@ async function quickAddChips(id, username) {
 async function loadSessionRake() {
   try {
     const data = await apiFetch('/api/admin/session-rake');
-    document.getElementById('stat-session-rake').textContent = `$${fmt(data.total || 0)}`;
-    document.getElementById('rake-session-total').textContent = `Session total: $${fmt(data.total || 0)}`;
-    if (data.hands?.length) {
-      const feed = document.getElementById('rake-live-feed');
-      feed.innerHTML = data.hands.slice().reverse().map(h => {
-        const t = new Date(h.ts).toLocaleTimeString();
-        return `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${t} — Pot $${fmt(h.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(h.rake)}</strong></div>`;
-      }).join('');
-    }
+    updateSessionRakeUI(data.total || 0, data.byTable || [], data.hands || []);
   } catch {}
 }
 
-function updateRakeFeed(sessionTotal, hand) {
-  document.getElementById('stat-session-rake').textContent = `$${fmt(sessionTotal)}`;
-  document.getElementById('rake-session-total').textContent = `Session total: $${fmt(sessionTotal)}`;
+function updateSessionRakeUI(total, byTable, hands) {
+  // Stat cards
+  document.getElementById('stat-session-rake').textContent = `$${fmt(total)}`;
+  document.getElementById('rake-session-total').textContent = `Session total: $${fmt(total)}`;
+  const panelEl = document.getElementById('rake-session-total-panel');
+  if (panelEl) panelEl.textContent = `$${fmt(total)}`;
+
+  // Grand total line in overview
+  const grandEl = document.getElementById('rake-grand-total');
+  if (grandEl) grandEl.textContent = `$${fmt(total)}`;
+
+  // Per-table breakdown (overview panel)
+  const byTableBody = document.getElementById('rake-by-table-body');
+  if (byTableBody) {
+    if (!byTable.length) {
+      byTableBody.innerHTML = '<div style="text-align:center;padding:8px;color:var(--text-dim)">No hands yet</div>';
+    } else {
+      byTableBody.innerHTML = byTable.map(t => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <span style="color:var(--text)">${esc(t.tableName)}</span>
+          <span style="color:var(--text-dim);font-size:.8rem">${t.handCount} hands</span>
+          <strong style="color:var(--chip-green)">$${fmt(t.total)}</strong>
+        </div>`).join('');
+    }
+  }
+
+  // Per-table table in Rake panel
+  const panelBody = document.getElementById('rake-by-table-panel-body');
+  if (panelBody) {
+    if (!byTable.length) {
+      panelBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>';
+    } else {
+      panelBody.innerHTML = byTable.map(t => `
+        <tr>
+          <td style="color:var(--text)">${esc(t.tableName)}</td>
+          <td style="color:var(--text-dim)">${t.handCount}</td>
+          <td style="color:var(--chip-green);font-weight:700">$${fmt(t.total)}</td>
+        </tr>`).join('') +
+        `<tr style="border-top:2px solid rgba(255,255,255,.15)">
+          <td colspan="2" style="color:var(--gold);font-weight:700">Grand Total</td>
+          <td style="color:var(--gold);font-weight:700">$${fmt(total)}</td>
+        </tr>`;
+    }
+  }
+
+  // Live feed
+  if (hands.length) {
+    const feed = document.getElementById('rake-live-feed');
+    if (feed) {
+      feed.innerHTML = hands.slice(0, 50).map(h => {
+        const t = new Date(h.ts).toLocaleTimeString();
+        const label = h.tableName ? ` [${esc(h.tableName)}]` : '';
+        return `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${t}${label} — Pot $${fmt(h.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(h.rake)}</strong></div>`;
+      }).join('');
+    }
+  }
+}
+
+function updateRakeFeed(sessionTotal, hand, byTable) {
+  updateSessionRakeUI(sessionTotal, byTable || [], []);
+  // Prepend just the new hand to the live feed
   const feed = document.getElementById('rake-live-feed');
   if (!feed || !hand) return;
   const empty = feed.querySelector('div[style*="text-align:center"]');
   if (empty) feed.innerHTML = '';
   const t = new Date().toLocaleTimeString();
+  const label = hand.tableName ? ` [${esc(hand.tableName)}]` : '';
   const row = document.createElement('div');
   row.style.cssText = 'padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)';
-  row.innerHTML = `${t} — Pot $${fmt(hand.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(hand.rake)}</strong>`;
+  row.innerHTML = `${t}${label} — Pot $${fmt(hand.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(hand.rake)}</strong>`;
   feed.insertBefore(row, feed.firstChild);
   if (feed.children.length > 50) feed.lastChild.remove();
 }

@@ -481,12 +481,22 @@ router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (re
 });
 
 router.get('/admin/session-rake', authMiddleware, adminMiddleware, (req, res) => {
-  // Import inline to avoid circular dep — handlers exports sessionRake
   try {
     const { sessionRake } = require('../socket/handlers');
-    res.json(sessionRake);
+    const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => ({
+      tableId: id, tableName: t.tableName, total: t.total,
+      handCount: t.hands.length,
+      hands: t.hands
+    }));
+    res.json({
+      total: sessionRake.total,
+      byTable,
+      // flat list of all hands newest-first for the live feed
+      hands: byTable.flatMap(t => t.hands.map(h => ({ ...h, tableId: t.tableId, tableName: t.tableName })))
+              .sort((a, b) => b.ts - a.ts).slice(0, 100)
+    });
   } catch {
-    res.json({ total: 0, hands: [] });
+    res.json({ total: 0, byTable: [], hands: [] });
   }
 });
 
