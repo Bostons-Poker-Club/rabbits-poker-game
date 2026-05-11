@@ -204,6 +204,10 @@ function updateJackpotDisplay() {
 
 function openJoinModal(tableId, bb) {
   const u = getUser();
+  if (!u.chips || u.chips <= 0) {
+    showToast('You have 0 chips. Contact the admin to receive chips before joining a table.', 'error');
+    return;
+  }
   document.getElementById('join-table-id').value = tableId;
   document.getElementById('join-table-bb').value = bb;
   document.getElementById('join-buyin').value = bb * 20;

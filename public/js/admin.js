@@ -95,8 +95,8 @@ function renderPlayers(list) {
                                    '<span style="color:var(--text-dim)">Player</span>';
     const hostBtnLabel = p.is_host ? 'Revoke Host' : 'Make Host';
     const hostBtnClass = p.is_host ? 'btn-outline' : 'btn-green';
-    const chipsBtn = p.is_host && !p.is_admin
-      ? `<button class="btn btn-sm btn-outline" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Chips</button>`
+    const chipsBtn = !p.is_admin
+      ? `<button class="btn btn-sm btn-gold" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Add Chips</button>`
       : '';
     return `
     <tr style="cursor:pointer" onclick="viewPlayer('${p.id}')">
@@ -129,17 +129,19 @@ function filterPlayers() {
 
 function openChipsModal(id, name) {
   document.getElementById('chips-player-id').value = id;
-  document.getElementById('chips-player-name').textContent = `Host: ${name}`;
+  document.getElementById('chips-player-name').textContent = `Player: ${name}`;
+  document.getElementById('chips-amount').value = '1000';
   openModal('chips-modal');
 }
 
 async function submitChips() {
   const id = document.getElementById('chips-player-id').value;
   const amount = parseInt(document.getElementById('chips-amount').value);
+  if (!amount || isNaN(amount)) return toast('Enter a valid amount', 'error');
   try {
     await apiFetch(`/api/admin/players/${id}/chips`, { method: 'POST', body: { amount } });
     closeModal('chips-modal');
-    toast('Chips updated');
+    toast(`${amount > 0 ? '+' : ''}${amount.toLocaleString()} chips applied`);
     loadPlayers();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -174,6 +176,13 @@ async function viewPlayer(id) {
       <div class="pd-row"><span class="pd-label">Status</span><span class="pd-value" style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></div>
     `;
     document.getElementById('pd-edit-btn').onclick = () => { closeModal('player-detail-modal'); openEditModal(id); };
+    const pdChipsBtn = document.getElementById('pd-chips-btn');
+    if (pdChipsBtn && !p.is_admin) {
+      pdChipsBtn.style.display = '';
+      pdChipsBtn.onclick = () => { closeModal('player-detail-modal'); openChipsModal(id, p.username); };
+    } else if (pdChipsBtn) {
+      pdChipsBtn.style.display = 'none';
+    }
     openModal('player-detail-modal');
   } catch (e) { toast(e.message, 'error'); }
 }

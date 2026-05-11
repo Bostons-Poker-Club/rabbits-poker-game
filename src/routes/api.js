@@ -74,10 +74,10 @@ router.post('/auth/register', async (req, res) => {
 
   if (error) {
     if (error.code === '23505') return res.status(400).json({ error: 'Username or email already taken' });
-    if (error.message?.includes('column')) {
+    if (error.message?.includes('column') || error.message?.includes('does not exist')) {
       ({ data, error } = await supabaseAdmin
         .from('users')
-        .insert({ username, email, password_hash: passwordHash, chips: 1000 })
+        .insert({ username, email, password_hash: passwordHash, chips: 0 })
         .select('id, username, email, chips, is_admin')
         .single());
     }
@@ -342,20 +342,38 @@ router.post('/jackpot/award', authMiddleware, adminMiddleware, async (req, res) 
 // ─── Admin Routes ─────────────────────────────────────────────────────────────
 
 router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) => {
-  const { data, error } = await supabaseAdmin
+  // Try with extended profile columns; fall back to base columns if migration not yet applied
+  let { data, error } = await supabaseAdmin
     .from('users')
     .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
     .order('created_at', { ascending: false });
+
+  if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
+    ({ data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, email, chips, is_admin, is_banned, created_at')
+      .order('created_at', { ascending: false }));
+  }
+
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data.map(p => ({ ...p, is_host: hostSet.has(p.id) })));
+  res.json((data || []).map(p => ({ ...p, is_host: hostSet.has(p.id) })));
 });
 
 router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  const { data, error } = await supabaseAdmin
+  let { data, error } = await supabaseAdmin
     .from('users')
     .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
     .eq('id', req.params.id)
     .single();
+
+  if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
+    ({ data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, email, chips, is_admin, is_banned, created_at')
+      .eq('id', req.params.id)
+      .single());
+  }
+
   if (error) return res.status(404).json({ error: 'Player not found' });
   res.json({ ...data, is_host: hostSet.has(data.id) });
 });
@@ -382,7 +400,6 @@ router.delete('/admin/players/:id', authMiddleware, adminMiddleware, async (req,
 router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (req, res) => {
   const { amount } = req.body;
   if (typeof amount !== 'number') return res.status(400).json({ error: 'Amount required' });
-  if (!hostSet.has(req.params.id)) return res.status(403).json({ error: 'Chips can only be adjusted for approved hosts' });
 
   const { data: user } = await supabaseAdmin
     .from('users')

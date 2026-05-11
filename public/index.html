@@ -61,7 +61,7 @@
       </div>
       <button class="btn btn-gold btn-full" onclick="doRegister()">Create Account</button>
       <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:12px">
-        Start with 1,000 free chips!
+        You start with 0 chips — contact admin to receive chips before playing.
       </p>
       <div id="reg-error" class="error-msg"></div>
       <div id="reg-success" class="success-msg"></div>
@@ -106,7 +106,8 @@
     okEl.textContent  = '';
     if (!nickname) { errEl.textContent = 'Nickname is required'; return; }
     try {
-      await register(username, email, password, nickname, phone);
+      const full_name = document.getElementById('reg-fullname').value.trim();
+      await register(username, email, password, nickname, phone, full_name);
       window.location.href = '/lobby.html';
     } catch (e) {
       errEl.textContent = e.message;
