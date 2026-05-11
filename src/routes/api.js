@@ -52,24 +52,38 @@ function hostMiddleware(req, res, next) {
 // ─── Auth Routes ────────────────────────────────────────────────────────────
 
 router.post('/auth/register', async (req, res) => {
-  const { username, email, password } = req.body;
+  const { username, email, password, full_name, nickname, phone } = req.body;
   if (!username || !email || !password) {
-    return res.status(400).json({ error: 'All fields required' });
+    return res.status(400).json({ error: 'Username, email and password are required' });
   }
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const { data, error } = await supabaseAdmin
+
+  // Try with extended profile fields first; fall back to base fields if migration not yet applied
+  let data, error;
+  ({ data, error } = await supabaseAdmin
     .from('users')
-    .insert({ username, email, password_hash: passwordHash, chips: 1000 })
+    .insert({ username, email, password_hash: passwordHash, chips: 1000,
+              full_name: full_name || null, nickname: nickname || null, phone: phone || null })
     .select('id, username, email, chips, is_admin')
-    .single();
+    .single());
 
   if (error) {
     if (error.code === '23505') return res.status(400).json({ error: 'Username or email already taken' });
-    return res.status(500).json({ error: error.message });
+    if (error.message?.includes('column')) {
+      ({ data, error } = await supabaseAdmin
+        .from('users')
+        .insert({ username, email, password_hash: passwordHash, chips: 1000 })
+        .select('id, username, email, chips, is_admin')
+        .single());
+    }
+    if (error) {
+      if (error.code === '23505') return res.status(400).json({ error: 'Username or email already taken' });
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   const token = jwt.sign({ id: data.id, username: data.username, isAdmin: data.is_admin }, JWT_SECRET, { expiresIn: '7d' });
@@ -328,10 +342,39 @@ router.post('/jackpot/award', authMiddleware, adminMiddleware, async (req, res) 
 router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, is_admin, is_banned, created_at')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
   res.json(data.map(p => ({ ...p, is_host: hostSet.has(p.id) })));
+});
+
+router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
+    .eq('id', req.params.id)
+    .single();
+  if (error) return res.status(404).json({ error: 'Player not found' });
+  res.json({ ...data, is_host: hostSet.has(data.id) });
+});
+
+router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { full_name, nickname, phone, email, address, city, state, zip } = req.body;
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ full_name, nickname, phone, email, address, city, state, zip })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
+});
+
+router.delete('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('users')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
 
 router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (req, res) => {

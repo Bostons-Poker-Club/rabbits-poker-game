@@ -60,8 +60,8 @@ async function login(username, password) {
   return data;
 }
 
-async function register(username, email, password) {
-  const data = await apiFetch('/api/auth/register', { method: 'POST', body: { username, email, password } });
+async function register(username, email, password, nickname, phone) {
+  const data = await apiFetch('/api/auth/register', { method: 'POST', body: { username, email, password, nickname, phone } });
   saveAuth(data.token, data.user);
   return data;
 }

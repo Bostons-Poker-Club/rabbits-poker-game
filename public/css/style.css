@@ -721,6 +721,20 @@ input, select, textarea { font-family: inherit; }
 .jackpot-admin-info { color: var(--text-dim); font-size: 0.85rem; margin-top: 4px; }
 .jackpot-admin-actions { display: flex; flex-direction: column; gap: 8px; }
 
+/* ─── Player Detail Modal ────────────────────────────────────────────────── */
+.player-detail-grid { margin-top: 16px; }
+.pd-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.pd-row:last-child { border-bottom: none; }
+.pd-label { color: var(--text-dim); font-size: .82rem; flex-shrink: 0; }
+.pd-value { color: var(--text); text-align: right; word-break: break-word; }
+
 /* ─── PTT Button ─────────────────────────────────────────────────────────── */
 .ptt-btn {
   background: rgba(255,255,255,0.08);

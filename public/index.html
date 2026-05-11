@@ -36,15 +36,27 @@
     <!-- Register Form -->
     <div id="form-register" style="display:none">
       <div class="form-group">
-        <label>Username</label>
-        <input type="text" id="reg-username" placeholder="Choose a username" maxlength="30">
+        <label>Full Name <span style="color:var(--text-dim)">(real name)</span></label>
+        <input type="text" id="reg-fullname" placeholder="John Smith" maxlength="80" autocomplete="name">
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="reg-email" placeholder="your@email.com">
+        <label>Nickname <span style="color:var(--gold)">*</span></label>
+        <input type="text" id="reg-nickname" placeholder="Table nickname (e.g. Maverick)" maxlength="40">
       </div>
       <div class="form-group">
-        <label>Password</label>
+        <label>Username <span style="color:var(--gold)">*</span></label>
+        <input type="text" id="reg-username" placeholder="Login username" maxlength="30" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label>Email <span style="color:var(--gold)">*</span></label>
+        <input type="email" id="reg-email" placeholder="your@email.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label>Phone Number</label>
+        <input type="tel" id="reg-phone" placeholder="(617) 555-0100" maxlength="20" autocomplete="tel">
+      </div>
+      <div class="form-group">
+        <label>Password <span style="color:var(--gold)">*</span></label>
         <input type="password" id="reg-password" placeholder="Min 6 characters" autocomplete="new-password">
       </div>
       <button class="btn btn-gold btn-full" onclick="doRegister()">Create Account</button>
@@ -84,14 +96,17 @@
 
   async function doRegister() {
     const username = document.getElementById('reg-username').value.trim();
-    const email = document.getElementById('reg-email').value.trim();
+    const email    = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
+    const nickname = document.getElementById('reg-nickname').value.trim();
+    const phone    = document.getElementById('reg-phone').value.trim();
     const errEl = document.getElementById('reg-error');
-    const okEl = document.getElementById('reg-success');
+    const okEl  = document.getElementById('reg-success');
     errEl.textContent = '';
-    okEl.textContent = '';
+    okEl.textContent  = '';
+    if (!nickname) { errEl.textContent = 'Nickname is required'; return; }
     try {
-      await register(username, email, password);
+      await register(username, email, password, nickname, phone);
       window.location.href = '/lobby.html';
     } catch (e) {
       errEl.textContent = e.message;
