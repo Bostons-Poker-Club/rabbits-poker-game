@@ -431,6 +431,7 @@ router.post('/admin/players/:id/seat', authMiddleware, adminMiddleware, async (r
 router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (req, res) => {
   const { isHost } = req.body;
   if (isHost) { hostSet.add(req.params.id); } else { hostSet.delete(req.params.id); }
+  appEvents.emit('host:change', { userId: req.params.id, isHost: !!isHost });
   res.json({ success: true, is_host: !!isHost });
 });
 
@@ -451,6 +452,16 @@ router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (re
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
+});
+
+router.get('/admin/session-rake', authMiddleware, adminMiddleware, (req, res) => {
+  // Import inline to avoid circular dep — handlers exports sessionRake
+  try {
+    const { sessionRake } = require('../socket/handlers');
+    res.json(sessionRake);
+  } catch {
+    res.json({ total: 0, hands: [] });
+  }
 });
 
 router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, res) => {

@@ -20,10 +20,15 @@ if (typeof io !== 'undefined') {
 
   adminSocket.on('admin:new_player', ({ userId, username }) => {
     showAdminNotification('🔔 New Registration', `${username} just registered`, userId, username);
+    loadPlayers();
   });
 
   adminSocket.on('admin:player_in_lobby', ({ userId, username }) => {
     showAdminNotification('🎯 Player in Lobby', `${username} is in the lobby`, userId, username);
+  });
+
+  adminSocket.on('admin:rake_update', ({ sessionTotal, hand }) => {
+    updateRakeFeed(sessionTotal, hand);
   });
 }
 
@@ -65,7 +70,37 @@ function showAdminNotification(title, body, userId, username) {
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake()]);
+  await Promise.all([loadPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake()]);
+}
+
+async function loadSessionRake() {
+  try {
+    const data = await apiFetch('/api/admin/session-rake');
+    document.getElementById('stat-session-rake').textContent = `$${fmt(data.total || 0)}`;
+    document.getElementById('rake-session-total').textContent = `Session total: $${fmt(data.total || 0)}`;
+    if (data.hands?.length) {
+      const feed = document.getElementById('rake-live-feed');
+      feed.innerHTML = data.hands.slice().reverse().map(h => {
+        const t = new Date(h.ts).toLocaleTimeString();
+        return `<div style="padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">${t} — Pot $${fmt(h.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(h.rake)}</strong></div>`;
+      }).join('');
+    }
+  } catch {}
+}
+
+function updateRakeFeed(sessionTotal, hand) {
+  document.getElementById('stat-session-rake').textContent = `$${fmt(sessionTotal)}`;
+  document.getElementById('rake-session-total').textContent = `Session total: $${fmt(sessionTotal)}`;
+  const feed = document.getElementById('rake-live-feed');
+  if (!feed || !hand) return;
+  const empty = feed.querySelector('div[style*="text-align:center"]');
+  if (empty) feed.innerHTML = '';
+  const t = new Date().toLocaleTimeString();
+  const row = document.createElement('div');
+  row.style.cssText = 'padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)';
+  row.innerHTML = `${t} — Pot $${fmt(hand.pot)} → Rake <strong style="color:var(--chip-green)">$${fmt(hand.rake)}</strong>`;
+  feed.insertBefore(row, feed.firstChild);
+  if (feed.children.length > 50) feed.lastChild.remove();
 }
 
 // ─── Panel Navigation ─────────────────────────────────────────────────────

@@ -24,6 +24,9 @@ const userSockets = new Map();       // userId -> socketId
 let jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
 let jackpotIo = null;
 
+// Session rake tracking (resets on server restart)
+const sessionRake = { total: 0, hands: [] };
+
 function getAdminSockets(io) {
   const sids = [];
   for (const [sid, info] of socketUsers) {
@@ -41,6 +44,18 @@ function setupSocketHandlers(io) {
   appEvents.on('player:registered', ({ userId, username }) => {
     for (const sid of getAdminSockets(io)) {
       io.to(sid).emit('admin:new_player', { userId, username });
+    }
+  });
+
+  // Forward host grant/revoke to the affected player
+  appEvents.on('host:change', ({ userId, isHost }) => {
+    const sid = userSockets.get(userId);
+    if (sid) {
+      io.to(sid).emit(isHost ? 'you:host_granted' : 'you:host_revoked', {
+        message: isHost
+          ? 'You have been granted Host privileges by admin. You can now create tables and manage the room.'
+          : 'Your Host privileges have been revoked by admin.'
+      });
     }
   });
 
@@ -92,10 +107,17 @@ function setupSocketHandlers(io) {
           .eq('id', userId)
           .single();
 
-        // Fall back to generous defaults for local/admin users not in DB
+        // Local admin bypass only — all real players must exist in DB
+        const isLocalAdmin = userId === 'local-admin-000';
+        if (!dbUser && !isLocalAdmin) {
+          return socket.emit('error', { message: 'Account not found. Please log out and log in again.' });
+        }
         const user = dbUser || { chips: 999999, is_banned: false };
 
         if (user.is_banned) return socket.emit('error', { message: 'Account is banned' });
+        if (!isLocalAdmin && user.chips <= 0) {
+          return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
+        }
 
         const chips = buyInChips || table.stakes_big_blind * 20;
         if (user.chips < chips) return socket.emit('error', { message: 'Insufficient chips' });
@@ -253,6 +275,33 @@ function setupSocketHandlers(io) {
     socket.on('ptt:stop', () => {
       const tId = socket.currentTableId;
       if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
+    });
+
+    // ─── Host Actions ─────────────────────────────────────────────────────
+
+    socket.on('host:add_chips', async ({ targetUserId, amount }) => {
+      if (!hostSet.has(userId) && !isAdmin) return socket.emit('error', { message: 'Host access required' });
+      if (!amount || amount <= 0) return socket.emit('error', { message: 'Amount must be positive' });
+
+      const tId = socket.currentTableId;
+      const game = tId ? activeGames.get(tId) : null;
+
+      if (game) {
+        const player = game.getPlayer(targetUserId);
+        if (!player) return socket.emit('error', { message: 'Player not at this table' });
+        player.chips += amount;
+        broadcastGameState(io, tId, game);
+      }
+
+      // Persist to DB
+      try {
+        const { data } = await supabaseAdmin.from('users').select('chips').eq('id', targetUserId).single();
+        if (data) await supabaseAdmin.from('users').update({ chips: data.chips + amount }).eq('id', targetUserId);
+      } catch {}
+
+      socket.emit('chips_added', { targetUserId, amount, by: username });
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('chips_received', { amount, from: username });
     });
 
     socket.on('lobby:join', () => {
@@ -590,6 +639,22 @@ async function persistHandResult(tableId, result) {
   try {
     const winner = result.winners?.[0];
     const jackpotContrib = result.jackpotContribution || 0;
+    const rakeAmount = result.rakeCollected || 0;
+
+    // Track session rake and notify admins
+    if (rakeAmount > 0) {
+      sessionRake.total += rakeAmount;
+      sessionRake.hands.push({ tableId, rake: rakeAmount, pot: result.pot, ts: Date.now() });
+      if (sessionRake.hands.length > 200) sessionRake.hands.shift(); // keep last 200
+      if (jackpotIo) {
+        for (const sid of getAdminSockets(jackpotIo)) {
+          jackpotIo.to(sid).emit('admin:rake_update', {
+            sessionTotal: sessionRake.total,
+            hand: { tableId, rake: rakeAmount, pot: result.pot }
+          });
+        }
+      }
+    }
 
     if (jackpotContrib > 0 && jackpotIo) {
       addToJackpot(jackpotIo, jackpotContrib);
@@ -649,4 +714,4 @@ async function leaveTable(socket, io, tableId, userId) {
   socket.emit('left_table', { tableId });
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake };

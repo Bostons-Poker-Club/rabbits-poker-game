@@ -31,27 +31,49 @@ apiFetch('/api/profile').then(profile => {
   const isHost = !!(profile.is_host);
   applyRoleUI(isAdmin, isHost);
   const u = getUser();
-  if (u) { u.isAdmin = isAdmin; u.chips = profile.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
-  // Admins see a crown instead of chip count
+  if (u) { u.isAdmin = isAdmin; u.isHost = isHost; u.chips = profile.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
   document.getElementById('header-chips').textContent = isAdmin ? '♛ Admin' : fmtChips(profile.chips);
+  if (isHost && !isAdmin) {
+    const badge = document.getElementById('host-badge');
+    if (badge) badge.style.display = '';
+  }
 }).catch(() => {});
 
 loadTables();
 loadTournaments();
 loadJackpot();
 
-// ─── Admin Socket (notifications) ─────────────────────────────────────────
+// ─── Socket (notifications for all logged-in users) ───────────────────────
 
-if (user.isAdmin && typeof io !== 'undefined') {
-  const adminSocket = io({ auth: { token: localStorage.getItem('rp_token') } });
-  adminSocket.on('connect', () => adminSocket.emit('lobby:join'));
+if (typeof io !== 'undefined') {
+  const lobbySocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  lobbySocket.on('connect', () => lobbySocket.emit('lobby:join'));
 
-  adminSocket.on('admin:new_player', ({ userId, username }) => {
-    showAdminNotification(`New registration: ${username}`, userId, username, 'registered');
+  // Admin-only events
+  if (user.isAdmin) {
+    lobbySocket.on('admin:new_player', ({ userId, username }) => {
+      showAdminNotification(`New registration: ${username}`, userId, username, 'registered');
+    });
+    lobbySocket.on('admin:player_in_lobby', ({ userId, username }) => {
+      showAdminNotification(`${username} is in the lobby`, userId, username, 'lobby');
+    });
+    lobbySocket.on('admin:rake_update', ({ sessionTotal }) => {
+      document.getElementById('header-chips').textContent = '♛ Admin';
+    });
+  }
+
+  // Host/player events
+  lobbySocket.on('you:host_granted', ({ message }) => {
+    showToast('🎰 ' + message, 'success');
+    setTimeout(() => location.reload(), 1500);
   });
-
-  adminSocket.on('admin:player_in_lobby', ({ userId, username }) => {
-    showAdminNotification(`${username} is in the lobby`, userId, username, 'lobby');
+  lobbySocket.on('you:host_revoked', ({ message }) => {
+    showToast(message);
+    setTimeout(() => location.reload(), 1500);
+  });
+  lobbySocket.on('chips_received', ({ amount, from }) => {
+    showToast(`🪙 ${fmtChips(amount)} chips added by ${from}`);
+    setTimeout(refreshChips, 500);
   });
 }
 

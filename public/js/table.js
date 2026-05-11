@@ -49,6 +49,7 @@ function connect() {
   socket.on('connect', () => {
     socket.emit('join_table', { tableId, buyInChips: buyIn });
     checkMicPermission();
+    renderHostControls();
   });
 
   socket.on('connect_error', (err) => {
@@ -114,6 +115,29 @@ function connect() {
     renderCommunityCards(communityCards);
     document.getElementById('hdr-street').textContent = street.toUpperCase();
     chatMsg('system', `--- ${street.toUpperCase()} ---`);
+  });
+
+  socket.on('you:host_granted', ({ message }) => {
+    toast('🎰 ' + message);
+    const u = getUser();
+    if (u) { u.isHost = true; localStorage.setItem('rp_user', JSON.stringify(u)); }
+    renderHostControls();
+  });
+
+  socket.on('you:host_revoked', ({ message }) => {
+    toast(message);
+    const u = getUser();
+    if (u) { u.isHost = false; localStorage.setItem('rp_user', JSON.stringify(u)); }
+    renderHostControls();
+  });
+
+  socket.on('chips_added', ({ targetUserId, amount, by }) => {
+    toast(`✅ +${fmt(amount)} chips added to player`);
+  });
+
+  socket.on('chips_received', ({ amount, from }) => {
+    toast(`🪙 +${fmt(amount)} chips added by ${from}`);
+    document.getElementById('hdr-chips').textContent = fmt((parseInt(document.getElementById('hdr-chips').textContent.replace(/,/g,'')) || 0) + amount);
   });
 
   socket.on('hand_ended', (result) => {
@@ -287,6 +311,33 @@ function renderTable(state) {
   renderCommunityCards(state.communityCards || []);
   document.getElementById('pot-amount').textContent = `$${fmt(state.pot || 0)}`;
   renderSeats(state);
+  renderHostControls(state);
+}
+
+function renderHostControls(state) {
+  const panel = document.getElementById('host-controls');
+  if (!panel) return;
+  const u = getUser();
+  if (!u?.isHost && !u?.isAdmin) { panel.style.display = 'none'; return; }
+  const src = state || gameState;
+  if (!src) return;
+
+  const others = (src.players || []).filter(p => p.userId !== user.id);
+  if (!others.length) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+
+  document.getElementById('host-player-list').innerHTML = others.map(p => `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.07)">
+      <span style="color:var(--text)">${esc(p.username)}</span>
+      <span style="color:var(--chip-green);font-size:.7rem">${fmt(p.chips)}</span>
+      <button class="btn btn-sm btn-gold" style="padding:2px 7px;font-size:.7rem" onclick="hostAddChips('${p.userId}','${esc(p.username)}')">+Chips</button>
+    </div>`).join('');
+}
+
+function hostAddChips(targetUserId, username) {
+  const amt = parseInt(prompt(`Add chips for ${username}:`, '500'));
+  if (!amt || amt <= 0) return;
+  socket.emit('host:add_chips', { targetUserId, amount: amt });
 }
 
 function renderCommunityCards(cards) {
@@ -500,6 +551,12 @@ function showHandResult(result) {
   document.getElementById('hr-amount').textContent = `+$${fmt(w.amount)}`;
   document.getElementById('hr-cards').innerHTML =
     (w.holeCards || []).map(c => cardHtml(c, true)).join('');
+  const rakeEl = document.getElementById('hr-rake');
+  if (rakeEl && result.rakeCollected) {
+    rakeEl.textContent = `Rake: $${fmt(result.rakeCollected)}`;
+  } else if (rakeEl) {
+    rakeEl.textContent = '';
+  }
 
   overlay.classList.remove('hidden');
   setTimeout(() => overlay.classList.add('hidden'), 4000);

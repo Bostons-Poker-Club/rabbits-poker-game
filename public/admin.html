@@ -28,7 +28,16 @@
       <div class="stat-card"><div class="stat-value" id="stat-players">–</div><div class="stat-label">Total Players</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-tables">–</div><div class="stat-label">Active Tables</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-jackpot">–</div><div class="stat-label">Jackpot Amount</div></div>
-      <div class="stat-card"><div class="stat-value" id="stat-rake">–</div><div class="stat-label">Total Rake</div></div>
+      <div class="stat-card"><div class="stat-value" id="stat-rake">–</div><div class="stat-label">All-Time Rake</div></div>
+      <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="stat-session-rake">$0</div><div class="stat-label">Session Rake</div></div>
+    </div>
+
+    <!-- Live rake feed -->
+    <div style="margin:20px 0;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:16px">
+      <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.95rem">📊 Live Rake Feed <span id="rake-session-total" style="color:var(--gold);font-size:.85rem;margin-left:8px">Session total: $0</span></h3>
+      <div id="rake-live-feed" style="max-height:180px;overflow-y:auto;font-size:.82rem;color:var(--text-dim)">
+        <div style="text-align:center;padding:12px">No hands this session yet</div>
+      </div>
     </div>
 
     <div style="margin-bottom:20px">
