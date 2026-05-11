@@ -48,6 +48,21 @@ const railQueue = [];
 const tableRequests = [];
 let tableRequestSeq = 0;
 
+// Ban enforcement — populated from DB on startup, updated on ban/unban
+const bannedUsers = new Set();
+
+// Broadcast messages history + offline queue
+const broadcastMessages = [];
+let broadcastMsgSeq = 0;
+const pendingMessages = new Map(); // userId -> msg[]
+
+async function loadBannedUsersFromDB() {
+  try {
+    const { data } = await supabaseAdmin.from('users').select('id').eq('is_banned', true);
+    if (data) data.forEach(u => bannedUsers.add(u.id));
+  } catch {}
+}
+
 function getAdminSockets(io) {
   const sids = [];
   for (const [sid, info] of socketUsers) {
@@ -109,6 +124,7 @@ function passMoneyPuck(io, tableId, game) {
 function setupSocketHandlers(io) {
   jackpotIo = io;
   loadJackpotFromDB();
+  loadBannedUsersFromDB();
   startJackpotTimer(io);
 
   // Forward app-level events to admin sockets
@@ -130,11 +146,47 @@ function setupSocketHandlers(io) {
     }
   });
 
+  // Immediate ban enforcement: return chips, notify, disconnect
+  appEvents.on('player:banned', async ({ userId }) => {
+    bannedUsers.add(userId);
+    // Return chips from any active game
+    for (const [tableId, game] of activeGames) {
+      const player = game.getPlayer(userId);
+      if (player) {
+        const chipsToReturn = player.chips;
+        game.removePlayer(userId);
+        broadcastGameState(io, tableId, game);
+        if (chipsToReturn > 0) {
+          try {
+            const { data } = await supabaseAdmin.from('users').select('chips').eq('id', userId).single();
+            if (data) await supabaseAdmin.from('users').update({ chips: data.chips + chipsToReturn }).eq('id', userId);
+          } catch {}
+        }
+      }
+    }
+    // Kick the socket
+    const sid = userSockets.get(userId);
+    if (sid) {
+      io.to(sid).emit('banned', { message: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
+      setTimeout(() => {
+        const s = io.sockets.sockets.get(sid);
+        if (s) s.disconnect(true);
+      }, 500);
+    }
+  });
+
+  appEvents.on('player:unbanned', ({ userId }) => {
+    bannedUsers.delete(userId);
+  });
+
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
     try {
       socket.user = jwt.verify(token, JWT_SECRET);
+      if (bannedUsers.has(socket.user.id)) {
+        return next(new Error('Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com'));
+      }
       next();
     } catch {
       next(new Error('Invalid token'));
@@ -147,6 +199,15 @@ function setupSocketHandlers(io) {
     userSockets.set(userId, socket.id);
 
     socket.emit('jackpot_state', getJackpotPublicState());
+
+    // Deliver any queued broadcast messages for this player
+    const queued = pendingMessages.get(userId);
+    if (queued && queued.length) {
+      for (const msg of queued) {
+        socket.emit('broadcast:message', { ...msg, pending: true });
+      }
+      pendingMessages.delete(userId);
+    }
 
     // ─── Table Events ──────────────────────────────────────────────────────
 
@@ -679,6 +740,55 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // ─── Broadcast Messaging ──────────────────────────────────────────────
+    socket.on('admin:send_message', ({ targetUserId, message }) => {
+      if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      if (!message || !message.trim()) return;
+
+      const msg = {
+        id: ++broadcastMsgSeq,
+        from: username,
+        message: message.trim().slice(0, 500),
+        targetUserId: targetUserId || null,
+        targetAll: !targetUserId,
+        sentAt: Date.now()
+      };
+
+      broadcastMessages.unshift(msg);
+      if (broadcastMessages.length > 200) broadcastMessages.pop();
+
+      let delivered = 0;
+      let queued = 0;
+
+      if (targetUserId) {
+        // Send to specific player
+        const targetSid = userSockets.get(targetUserId);
+        if (targetSid) {
+          io.to(targetSid).emit('broadcast:message', msg);
+          delivered++;
+        } else {
+          // Player offline — queue
+          if (!pendingMessages.has(targetUserId)) pendingMessages.set(targetUserId, []);
+          pendingMessages.get(targetUserId).push(msg);
+          queued++;
+        }
+      } else {
+        // Broadcast to all connected (non-admin) players
+        for (const [uid, sid] of userSockets) {
+          if (uid === userId) continue; // skip self (the admin)
+          io.to(sid).emit('broadcast:message', msg);
+          delivered++;
+        }
+      }
+
+      socket.emit('admin:message_sent', { id: msg.id, delivered, queued });
+
+      // Update all admin UIs with new message
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:message_history', { messages: broadcastMessages.slice(0, 50) });
+      }
+    });
+
     socket.on('get_table_state', ({ tableId }) => {
       const game = activeGames.get(tableId || socket.currentTableId);
       if (!game) return;
@@ -1152,4 +1262,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages };

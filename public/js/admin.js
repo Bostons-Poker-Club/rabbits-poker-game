@@ -7,6 +7,7 @@ if (!user.isAdmin) { window.location.href = '/lobby.html'; }
 let allPlayers = [];
 let allTables = [];
 let allTournaments = [];
+let currentByTable = []; // session rake by table for overview column
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 
@@ -52,10 +53,22 @@ if (typeof io !== 'undefined') {
   adminSocket.on('admin:table_request_update', (req) => {
     loadTableRequests(); // refresh the whole list
   });
+
+  adminSocket.on('admin:message_sent', ({ id, delivered, queued }) => {
+    const status = document.getElementById('msg-status');
+    if (status) {
+      status.textContent = `Sent! ${delivered} delivered${queued ? `, ${queued} queued (offline)` : ''}`;
+      setTimeout(() => { status.textContent = ''; }, 4000);
+    }
+  });
+
+  adminSocket.on('admin:message_history', ({ messages }) => {
+    renderMessages(messages);
+  });
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages()]);
 }
 
 async function loadPendingPlayers() {
@@ -111,6 +124,8 @@ async function loadSessionRake() {
 }
 
 function updateSessionRakeUI(total, byTable, hands) {
+  currentByTable = byTable || [];
+
   // Stat cards
   document.getElementById('stat-session-rake').textContent = `$${fmt(total)}`;
   document.getElementById('rake-session-total').textContent = `Session total: $${fmt(total)}`;
@@ -343,6 +358,68 @@ function actionTableRequest(requestId, action) {
   setTimeout(loadTableRequests, 500);
 }
 
+// ─── Broadcast Messages ───────────────────────────────────────────────────
+
+async function loadMessages() {
+  try {
+    const list = await apiFetch('/api/admin/messages');
+    renderMessages(list);
+    populateRecipientSelector();
+  } catch {}
+}
+
+function populateRecipientSelector() {
+  const sel = document.getElementById('msg-recipient');
+  if (!sel) return;
+  const currentOptions = Array.from(sel.options).map(o => o.value);
+  // Add any players not yet in the selector
+  for (const p of allPlayers) {
+    if (!currentOptions.includes(p.id)) {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = `${p.username}${p.nickname ? ` "${p.nickname}"` : ''}`;
+      sel.appendChild(opt);
+    }
+  }
+}
+
+function renderMessages(list) {
+  const el = document.getElementById('messages-history');
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim)">No messages sent yet this session</div>';
+    return;
+  }
+  el.innerHTML = list.map(m => {
+    const time = new Date(m.sentAt).toLocaleTimeString();
+    let targetLabel;
+    if (m.targetAll) {
+      targetLabel = '<span style="color:var(--gold)">All Players</span>';
+    } else {
+      const p = allPlayers.find(pl => pl.id === m.targetUserId);
+      const name = p ? (p.nickname ? `${p.username} "${p.nickname}"` : p.username) : (m.targetUserId || 'Unknown');
+      targetLabel = `<span style="color:var(--chip-green)">${esc(name)}</span>`;
+    }
+    return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+        <div style="flex:1">
+          <div style="color:var(--text-dim);font-size:.75rem;margin-bottom:4px">To: ${targetLabel} · From: <strong>${esc(m.from)}</strong> · ${time}</div>
+          <div style="color:var(--text);font-size:.88rem">${esc(m.message)}</div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function sendAdminMessage() {
+  if (!adminSocket) return toast('Not connected', 'error');
+  const targetUserId = document.getElementById('msg-recipient').value || null;
+  const message = document.getElementById('msg-text').value.trim();
+  if (!message) return toast('Enter a message', 'error');
+  adminSocket.emit('admin:send_message', { targetUserId, message });
+  document.getElementById('msg-text').value = '';
+}
+
 // ─── Panel Navigation ─────────────────────────────────────────────────────
 
 function showPanel(name) {
@@ -359,6 +436,7 @@ async function loadPlayers() {
     allPlayers = await apiFetch('/api/admin/players');
     renderPlayers(allPlayers);
     document.getElementById('stat-players').textContent = allPlayers.length;
+    populateRecipientSelector();
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -571,18 +649,23 @@ function renderOverviewTables(list) {
   const active = list.filter(t => t.status !== 'closed');
   tbody.innerHTML = active.map(t => {
     const seated = t.table_seats?.[0]?.count || 0;
+    const rakeEntry = currentByTable.find(r => r.tableId === t.id);
+    const rakeDisplay = rakeEntry
+      ? `<span style="color:var(--chip-green)">$${fmt(rakeEntry.total)}</span><span style="color:var(--text-dim);font-size:.75rem;margin-left:4px">(${rakeEntry.handCount}h)</span>`
+      : '<span style="color:var(--text-dim)">—</span>';
     return `
     <tr>
       <td>${esc(t.name)}</td>
       <td>${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</td>
       <td>$${t.stakes_small_blind}/$${t.stakes_big_blind}</td>
       <td>${seated}/${t.max_players}</td>
+      <td>${rakeDisplay}</td>
       <td><div class="actions">
         <a href="/table.html?tableId=${t.id}&buyIn=${t.stakes_big_blind * 20}"><button class="btn btn-sm btn-outline">View</button></a>
         <button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">Close</button>
       </div></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">No active tables</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No active tables</td></tr>';
 }
 
 async function createTable() {

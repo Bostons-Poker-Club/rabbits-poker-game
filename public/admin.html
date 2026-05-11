@@ -17,6 +17,7 @@
   <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
+  <button class="admin-tab-btn" onclick="showPanel('messages')">📨 Messages</button>
   <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
   <button class="admin-tab-btn" onclick="logout()">Logout</button>
 </nav>
@@ -62,7 +63,7 @@
     <h2 style="color:var(--gold);margin-bottom:14px">Active Tables</h2>
     <div class="table-wrap">
       <table class="data-table" id="active-tables-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Players</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Players</th><th>Session Rake</th><th>Actions</th></tr></thead>
         <tbody id="active-tables-body"></tbody>
       </table>
     </div>
@@ -206,6 +207,39 @@
         <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Max</th><th>Rake</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="tables-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Messages -->
+  <div class="admin-panel" id="panel-messages">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h2 style="color:var(--gold)">📨 Broadcast Messages</h2>
+    </div>
+
+    <!-- Compose -->
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px">
+      <h3 style="color:var(--chip-green);margin:0 0 14px;font-size:.95rem">Send Message</h3>
+      <div class="form-group">
+        <label>Recipient</label>
+        <select id="msg-recipient" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="">All Players (Broadcast)</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label>Message</label>
+        <textarea id="msg-text" maxlength="500" rows="3" placeholder="Type your message here…"
+          style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:vertical;font-family:inherit;font-size:.9rem;box-sizing:border-box"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+        <button class="btn btn-gold" onclick="sendAdminMessage()">Send Message</button>
+        <span id="msg-status" style="color:var(--chip-green);font-size:.82rem"></span>
+      </div>
+    </div>
+
+    <!-- History -->
+    <h3 style="color:var(--gold);margin-bottom:10px;font-size:.9rem">Message History</h3>
+    <div id="messages-history" style="max-height:500px;overflow-y:auto;font-size:.84rem">
+      <div style="text-align:center;padding:24px;color:var(--text-dim)">No messages sent yet this session</div>
     </div>
   </div>
 

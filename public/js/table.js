@@ -220,6 +220,16 @@ function connect() {
     setTimeout(() => window.location.href = '/lobby.html', 2000);
   });
 
+  socket.on('broadcast:message', ({ from, message, pending }) => {
+    showAdminMessageToast(from, message, pending);
+  });
+
+  socket.on('banned', ({ message }) => {
+    clearAuth();
+    toast('Your account has been suspended.', 'error');
+    setTimeout(() => window.location.href = '/index.html', 2500);
+  });
+
   socket.on('table_closed', () => {
     toast('Table closed by admin', 'error');
     setTimeout(() => window.location.href = '/lobby.html', 2000);
@@ -751,6 +761,20 @@ function toast(msg, type = '') {
   t.textContent = msg;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 3500);
+}
+
+function showAdminMessageToast(from, message, pending) {
+  const existing = document.getElementById('admin-msg-overlay');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'admin-msg-overlay';
+  div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9500;max-width:360px;width:90%;background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+  div.innerHTML = `
+    <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">📨 ${pending ? 'Missed message' : 'Message from Admin'} — ${from}</div>
+    <div style="color:var(--text);font-size:.9rem;line-height:1.5">${String(message).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</div>
+    <button onclick="document.getElementById('admin-msg-overlay').remove()" style="margin-top:10px;background:none;border:1px solid var(--gold);color:var(--gold);padding:3px 12px;border-radius:6px;cursor:pointer;font-size:.78rem">Dismiss</button>`;
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 15000);
 }
 
 // ─── Push to Talk ─────────────────────────────────────────────────────────

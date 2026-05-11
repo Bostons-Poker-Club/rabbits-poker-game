@@ -34,6 +34,13 @@ function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: 'No token provided' });
   try {
     req.user = jwt.verify(token, JWT_SECRET);
+    // Check in-memory ban set for immediate enforcement
+    try {
+      const { bannedUsers } = require('../socket/handlers');
+      if (bannedUsers.has(req.user.id)) {
+        return res.status(403).json({ error: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
+      }
+    } catch {}
     next();
   } catch {
     res.status(401).json({ error: 'Invalid token' });
@@ -110,7 +117,7 @@ router.post('/auth/login', async (req, res) => {
   console.log(`[login] user=${username} db_found=${!!user} db_error=${dbError?.code || 'none'}`);
 
   if (user) {
-    if (user.is_banned) return res.status(403).json({ error: 'Account is banned' });
+    if (user.is_banned) return res.status(403).json({ error: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
     const valid = await bcrypt.compare(password, user.password_hash);
     console.log(`[login] db bcrypt valid=${valid}`);
     if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
@@ -477,6 +484,12 @@ router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (re
     .update({ is_banned: banned })
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
+  // Kick immediately if banning, re-allow if unbanning
+  if (banned) {
+    appEvents.emit('player:banned', { userId: req.params.id });
+  } else {
+    appEvents.emit('player:unbanned', { userId: req.params.id });
+  }
   res.json({ success: true });
 });
 
@@ -529,6 +542,13 @@ router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (
   const appEvents = require('../events');
   appEvents.emit('admin:change', { userId: req.params.id, isAdmin: !!makeAdmin });
   res.json({ success: true, is_admin: !!makeAdmin });
+});
+
+router.get('/admin/messages', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { broadcastMessages } = require('../socket/handlers');
+    res.json(broadcastMessages.slice(0, 100));
+  } catch { res.json([]); }
 });
 
 router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, res) => {

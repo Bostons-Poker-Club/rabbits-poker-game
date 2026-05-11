@@ -94,6 +94,17 @@ if (typeof io !== 'undefined') {
   lobbySocket.on('rail:denied', ({ message }) => {
     showToast(message, 'error');
   });
+
+  // Admin broadcast messages
+  lobbySocket.on('broadcast:message', ({ from, message, pending }) => {
+    showAdminMessage(from, message, pending);
+  });
+
+  // Ban enforcement
+  lobbySocket.on('banned', ({ message }) => {
+    clearAuth();
+    showBannedModal(message);
+  });
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────
@@ -346,6 +357,36 @@ function showToast(msg, type = '') {
   t.textContent = msg;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 3500);
+}
+
+function showAdminMessage(from, message, pending) {
+  const existing = document.getElementById('admin-msg-modal');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'admin-msg-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9500;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:28px 32px;max-width:420px;width:90%;text-align:center;box-shadow:0 0 40px rgba(212,175,55,.2)">
+      <div style="font-size:2rem;margin-bottom:10px">📨</div>
+      <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">${pending ? 'Message (while you were offline)' : 'Message from Admin'}</div>
+      <div style="font-size:.9rem;color:var(--gold);font-weight:700;margin-bottom:12px">From: ${esc(from)}</div>
+      <p style="color:var(--text);line-height:1.6;font-size:.95rem;margin-bottom:20px">${esc(message)}</p>
+      <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Dismiss</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function showBannedModal(message) {
+  const div = document.createElement('div');
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#1a0000;border:2px solid var(--red);border-radius:16px;padding:32px 36px;max-width:440px;text-align:center">
+      <div style="font-size:2.5rem;margin-bottom:12px">⛔</div>
+      <h2 style="color:var(--red);margin-bottom:10px">Account Suspended</h2>
+      <p style="color:var(--text);line-height:1.6">${esc(message)}</p>
+      <button class="btn btn-outline" onclick="window.location.href='/index.html'" style="margin-top:20px">Go to Login</button>
+    </div>`;
+  document.body.appendChild(div);
 }
 
 // Close modal on overlay click
