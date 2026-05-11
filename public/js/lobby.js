@@ -9,8 +9,9 @@ let jackpotData = null;
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 document.getElementById('header-username').textContent = user.username;
-// Hide chip count for admin — show crown instead
-document.getElementById('header-chips').textContent = user.isAdmin ? '♛ Admin' : fmtChips(user.chips);
+document.getElementById('header-chips').textContent = user.isAdmin
+  ? `♛ ${fmtChips(user.chips || 0)}`
+  : fmtChips(user.chips);
 
 function applyRoleUI(isAdmin, isHost) {
   if (isAdmin) {
@@ -32,7 +33,10 @@ apiFetch('/api/profile').then(profile => {
   applyRoleUI(isAdmin, isHost);
   const u = getUser();
   if (u) { u.isAdmin = isAdmin; u.isHost = isHost; u.chips = profile.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
-  document.getElementById('header-chips').textContent = isAdmin ? '♛ Admin' : fmtChips(profile.chips);
+  // Always show actual chip count so admin can join tables
+  document.getElementById('header-chips').textContent = isAdmin
+    ? `♛ ${fmtChips(profile.chips)}`
+    : fmtChips(profile.chips);
   if (isHost && !isAdmin) {
     const badge = document.getElementById('host-badge');
     if (badge) badge.style.display = '';
@@ -216,16 +220,17 @@ function updateJackpotDisplay() {
 
 function openJoinModal(tableId, bb) {
   const u = getUser();
-  if (!u.chips || u.chips <= 0) {
+  if (!u.isAdmin && (!u.chips || u.chips <= 0)) {
     showToast('You have 0 chips. Contact the admin to receive chips before joining a table.', 'error');
     return;
   }
+  const chips = u.chips || (u.isAdmin ? 100000 : 0);
   document.getElementById('join-table-id').value = tableId;
   document.getElementById('join-table-bb').value = bb;
   document.getElementById('join-buyin').value = bb * 20;
   document.getElementById('join-buyin').min = bb * 10;
-  document.getElementById('join-buyin').max = u.chips;
-  document.getElementById('join-balance-info').textContent = `Your balance: ${fmtChips(u.chips)} chips. Min buy-in: ${fmtChips(bb * 10)}`;
+  document.getElementById('join-buyin').max = chips;
+  document.getElementById('join-balance-info').textContent = `Your balance: ${fmtChips(chips)} chips. Min buy-in: ${fmtChips(bb * 10)}`;
   openModal('join-table-modal');
 }
 

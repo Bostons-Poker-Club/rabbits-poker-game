@@ -443,28 +443,23 @@ async function loadPlayers() {
 function renderPlayers(list) {
   const tbody = document.getElementById('players-body');
   tbody.innerHTML = list.map(p => {
+    const isSelf = p.id === user.id;
     const roleLabel = p.is_admin ? '<span style="color:var(--gold)">Admin</span>' :
                       p.is_host  ? '<span style="color:var(--chip-green)">Host</span>' :
                                    '<span style="color:var(--text-dim)">Player</span>';
-    const hostBtnLabel = p.is_host ? 'Revoke Host' : 'Make Host';
-    const hostBtnClass = p.is_host ? 'btn-outline' : 'btn-green';
-    const chipsBtn = !p.is_admin
-      ? `<button class="btn btn-sm btn-gold" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Add Chips</button>`
-      : '';
+    const selfTag = isSelf ? '<span style="font-size:.65rem;background:rgba(255,200,0,.15);color:var(--gold);padding:1px 5px;border-radius:4px;margin-left:4px">YOU</span>' : '';
     return `
     <tr style="cursor:pointer" onclick="viewPlayer('${p.id}')">
-      <td><strong>${esc(p.username)}</strong>${p.full_name ? `<div style="font-size:.75rem;color:var(--text-dim)">${esc(p.full_name)}</div>` : ''}</td>
+      <td><strong>${esc(p.username)}</strong>${selfTag}${p.full_name ? `<div style="font-size:.75rem;color:var(--text-dim)">${esc(p.full_name)}</div>` : ''}</td>
       <td style="color:var(--chip-green)">${esc(p.nickname || '–')}</td>
       <td style="color:var(--text-dim);font-size:.85rem">${esc(p.phone || '–')}</td>
-      <td style="color:var(--gold)">${p.is_admin ? '∞' : fmt(p.chips)}</td>
+      <td style="color:var(--gold)">${fmt(p.chips)}</td>
       <td>${roleLabel}</td>
       <td><span style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></td>
       <td onclick="event.stopPropagation()"><div class="actions">
         <button class="btn btn-sm btn-outline" onclick="openEditModal('${p.id}')">Edit</button>
-        ${chipsBtn}
-        ${!p.is_admin ? `<button class="btn btn-sm ${hostBtnClass}" onclick="toggleHost('${p.id}',${!p.is_host})">${hostBtnLabel}</button>` : ''}
-        <button class="btn btn-sm ${p.is_banned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${p.id}',${!p.is_banned})">${p.is_banned ? 'Unban' : 'Ban'}</button>
-        ${!p.is_admin ? `<button class="btn btn-sm btn-red" onclick="deletePlayer('${p.id}','${esc(p.username)}')">Delete</button>` : ''}
+        ${!isSelf ? `<button class="btn btn-sm ${p.is_banned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${p.id}',${!p.is_banned})">${p.is_banned ? 'Unban' : 'Ban'}</button>` : ''}
+        ${!isSelf ? `<button class="btn btn-sm btn-red" onclick="deletePlayer('${p.id}','${esc(p.username)}')">Delete</button>` : ''}
       </div></td>
     </tr>`;
   }).join('');
@@ -530,15 +525,14 @@ async function viewPlayer(id) {
     `;
     document.getElementById('pd-edit-btn').onclick = () => { closeModal('player-detail-modal'); openEditModal(id); };
 
+    // Chips button — show for everyone
     const pdChipsBtn = document.getElementById('pd-chips-btn');
-    if (pdChipsBtn && !p.is_admin) {
+    if (pdChipsBtn) {
       pdChipsBtn.style.display = '';
       pdChipsBtn.onclick = () => { closeModal('player-detail-modal'); openChipsModal(id, p.username); };
-    } else if (pdChipsBtn) {
-      pdChipsBtn.style.display = 'none';
     }
 
-    // Admin role toggle (don't allow self-demotion)
+    // Admin role toggle (hide for self)
     const pdAdminBtn = document.getElementById('pd-admin-btn');
     if (pdAdminBtn && id !== user.id) {
       pdAdminBtn.style.display = '';
@@ -564,43 +558,77 @@ async function viewPlayer(id) {
 async function openEditModal(id) {
   try {
     const p = await apiFetch(`/api/admin/players/${id}`);
-    document.getElementById('ep-id').value = id;
-    document.getElementById('ep-fullname').value = p.full_name || '';
+    const isSelf = p.id === user.id;
+
+    // Split full_name into first / last
+    const nameParts = (p.full_name || '').trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName  = nameParts.slice(1).join(' ') || '';
+
+    document.getElementById('ep-id').value        = id;
+    document.getElementById('ep-firstname').value = firstName;
+    document.getElementById('ep-lastname').value  = lastName;
     document.getElementById('ep-nickname').value  = p.nickname  || '';
+    document.getElementById('ep-username').value  = p.username  || '';
     document.getElementById('ep-email').value     = p.email     || '';
     document.getElementById('ep-phone').value     = p.phone     || '';
     document.getElementById('ep-address').value   = p.address   || '';
     document.getElementById('ep-city').value      = p.city      || '';
     document.getElementById('ep-state').value     = p.state     || '';
     document.getElementById('ep-zip').value       = p.zip       || '';
+
+    // Role selector
+    const role = p.is_admin ? 'admin' : p.is_host ? 'host' : 'player';
+    document.getElementById('ep-role').value = role;
+    // Prevent self-demotion
+    document.getElementById('ep-role').disabled = isSelf;
+
+    // Status selector
+    document.getElementById('ep-status').value    = p.is_banned ? 'banned' : 'active';
+    document.getElementById('ep-status').disabled = isSelf;
+
+    // Chip display
+    document.getElementById('ep-chips-display').textContent = fmt(p.chips || 0) + ' chips';
+    document.getElementById('ep-chips-adj').value = '';
+
     openModal('edit-player-modal');
   } catch (e) { toast(e.message, 'error'); }
 }
 
 async function submitEditPlayer() {
   const id = document.getElementById('ep-id').value;
+  const firstName = document.getElementById('ep-firstname').value.trim();
+  const lastName  = document.getElementById('ep-lastname').value.trim();
+  const fullName  = [firstName, lastName].filter(Boolean).join(' ') || null;
+  const chipsAdj  = parseInt(document.getElementById('ep-chips-adj').value) || 0;
+
   try {
     await apiFetch(`/api/admin/players/${id}`, {
       method: 'PUT',
       body: {
-        full_name: document.getElementById('ep-fullname').value.trim() || null,
+        full_name: fullName,
         nickname:  document.getElementById('ep-nickname').value.trim()  || null,
-        email:     document.getElementById('ep-email').value.trim(),
+        username:  document.getElementById('ep-username').value.trim()  || undefined,
+        email:     document.getElementById('ep-email').value.trim()     || null,
         phone:     document.getElementById('ep-phone').value.trim()     || null,
         address:   document.getElementById('ep-address').value.trim()   || null,
         city:      document.getElementById('ep-city').value.trim()      || null,
         state:     document.getElementById('ep-state').value.trim()     || null,
-        zip:       document.getElementById('ep-zip').value.trim()       || null
+        zip:       document.getElementById('ep-zip').value.trim()       || null,
+        role:      document.getElementById('ep-role').disabled ? undefined : document.getElementById('ep-role').value,
+        is_banned: document.getElementById('ep-status').disabled ? undefined : document.getElementById('ep-status').value === 'banned',
+        chips_adj: chipsAdj || undefined
       }
     });
     closeModal('edit-player-modal');
-    toast('Player info saved');
+    toast('Player saved');
     loadPlayers();
   } catch (e) { toast(e.message, 'error'); }
 }
 
 async function deletePlayer(id, username) {
-  if (!confirm(`Permanently delete player "${username}"? This cannot be undone.`)) return;
+  if (id === user.id) return toast('Cannot delete your own account', 'error');
+  if (!confirm(`⚠️ Permanently delete "${username}"?\n\nThis will remove all their data and cannot be undone.`)) return;
   try {
     await apiFetch(`/api/admin/players/${id}`, { method: 'DELETE' });
     toast(`${username} deleted`);

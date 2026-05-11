@@ -412,12 +412,78 @@ router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
 });
 
 router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  const { full_name, nickname, phone, email, address, city, state, zip } = req.body;
-  const { error } = await supabaseAdmin
-    .from('users')
-    .update({ full_name, nickname, phone, email, address, city, state, zip })
-    .eq('id', req.params.id);
+  const { full_name, nickname, phone, email, address, city, state, zip, username, role, is_banned, chips_adj } = req.body;
+  const targetId = req.params.id;
+
+  // Fetch current state to derive changes
+  const { data: current } = await supabaseAdmin.from('users').select('chips, is_admin, is_banned').eq('id', targetId).single();
+
+  // Build update object — only include defined fields
+  const updates = {};
+  if (full_name  !== undefined) updates.full_name  = full_name;
+  if (nickname   !== undefined) updates.nickname   = nickname;
+  if (phone      !== undefined) updates.phone      = phone;
+  if (email      !== undefined) updates.email      = email;
+  if (address    !== undefined) updates.address    = address;
+  if (city       !== undefined) updates.city       = city;
+  if (state      !== undefined) updates.state      = state;
+  if (zip        !== undefined) updates.zip        = zip;
+  if (username   !== undefined && username) updates.username = username;
+
+  // Role changes
+  let newIsAdmin = current?.is_admin ?? false;
+  let roleChanged = false;
+  if (role !== undefined) {
+    if (role === 'admin') {
+      updates.is_admin = true;
+      newIsAdmin = true;
+      roleChanged = true;
+      // Remove from hostSet if they become admin
+      hostSet.delete(targetId);
+    } else if (role === 'host') {
+      updates.is_admin = false;
+      newIsAdmin = false;
+      hostSet.add(targetId);
+      roleChanged = true;
+    } else {
+      updates.is_admin = false;
+      newIsAdmin = false;
+      hostSet.delete(targetId);
+      roleChanged = true;
+    }
+  }
+
+  // Ban changes
+  let banChanged = false;
+  if (is_banned !== undefined) {
+    updates.is_banned = is_banned;
+    banChanged = true;
+  }
+
+  // Chip adjustment
+  if (chips_adj && chips_adj !== 0 && current) {
+    updates.chips = Math.max(0, (current.chips || 0) + chips_adj);
+  }
+
+  const { error } = await supabaseAdmin.from('users').update(updates).eq('id', targetId);
   if (error) return res.status(500).json({ error: error.message });
+
+  // Fire side effects
+  if (roleChanged) {
+    const isNowHost = role === 'host';
+    appEvents.emit('host:change', { userId: targetId, isHost: isNowHost });
+    if (role === 'admin' || (current?.is_admin && role !== 'admin')) {
+      appEvents.emit('admin:change', { userId: targetId, isAdmin: newIsAdmin });
+    }
+  }
+  if (banChanged) {
+    if (is_banned) {
+      appEvents.emit('player:banned', { userId: targetId });
+    } else {
+      appEvents.emit('player:unbanned', { userId: targetId });
+    }
+  }
+
   res.json({ success: true });
 });
 

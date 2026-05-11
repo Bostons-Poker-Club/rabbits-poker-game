@@ -372,48 +372,98 @@
 
 <!-- Edit Player Modal -->
 <div class="modal-overlay hidden" id="edit-player-modal">
-  <div class="modal" style="max-width:520px">
+  <div class="modal" style="max-width:560px">
     <h2>Edit Player</h2>
     <input type="hidden" id="ep-id">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+
+      <!-- Name row -->
       <div class="form-group">
-        <label>Full Name</label>
-        <input type="text" id="ep-fullname" maxlength="80" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <label>First Name</label>
+        <input type="text" id="ep-firstname" maxlength="60" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
+      <div class="form-group">
+        <label>Last Name</label>
+        <input type="text" id="ep-lastname" maxlength="60" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+
+      <!-- Nickname + Username -->
       <div class="form-group">
         <label>Nickname</label>
-        <input type="text" id="ep-nickname" maxlength="40" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="text" id="ep-nickname" maxlength="40" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
       <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="ep-username" maxlength="30" autocomplete="off" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+
+      <!-- Email + Phone -->
+      <div class="form-group">
         <label>Email</label>
-        <input type="email" id="ep-email" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="email" id="ep-email" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
       <div class="form-group">
         <label>Phone</label>
-        <input type="tel" id="ep-phone" maxlength="20" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="tel" id="ep-phone" maxlength="20" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
+
+      <!-- Address full row -->
       <div class="form-group" style="grid-column:1/-1">
         <label>Address</label>
-        <input type="text" id="ep-address" maxlength="120" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="text" id="ep-address" maxlength="120" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
+
+      <!-- City / State / ZIP -->
       <div class="form-group">
         <label>City</label>
-        <input type="text" id="ep-city" maxlength="60" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="text" id="ep-city" maxlength="60" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
       </div>
       <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div>
           <label>State</label>
-          <input type="text" id="ep-state" maxlength="20" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <input type="text" id="ep-state" maxlength="20" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         </div>
         <div>
           <label>ZIP</label>
-          <input type="text" id="ep-zip" maxlength="10" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <input type="text" id="ep-zip" maxlength="10" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         </div>
       </div>
+
+      <!-- Role + Status -->
+      <div class="form-group">
+        <label>Role</label>
+        <select id="ep-role" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="player">Player</option>
+          <option value="host">Host</option>
+          <option value="admin">Admin</option>
+        </select>
+        <div style="font-size:.72rem;color:var(--text-dim);margin-top:3px">Disabled for your own account</div>
+      </div>
+      <div class="form-group">
+        <label>Status</label>
+        <select id="ep-status" style="width:100%;padding:9px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="active">Active</option>
+          <option value="banned">Banned</option>
+        </select>
+        <div style="font-size:.72rem;color:var(--text-dim);margin-top:3px">Disabled for your own account</div>
+      </div>
+
+      <!-- Chip balance full row -->
+      <div class="form-group" style="grid-column:1/-1;background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);border-radius:var(--radius);padding:12px">
+        <label style="color:var(--gold)">Chip Balance</label>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <span id="ep-chips-display" style="color:var(--gold);font-weight:700;font-size:1rem;min-width:100px">– chips</span>
+          <input type="number" id="ep-chips-adj" placeholder="±  amount" style="flex:1;min-width:100px;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <span style="color:var(--text-dim);font-size:.8rem">Positive adds, negative deducts</span>
+        </div>
+      </div>
+
     </div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('edit-player-modal')">Cancel</button>
-      <button class="btn btn-gold" onclick="submitEditPlayer()">Save Changes</button>
+      <button class="btn btn-gold" onclick="submitEditPlayer()">Save All Changes</button>
     </div>
   </div>
 </div>
