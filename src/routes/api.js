@@ -8,19 +8,23 @@ const { supabaseAdmin } = require('../db/supabase');
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
-// In-memory high hand state — survives within a deployment, resets on restart
+// In-memory high hand state
 let highHandState = { description: '', holder: '', setAt: null };
 
-// Local admin fallback — works without Supabase
-// Hash is bcrypt of 'admin123' — verified correct
+// In-memory host set — admin grants host status; resets on server restart
+const hostSet = new Set();
+
 const LOCAL_ADMIN = {
   id: 'local-admin-000',
   username: process.env.ADMIN_USERNAME || 'admin',
-  email: 'admin@rabbitspoker.com',
+  email: 'admin@rabbsroom.com',
   passwordHash: process.env.ADMIN_PASSWORD_HASH || '$2a$10$IhLhqS2Zh/GR/BaWT6X5EOu.trshg1Nhuru73B6NBA353.zIWC5XG',
-  chips: 999999,
+  chips: 100000,
   isAdmin: true
 };
+
+const ADMIN_CHIP_REFILL = 100000;
+const ADMIN_CHIP_LOW_THRESHOLD = 10000;
 
 // ─── Auth Middleware ────────────────────────────────────────────────────────
 
@@ -38,6 +42,11 @@ function authMiddleware(req, res, next) {
 function adminMiddleware(req, res, next) {
   if (!req.user?.isAdmin) return res.status(403).json({ error: 'Admin access required' });
   next();
+}
+
+function hostMiddleware(req, res, next) {
+  if (req.user?.isAdmin || hostSet.has(req.user?.id)) return next();
+  return res.status(403).json({ error: 'Host or admin access required' });
 }
 
 // ─── Auth Routes ────────────────────────────────────────────────────────────
@@ -142,7 +151,14 @@ router.get('/profile', authMiddleware, async (req, res) => {
     .eq('id', req.user.id)
     .single();
   if (error) return res.status(404).json({ error: 'User not found' });
-  res.json(data);
+
+  // Auto-refill admin chips when low
+  if (data.is_admin && data.chips < ADMIN_CHIP_LOW_THRESHOLD) {
+    await supabaseAdmin.from('users').update({ chips: ADMIN_CHIP_REFILL }).eq('id', data.id);
+    data.chips = ADMIN_CHIP_REFILL;
+  }
+
+  res.json({ ...data, is_host: hostSet.has(req.user.id) });
 });
 
 // ─── Tables ─────────────────────────────────────────────────────────────────
@@ -157,7 +173,7 @@ router.get('/tables', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
-router.post('/tables', authMiddleware, adminMiddleware, async (req, res) => {
+router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
   const { name, game_type, stakes_small_blind, stakes_big_blind, max_players, rake_percent } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
 
@@ -210,6 +226,15 @@ router.post('/tournaments', authMiddleware, adminMiddleware, async (req, res) =>
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+router.delete('/tournaments/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('tournaments')
+    .delete()
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true });
 });
 
 router.post('/tournaments/:id/register', authMiddleware, async (req, res) => {
@@ -306,12 +331,13 @@ router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) =
     .select('id, username, email, chips, is_admin, is_banned, created_at')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  res.json(data.map(p => ({ ...p, is_host: hostSet.has(p.id) })));
 });
 
 router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (req, res) => {
   const { amount } = req.body;
   if (typeof amount !== 'number') return res.status(400).json({ error: 'Amount required' });
+  if (!hostSet.has(req.params.id)) return res.status(403).json({ error: 'Chips can only be adjusted for approved hosts' });
 
   const { data: user } = await supabaseAdmin
     .from('users')
@@ -327,6 +353,21 @@ router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (
 
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true, newChips });
+});
+
+router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (req, res) => {
+  const { isHost } = req.body;
+  if (isHost) { hostSet.add(req.params.id); } else { hostSet.delete(req.params.id); }
+  res.json({ success: true, is_host: !!isHost });
+});
+
+router.post('/admin/refill-chips', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ chips: ADMIN_CHIP_REFILL })
+    .eq('id', req.user.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ success: true, chips: ADMIN_CHIP_REFILL });
 });
 
 router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (req, res) => {

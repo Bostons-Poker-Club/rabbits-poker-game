@@ -721,6 +721,66 @@ input, select, textarea { font-family: inherit; }
 .jackpot-admin-info { color: var(--text-dim); font-size: 0.85rem; margin-top: 4px; }
 .jackpot-admin-actions { display: flex; flex-direction: column; gap: 8px; }
 
+/* ─── PTT Button ─────────────────────────────────────────────────────────── */
+.ptt-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  color: var(--text);
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.ptt-btn:hover { border-color: var(--gold); color: var(--gold); }
+.ptt-btn.speaking {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+}
+@keyframes ptt-pulse {
+  from { box-shadow: 0 0 6px rgba(230,57,70,0.6); }
+  to   { box-shadow: 0 0 18px rgba(230,57,70,1); }
+}
+
+/* Speaking indicator shown inside seat box */
+.ptt-speaking {
+  display: inline-block;
+  font-size: 0.7em;
+  margin-left: 4px;
+  animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+}
+
+/* ─── Custom Card Back (RabbsRoom themed) ────────────────────────────────── */
+.card.back {
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #0d3d22 0px, #0d3d22 4px,
+      #0f4a28 4px, #0f4a28 8px
+    );
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 0 0 2px rgba(212,175,55,0.3), 1px 2px 6px rgba(0,0,0,0.5);
+}
+.card.back::after {
+  content: '🐇';
+  font-size: 1.3em;
+}
+
+/* ─── Chip Icon in Seat ──────────────────────────────────────────────────── */
+.seat-chips::before {
+  content: '⬤ ';
+  font-size: 0.5em;
+  color: var(--chip-green);
+  vertical-align: middle;
+  margin-right: 2px;
+}
+
 /* ─── Responsive Tweaks ──────────────────────────────────────────────────── */
 @media (max-width: 500px) {
   .auth-card { padding: 24px 16px; }

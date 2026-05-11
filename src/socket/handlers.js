@@ -210,6 +210,34 @@ function setupSocketHandlers(io) {
       });
     });
 
+    // ─── WebRTC PTT ───────────────────────────────────────────────────────
+
+    socket.on('ptt:join', () => {
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      // Collect peer list for the speaker (everyone else in the room)
+      const sids = io.sockets.adapter.rooms.get(tId) || new Set();
+      const peers = [];
+      for (const sid of sids) {
+        const peer = socketUsers.get(sid);
+        if (peer && peer.userId !== userId) {
+          peers.push({ userId: peer.userId, username: peer.username });
+        }
+      }
+      socket.emit('ptt:peers', { peers });
+      socket.to(tId).emit('ptt:speaker_active', { userId, username });
+    });
+
+    socket.on('ptt:signal', ({ targetUserId, signal }) => {
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('ptt:signal', { fromUserId: userId, signal });
+    });
+
+    socket.on('ptt:stop', () => {
+      const tId = socket.currentTableId;
+      if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
+    });
+
     socket.on('get_table_state', ({ tableId }) => {
       const game = activeGames.get(tableId || socket.currentTableId);
       if (!game) return;

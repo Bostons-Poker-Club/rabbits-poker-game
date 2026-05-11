@@ -3,18 +3,19 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Rabbits Poker – Admin</title>
+  <title>RabbsRoom – Admin</title>
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body class="admin-page">
 
 <nav class="admin-nav">
-  <span class="logo">🐇 Admin Panel</span>
+  <span class="logo">🐇 RabbsRoom Admin</span>
   <button class="admin-tab-btn active" onclick="showPanel('overview')">Overview</button>
   <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
   <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
+  <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
-  <button class="admin-tab-btn" onclick="showPanel('rake')">Rake Report</button>
+  <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
   <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
   <button class="admin-tab-btn" onclick="logout()">Logout</button>
 </nav>
@@ -28,6 +29,12 @@
       <div class="stat-card"><div class="stat-value" id="stat-tables">–</div><div class="stat-label">Active Tables</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-jackpot">–</div><div class="stat-label">Jackpot Amount</div></div>
       <div class="stat-card"><div class="stat-value" id="stat-rake">–</div><div class="stat-label">Total Rake</div></div>
+    </div>
+
+    <div style="margin-bottom:20px">
+      <button class="btn btn-outline" onclick="refillAdminChips()" style="gap:8px">
+        💰 Refill My Chips (100,000)
+      </button>
     </div>
 
     <h2 style="color:var(--gold);margin-bottom:14px">Active Tables</h2>
@@ -107,8 +114,22 @@
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Username</th><th>Email</th><th>Chips</th><th>Admin</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Username</th><th>Email</th><th>Chips</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="players-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tournaments -->
+  <div class="admin-panel" id="panel-tournaments">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--gold)">Tournaments</h2>
+      <button class="btn btn-gold btn-sm" onclick="openModal('create-tournament-modal-admin')">+ Create Tournament</button>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Name</th><th>Buy-In</th><th>Starting Chips</th><th>Status</th><th>Players</th><th>Actions</th></tr></thead>
+        <tbody id="tournaments-body"></tbody>
       </table>
     </div>
   </div>
@@ -182,10 +203,33 @@
   </div>
 </div>
 
+<!-- Create Tournament Modal (Admin) -->
+<div class="modal-overlay hidden" id="create-tournament-modal-admin">
+  <div class="modal">
+    <h2>Create Tournament</h2>
+    <div class="form-group">
+      <label>Name</label>
+      <input type="text" id="tn-name-a" placeholder="Sunday Special" maxlength="50">
+    </div>
+    <div class="form-group">
+      <label>Buy-In (chips)</label>
+      <input type="number" id="tn-buyin-a" value="100" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="form-group">
+      <label>Starting Chips per Player</label>
+      <input type="number" id="tn-chips-a" value="10000" min="1000" step="500" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('create-tournament-modal-admin')">Cancel</button>
+      <button class="btn btn-gold" onclick="createTournamentAdmin()">Create</button>
+    </div>
+  </div>
+</div>
+
 <!-- Add Chips Modal -->
 <div class="modal-overlay hidden" id="chips-modal">
   <div class="modal">
-    <h2>Adjust Chips</h2>
+    <h2>Adjust Host Chips</h2>
     <input type="hidden" id="chips-player-id">
     <p id="chips-player-name" style="color:var(--text-dim);margin-bottom:14px"></p>
     <div class="form-group">

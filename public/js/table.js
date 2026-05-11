@@ -16,6 +16,12 @@ let shotClockInterval = null;
 let shotClockEnd = 0;
 let chatOpen = false;
 
+// WebRTC PTT state
+let pttStream = null;
+const pttPeers = new Map();   // userId -> RTCPeerConnection
+const pttAudioEls = new Map(); // userId -> HTMLAudioElement
+const STUN_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun1.l.google.com:19302' }] };
+
 // ─── Seat Layout (positions as % of oval width/height offset from center) ──
 
 const SEAT_POSITIONS = {
@@ -143,6 +149,72 @@ function connect() {
   socket.on('disconnect', () => {
     toast('Disconnected. Reconnecting…', 'error');
   });
+
+  // ─── WebRTC PTT ─────────────────────────────────────────────────────────
+
+  // Server tells speaker which peers to connect to
+  socket.on('ptt:peers', async ({ peers }) => {
+    if (!pttStream) return;
+    for (const peer of peers) {
+      const pc = new RTCPeerConnection(STUN_CFG);
+      pttPeers.set(peer.userId, pc);
+      pttStream.getTracks().forEach(t => pc.addTrack(t, pttStream));
+      pc.onicecandidate = e => {
+        if (e.candidate) socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'ice', candidate: e.candidate } });
+      };
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'offer', sdp: offer.sdp } });
+      } catch {}
+    }
+  });
+
+  // Receive WebRTC signaling messages
+  socket.on('ptt:signal', async ({ fromUserId, signal }) => {
+    if (signal.type === 'offer') {
+      // We are a listener — someone is sending us audio
+      const pc = new RTCPeerConnection(STUN_CFG);
+      pttPeers.set(fromUserId, pc);
+      const audio = new Audio();
+      audio.autoplay = true;
+      document.body.appendChild(audio);
+      pttAudioEls.set(fromUserId, audio);
+      pc.ontrack = e => { audio.srcObject = e.streams[0]; };
+      pc.onicecandidate = e => {
+        if (e.candidate) socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'ice', candidate: e.candidate } });
+      };
+      try {
+        await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'answer', sdp: answer.sdp } });
+      } catch {}
+    } else if (signal.type === 'answer') {
+      const pc = pttPeers.get(fromUserId);
+      if (pc && pc.signalingState !== 'stable') {
+        try { await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp }); } catch {}
+      }
+    } else if (signal.type === 'ice') {
+      const pc = pttPeers.get(fromUserId);
+      if (pc && signal.candidate) {
+        try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch {}
+      }
+    }
+  });
+
+  // Visual indicator: someone started/stopped speaking
+  socket.on('ptt:speaker_active', ({ userId: speakerId, username: speakerName }) => {
+    setSpeakingIndicator(speakerId, true, speakerName);
+  });
+
+  socket.on('ptt:speaker_stopped', ({ userId: speakerId }) => {
+    const pc = pttPeers.get(speakerId);
+    if (pc) { pc.close(); pttPeers.delete(speakerId); }
+    const audio = pttAudioEls.get(speakerId);
+    if (audio) { audio.srcObject = null; audio.remove(); pttAudioEls.delete(speakerId); }
+    setSpeakingIndicator(speakerId, false);
+  });
 }
 
 // ─── Render Table ─────────────────────────────────────────────────────────
@@ -196,7 +268,7 @@ function renderSeats(state) {
 
       html += `
         <div class="seat" style="left:${pos.x}%;top:${pos.y}%">
-          <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}">
+          <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}" data-user-id="${player.userId}">
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">${fmt(player.chips)}</div>
@@ -433,6 +505,51 @@ function toast(msg, type = '') {
   t.textContent = msg;
   toastContainer.appendChild(t);
   setTimeout(() => t.remove(), 3500);
+}
+
+// ─── Push to Talk ─────────────────────────────────────────────────────────
+
+async function startPTT(e) {
+  if (e) e.preventDefault();
+  if (pttStream) return;
+  try {
+    pttStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    document.getElementById('ptt-btn').classList.add('speaking');
+    socket.emit('ptt:join');
+  } catch {
+    toast('Microphone access denied', 'error');
+  }
+}
+
+function stopPTT() {
+  if (!pttStream) return;
+  pttStream.getTracks().forEach(t => t.stop());
+  pttStream = null;
+  document.getElementById('ptt-btn').classList.remove('speaking');
+  pttPeers.forEach(pc => pc.close());
+  pttPeers.clear();
+  pttAudioEls.forEach(a => { a.srcObject = null; a.remove(); });
+  pttAudioEls.clear();
+  socket.emit('ptt:stop');
+  document.querySelectorAll('.ptt-speaking').forEach(el => el.remove());
+}
+
+function setSpeakingIndicator(userId, active, username) {
+  // Try to find the seat for this user
+  const seatBox = document.querySelector(`.seat-box[data-user-id="${userId}"]`);
+  if (!seatBox) {
+    if (active) toast(`🎙 ${username || 'Player'} is talking`);
+    return;
+  }
+  const existing = seatBox.querySelector('.ptt-speaking');
+  if (active && !existing) {
+    const dot = document.createElement('span');
+    dot.className = 'ptt-speaking';
+    dot.textContent = '🎙';
+    seatBox.appendChild(dot);
+  } else if (!active && existing) {
+    existing.remove();
+  }
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────

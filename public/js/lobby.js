@@ -9,26 +9,31 @@ let jackpotData = null;
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 document.getElementById('header-username').textContent = user.username;
-document.getElementById('header-chips').textContent = fmtChips(user.chips);
+// Hide chip count for admin — show crown instead
+document.getElementById('header-chips').textContent = user.isAdmin ? '♛ Admin' : fmtChips(user.chips);
 
-function applyAdminUI(isAdmin) {
-  if (!isAdmin) return;
-  document.getElementById('admin-link').style.display = '';
-  document.getElementById('create-table-btn').style.display = '';
-  document.getElementById('create-tournament-btn').style.display = '';
+function applyRoleUI(isAdmin, isHost) {
+  if (isAdmin) {
+    document.getElementById('admin-link').style.display = '';
+    document.getElementById('create-table-btn').style.display = '';
+    document.getElementById('create-tournament-btn').style.display = '';
+  } else if (isHost) {
+    document.getElementById('create-table-btn').style.display = '';
+  }
 }
 
 // Apply immediately from cached user (JWT-derived)
-applyAdminUI(user.isAdmin);
+applyRoleUI(user.isAdmin, false);
 
 // Then confirm from API in case localStorage is stale
 apiFetch('/api/profile').then(profile => {
   const isAdmin = !!(profile.is_admin || profile.isAdmin);
-  applyAdminUI(isAdmin);
-  // Keep localStorage in sync
+  const isHost = !!(profile.is_host);
+  applyRoleUI(isAdmin, isHost);
   const u = getUser();
   if (u) { u.isAdmin = isAdmin; u.chips = profile.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
-  document.getElementById('header-chips').textContent = fmtChips(profile.chips);
+  // Admins see a crown instead of chip count
+  document.getElementById('header-chips').textContent = isAdmin ? '♛ Admin' : fmtChips(profile.chips);
 }).catch(() => {});
 
 loadTables();
@@ -214,7 +219,7 @@ async function refreshChips() {
     const u = getUser();
     u.chips = profile.chips;
     localStorage.setItem('rp_user', JSON.stringify(u));
-    document.getElementById('header-chips').textContent = fmtChips(profile.chips);
+    document.getElementById('header-chips').textContent = u.isAdmin ? '♛ Admin' : fmtChips(profile.chips);
   } catch {}
 }
 

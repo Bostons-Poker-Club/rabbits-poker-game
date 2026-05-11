@@ -6,14 +6,14 @@ if (!user.isAdmin) { window.location.href = '/lobby.html'; }
 
 let allPlayers = [];
 let allTables = [];
+let allTournaments = [];
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 
 loadAll();
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadTables(), loadJackpot(), loadRake()]);
-  updateStats();
+  await Promise.all([loadPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake()]);
 }
 
 // ─── Panel Navigation ─────────────────────────────────────────────────────
@@ -37,21 +37,31 @@ async function loadPlayers() {
 
 function renderPlayers(list) {
   const tbody = document.getElementById('players-body');
-  tbody.innerHTML = list.map(p => `
+  tbody.innerHTML = list.map(p => {
+    const roleLabel = p.is_admin ? '<span style="color:var(--gold)">Admin</span>' :
+                      p.is_host  ? '<span style="color:var(--chip-green)">Host</span>' :
+                                   '<span style="color:var(--text-dim)">Player</span>';
+    const hostBtnLabel = p.is_host ? 'Revoke Host' : 'Make Host';
+    const hostBtnClass = p.is_host ? 'btn-outline' : 'btn-green';
+    const chipsBtn = p.is_host && !p.is_admin
+      ? `<button class="btn btn-sm btn-outline" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Chips</button>`
+      : '';
+    return `
     <tr>
       <td>${esc(p.username)}</td>
       <td style="color:var(--text-dim)">${esc(p.email)}</td>
-      <td style="color:var(--gold)">${fmt(p.chips)}</td>
-      <td>${p.is_admin ? '✓' : ''}</td>
+      <td style="color:var(--gold)">${p.is_admin ? '∞' : fmt(p.chips)}</td>
+      <td>${roleLabel}</td>
       <td><span style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></td>
       <td><div class="actions">
-        <button class="btn btn-sm btn-outline" onclick="openChipsModal('${p.id}','${esc(p.username)}')">Chips</button>
+        ${chipsBtn}
+        ${!p.is_admin ? `<button class="btn btn-sm ${hostBtnClass}" onclick="toggleHost('${p.id}',${!p.is_host})">${hostBtnLabel}</button>` : ''}
         <button class="btn btn-sm ${p.is_banned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${p.id}',${!p.is_banned})">
           ${p.is_banned ? 'Unban' : 'Ban'}
         </button>
       </div></td>
-    </tr>
-  `).join('');
+    </tr>`;
+  }).join('');
 }
 
 function filterPlayers() {
@@ -61,7 +71,7 @@ function filterPlayers() {
 
 function openChipsModal(id, name) {
   document.getElementById('chips-player-id').value = id;
-  document.getElementById('chips-player-name').textContent = `Player: ${name}`;
+  document.getElementById('chips-player-name').textContent = `Host: ${name}`;
   openModal('chips-modal');
 }
 
@@ -72,6 +82,14 @@ async function submitChips() {
     await apiFetch(`/api/admin/players/${id}/chips`, { method: 'POST', body: { amount } });
     closeModal('chips-modal');
     toast('Chips updated');
+    loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function toggleHost(id, isHost) {
+  try {
+    await apiFetch(`/api/admin/players/${id}/host`, { method: 'POST', body: { isHost } });
+    toast(isHost ? 'Host access granted' : 'Host access revoked');
     loadPlayers();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -161,6 +179,65 @@ async function closeTable(id) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+// ─── Tournaments ──────────────────────────────────────────────────────────
+
+async function loadTournaments() {
+  try {
+    allTournaments = await apiFetch('/api/tournaments');
+    renderTournamentsAdmin(allTournaments);
+  } catch {}
+}
+
+function renderTournamentsAdmin(list) {
+  const tbody = document.getElementById('tournaments-body');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No tournaments</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(t => {
+    const players = t.tournament_players?.[0]?.count || 0;
+    const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
+    return `
+    <tr>
+      <td>${esc(t.name)}</td>
+      <td style="color:var(--gold)">${fmt(t.buy_in)}</td>
+      <td>${fmt(t.starting_chips)}</td>
+      <td><span style="color:${statusColor}">${t.status}</span></td>
+      <td>${players}</td>
+      <td><div class="actions">
+        <button class="btn btn-sm btn-red" onclick="deleteTournament('${t.id}','${esc(t.name)}')">Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+async function createTournamentAdmin() {
+  const name = document.getElementById('tn-name-a').value.trim();
+  if (!name) return toast('Name required', 'error');
+  try {
+    await apiFetch('/api/tournaments', {
+      method: 'POST',
+      body: {
+        name,
+        buy_in: parseInt(document.getElementById('tn-buyin-a').value),
+        starting_chips: parseInt(document.getElementById('tn-chips-a').value)
+      }
+    });
+    closeModal('create-tournament-modal-admin');
+    toast('Tournament created');
+    loadTournaments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteTournament(id, name) {
+  if (!confirm(`Delete tournament "${name}"? This cannot be undone.`)) return;
+  try {
+    await apiFetch(`/api/tournaments/${id}`, { method: 'DELETE' });
+    toast('Tournament deleted');
+    loadTournaments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
 // ─── Jackpot ──────────────────────────────────────────────────────────────
 
 let countdownDeadline = null;
@@ -231,6 +308,18 @@ async function resetJackpot() {
   toast('Jackpot reset (via admin socket action)');
 }
 
+// ─── Admin Chip Refill ────────────────────────────────────────────────────
+
+async function refillAdminChips() {
+  try {
+    const r = await apiFetch('/api/admin/refill-chips', { method: 'POST' });
+    toast(`Chips refilled to ${fmt(r.chips)}`);
+    // Update local display
+    const u = getUser();
+    if (u) { u.chips = r.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
 // ─── Rake Report ──────────────────────────────────────────────────────────
 
 async function loadRake() {
@@ -251,10 +340,6 @@ async function loadRake() {
     `).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--text-dim)">No hands yet</td></tr>';
   } catch {}
 }
-
-// ─── Stats ────────────────────────────────────────────────────────────────
-
-function updateStats() {}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
