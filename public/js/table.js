@@ -173,6 +173,11 @@ function connect() {
     }
   });
 
+  socket.on('cashout_confirmed', ({ chips }) => {
+    toast(`✅ Cashed out ${fmt(chips)} chips. Returning to lobby…`);
+    setTimeout(() => window.location.href = '/lobby.html', 1500);
+  });
+
   // ─── Money Puck ───────────────────────────────────────────────────────────
 
   socket.on('puck:state', (state) => {
@@ -611,8 +616,17 @@ function returnFromBreak() {
 }
 
 function leaveTable() {
-  socket.emit('leave_table', { tableId });
-  window.location.href = '/lobby.html';
+  // Show cashout confirmation modal instead of instant leave
+  openModal('leave-confirm-modal');
+}
+
+function cashOutAndLeave() {
+  closeModal('leave-confirm-modal');
+  socket.emit('cashout_request', { tableId });
+}
+
+function stayAtTable() {
+  closeModal('leave-confirm-modal');
 }
 
 function takeSeat(seatNumber) {
@@ -872,6 +886,9 @@ function animateChipToPot(seatNumber) {
 
   setTimeout(() => chip.remove(), 700);
 }
+
+function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────
 

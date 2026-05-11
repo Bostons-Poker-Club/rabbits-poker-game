@@ -500,6 +500,37 @@ router.get('/admin/session-rake', authMiddleware, adminMiddleware, (req, res) =>
   }
 });
 
+router.get('/admin/notifications', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { adminNotifs } = require('../socket/handlers');
+    res.json(adminNotifs.slice(0, 100));
+  } catch { res.json([]); }
+});
+
+router.get('/admin/rail', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { railQueue } = require('../socket/handlers');
+    res.json(railQueue);
+  } catch { res.json([]); }
+});
+
+router.get('/admin/table-requests', authMiddleware, adminMiddleware, (req, res) => {
+  try {
+    const { tableRequests } = require('../socket/handlers');
+    res.json(tableRequests.slice(0, 50));
+  } catch { res.json([]); }
+});
+
+router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (req, res) => {
+  const { isAdmin: makeAdmin } = req.body;
+  const { error } = await supabaseAdmin.from('users').update({ is_admin: !!makeAdmin }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  // Update their JWT on next login — for now notify via socket
+  const appEvents = require('../events');
+  appEvents.emit('admin:change', { userId: req.params.id, isAdmin: !!makeAdmin });
+  res.json({ success: true, is_admin: !!makeAdmin });
+});
+
 router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('hands')

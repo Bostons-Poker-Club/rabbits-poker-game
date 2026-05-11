@@ -14,8 +14,9 @@ loadAll();
 
 // ─── Admin Real-time Notifications ────────────────────────────────────────
 
+let adminSocket = null;
 if (typeof io !== 'undefined') {
-  const adminSocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  adminSocket = io({ auth: { token: localStorage.getItem('rp_token') } });
   adminSocket.on('connect', () => adminSocket.emit('lobby:join'));
 
   adminSocket.on('admin:new_player', ({ username }) => {
@@ -32,10 +33,29 @@ if (typeof io !== 'undefined') {
   adminSocket.on('admin:rake_update', ({ sessionTotal, hand, byTable }) => {
     updateRakeFeed(sessionTotal, hand, byTable);
   });
+
+  adminSocket.on('admin:notification', (notif) => {
+    prependAlertRow(notif);
+    bumpAlertBadge();
+  });
+
+  adminSocket.on('admin:rail_update', ({ queue }) => {
+    renderRail(queue);
+  });
+
+  adminSocket.on('admin:table_request', (req) => {
+    prependTableRequest(req);
+    const cnt = document.getElementById('requests-count');
+    if (cnt) cnt.textContent = '';
+  });
+
+  adminSocket.on('admin:table_request_update', (req) => {
+    loadTableRequests(); // refresh the whole list
+  });
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests()]);
 }
 
 async function loadPendingPlayers() {
@@ -164,6 +184,165 @@ function updateRakeFeed(sessionTotal, hand, byTable) {
   if (feed.children.length > 50) feed.lastChild.remove();
 }
 
+// ─── Alerts / Notifications ───────────────────────────────────────────────
+
+let unreadAlerts = 0;
+
+const NOTIF_ICONS = { allin:'🃏', cashout:'💰', seat_open:'🪑', rail_join:'🎟', new_player:'🆕', player_in_lobby:'👀', table_request:'📋', needs_chips:'🪙' };
+const NOTIF_COLORS = { allin:'var(--gold)', cashout:'var(--chip-green)', seat_open:'#7b9fff', rail_join:'#a78bfa', table_request:'var(--gold)', needs_chips:'var(--red)' };
+
+async function loadNotifications() {
+  try {
+    const list = await apiFetch('/api/admin/notifications');
+    const feed = document.getElementById('alerts-feed');
+    if (!list.length) { if (feed) feed.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim)">No alerts yet this session</div>'; return; }
+    if (feed) feed.innerHTML = list.map(n => alertRowHtml(n)).join('');
+  } catch {}
+}
+
+function alertRowHtml(n) {
+  const icon = NOTIF_ICONS[n.type] || '🔔';
+  const color = NOTIF_COLORS[n.type] || 'var(--text)';
+  const time = new Date(n.ts).toLocaleTimeString();
+  const btns = alertActionBtns(n);
+  return `<div class="alert-row" id="alert-${n.id}" style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+    <span style="font-size:1.2rem;flex-shrink:0">${icon}</span>
+    <div style="flex:1;min-width:0">
+      <div style="color:${color};font-weight:700;font-size:.85rem">${esc(n.title)}</div>
+      <div style="color:var(--text);font-size:.82rem;margin:2px 0">${esc(n.body)}</div>
+      ${btns}
+    </div>
+    <span style="color:var(--text-dim);font-size:.72rem;flex-shrink:0">${time}</span>
+  </div>`;
+}
+
+function alertActionBtns(n) {
+  if (n.type === 'allin' && n.data?.userId) {
+    return `<button class="btn btn-sm btn-gold" style="margin-top:4px;font-size:.72rem;padding:2px 8px" onclick="quickAddChips('${n.data.userId}','${esc(n.data.username || '')}')">Add Chips (Rebuy)</button>`;
+  }
+  if (n.type === 'rail_join' && n.data?.userId) {
+    return `<div style="display:flex;gap:4px;margin-top:4px">
+      <button class="btn btn-sm btn-green" style="font-size:.72rem;padding:2px 8px" onclick="approveRailPlayer('${n.data.userId}',${n.data.buyin||200})">Approve</button>
+      <button class="btn btn-sm btn-red" style="font-size:.72rem;padding:2px 8px" onclick="denyRailPlayer('${n.data.userId}')">Deny</button></div>`;
+  }
+  if (n.type === 'needs_chips' && n.data?.userId) {
+    return `<button class="btn btn-sm btn-gold" style="margin-top:4px;font-size:.72rem;padding:2px 8px" onclick="quickAddChips('${n.data.userId}','${esc(n.data.username||'')}')">Add Chips</button>`;
+  }
+  return '';
+}
+
+function prependAlertRow(n) {
+  const feed = document.getElementById('alerts-feed');
+  if (!feed) return;
+  const empty = feed.querySelector('div[style*="text-align:center"]');
+  if (empty) feed.innerHTML = '';
+  const div = document.createElement('div');
+  div.innerHTML = alertRowHtml(n);
+  feed.insertBefore(div.firstChild, feed.firstChild);
+  if (feed.children.length > 100) feed.lastChild.remove();
+}
+
+function bumpAlertBadge() {
+  unreadAlerts++;
+  const badge = document.getElementById('alert-badge');
+  if (badge) { badge.textContent = unreadAlerts; badge.style.display = ''; }
+}
+
+function markAllRead() {
+  unreadAlerts = 0;
+  const badge = document.getElementById('alert-badge');
+  if (badge) badge.style.display = 'none';
+  toast('All alerts marked read');
+}
+
+// ─── Rail Management ──────────────────────────────────────────────────────
+
+async function loadRail() {
+  try {
+    const queue = await apiFetch('/api/admin/rail');
+    renderRail(queue);
+  } catch { renderRail([]); }
+}
+
+function renderRail(queue) {
+  const body = document.getElementById('rail-body');
+  const cnt = document.getElementById('rail-count');
+  if (!body) return;
+  if (cnt) cnt.textContent = queue.length ? `(${queue.length})` : '';
+  if (!queue.length) { body.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:8px">No players waiting</div>'; return; }
+  body.innerHTML = queue.map((r, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <div>
+        <span style="color:var(--text-dim);font-size:.75rem;margin-right:8px">#${i+1}</span>
+        <strong style="color:var(--text)">${esc(r.username)}</strong>
+        ${r.nickname ? `<span style="color:var(--chip-green);margin-left:5px">"${esc(r.nickname)}"</span>` : ''}
+        ${r.phone ? `<div style="color:var(--text-dim);font-size:.75rem">📞 ${esc(r.phone)}</div>` : ''}
+        <div style="color:var(--text-dim);font-size:.75rem">Buy-in req: $${fmt(r.requestedBuyin)}</div>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn btn-sm btn-green" onclick="approveRailPlayer('${r.userId}',${r.requestedBuyin||200})">Approve</button>
+        <button class="btn btn-sm btn-red" onclick="denyRailPlayer('${r.userId}')">Deny</button>
+      </div>
+    </div>`).join('');
+}
+
+function approveRailPlayer(userId, defaultAmt) {
+  const amt = parseInt(prompt(`Approve chips for player:`, defaultAmt || 200) || '0');
+  if (!amt || amt <= 0) return;
+  adminSocket.emit('rail:approve', { targetUserId: userId, amount: amt });
+}
+
+function denyRailPlayer(userId) {
+  const reason = prompt('Reason for denial (optional):') || '';
+  adminSocket.emit('rail:deny', { targetUserId: userId, reason });
+}
+
+// ─── Table Requests ───────────────────────────────────────────────────────
+
+async function loadTableRequests() {
+  try {
+    const list = await apiFetch('/api/admin/table-requests');
+    renderTableRequests(list);
+  } catch { renderTableRequests([]); }
+}
+
+function renderTableRequests(list) {
+  const body = document.getElementById('table-requests-body');
+  const cnt = document.getElementById('requests-count');
+  if (!body) return;
+  const pending = list.filter(r => r.status === 'pending');
+  if (cnt) cnt.textContent = pending.length ? `(${pending.length} pending)` : '';
+  if (!list.length) { body.innerHTML = '<div style="color:var(--text-dim)">No pending requests</div>'; return; }
+  body.innerHTML = list.map(r => {
+    const time = new Date(r.requestedAt).toLocaleTimeString();
+    const statusColor = r.status === 'approved' ? 'var(--chip-green)' : r.status === 'denied' ? 'var(--red)' : 'var(--gold)';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06);flex-wrap:wrap;gap:8px">
+      <div>
+        <strong style="color:var(--text)">${esc(r.hostName)}</strong>
+        <span style="color:var(--text-dim);font-size:.8rem;margin-left:6px">$${r.sb}/$${r.bb} ${r.gameType === 'plo' ? 'PLO' : "Hold'em"} · ${r.maxPlayers}p · ${r.rake}% rake</span>
+        <div style="color:var(--text-dim);font-size:.72rem">${time}</div>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <span style="color:${statusColor};font-size:.75rem;font-weight:700">${r.status.toUpperCase()}</span>
+        ${r.status === 'pending' ? `
+          <button class="btn btn-sm btn-green" onclick="actionTableRequest(${r.id},'approved')">Approve</button>
+          <button class="btn btn-sm btn-red" onclick="actionTableRequest(${r.id},'denied')">Deny</button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function prependTableRequest(req) {
+  loadTableRequests(); // simple refresh
+}
+
+function actionTableRequest(requestId, action) {
+  let reason = '';
+  if (action === 'denied') reason = prompt('Reason for denial (optional):') || '';
+  adminSocket.emit('table:request_action', { requestId, action, reason });
+  setTimeout(loadTableRequests, 500);
+}
+
 // ─── Panel Navigation ─────────────────────────────────────────────────────
 
 function showPanel(name) {
@@ -272,6 +451,7 @@ async function viewPlayer(id) {
       <div class="pd-row"><span class="pd-label">Status</span><span class="pd-value" style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></div>
     `;
     document.getElementById('pd-edit-btn').onclick = () => { closeModal('player-detail-modal'); openEditModal(id); };
+
     const pdChipsBtn = document.getElementById('pd-chips-btn');
     if (pdChipsBtn && !p.is_admin) {
       pdChipsBtn.style.display = '';
@@ -279,6 +459,26 @@ async function viewPlayer(id) {
     } else if (pdChipsBtn) {
       pdChipsBtn.style.display = 'none';
     }
+
+    // Admin role toggle (don't allow self-demotion)
+    const pdAdminBtn = document.getElementById('pd-admin-btn');
+    if (pdAdminBtn && id !== user.id) {
+      pdAdminBtn.style.display = '';
+      pdAdminBtn.textContent = p.is_admin ? 'Revoke Admin' : 'Make Admin';
+      pdAdminBtn.className = `btn ${p.is_admin ? 'btn-red' : 'btn-outline'}`;
+      pdAdminBtn.onclick = async () => {
+        if (!confirm(`${p.is_admin ? 'Revoke' : 'Grant'} admin access for ${p.username}?`)) return;
+        try {
+          await apiFetch(`/api/admin/players/${id}/admin`, { method: 'POST', body: { isAdmin: !p.is_admin } });
+          toast(`Admin status ${p.is_admin ? 'revoked' : 'granted'} for ${p.username}`);
+          closeModal('player-detail-modal');
+          loadPlayers();
+        } catch (e) { toast(e.message, 'error'); }
+      };
+    } else if (pdAdminBtn) {
+      pdAdminBtn.style.display = 'none';
+    }
+
     openModal('player-detail-modal');
   } catch (e) { toast(e.message, 'error'); }
 }

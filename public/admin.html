@@ -11,6 +11,7 @@
 <nav class="admin-nav">
   <span class="logo">🐇 RabbsRoom Admin</span>
   <button class="admin-tab-btn active" onclick="showPanel('overview')">Overview</button>
+  <button class="admin-tab-btn" onclick="showPanel('alerts')">🔔 Alerts <span id="alert-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
   <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
   <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
@@ -64,6 +65,17 @@
         <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Players</th><th>Actions</th></tr></thead>
         <tbody id="active-tables-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Alerts Feed -->
+  <div class="admin-panel" id="panel-alerts">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h2 style="color:var(--gold)">🔔 Alert Feed</h2>
+      <button class="btn btn-sm btn-outline" onclick="markAllRead()">Mark All Read</button>
+    </div>
+    <div id="alerts-feed" style="max-height:600px;overflow-y:auto">
+      <div style="text-align:center;padding:24px;color:var(--text-dim)">No alerts yet this session</div>
     </div>
   </div>
 
@@ -138,6 +150,15 @@
       <div id="pending-players-body" style="font-size:.85rem;color:var(--text-dim)">Loading…</div>
     </div>
 
+    <!-- Rail Waiting Queue -->
+    <div id="rail-section" style="margin-bottom:24px;background:rgba(0,0,100,.12);border:1px solid rgba(100,100,255,.3);border-radius:var(--radius);padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="color:#7b9fff;font-size:.95rem;margin:0">🎟 Rail — Waiting Room <span id="rail-count" style="font-size:.8rem;color:var(--text-dim)"></span></h3>
+        <button class="btn btn-sm btn-outline" onclick="loadRail()">Refresh</button>
+      </div>
+      <div id="rail-body" style="font-size:.85rem;color:var(--text-dim)">Loading…</div>
+    </div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--gold)">All Players</h2>
       <input type="text" id="player-search" placeholder="Search username or nickname…" oninput="filterPlayers()"
@@ -167,6 +188,15 @@
 
   <!-- Tables -->
   <div class="admin-panel" id="panel-tables">
+    <!-- Host Table Requests -->
+    <div id="table-requests-section" style="margin-bottom:24px;background:rgba(100,50,0,.15);border:1px solid rgba(255,165,0,.3);border-radius:var(--radius);padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="color:var(--gold);font-size:.9rem;margin:0">📋 Host Table Requests <span id="requests-count" style="font-size:.8rem;color:var(--text-dim)"></span></h3>
+        <button class="btn btn-sm btn-outline" onclick="loadTableRequests()">Refresh</button>
+      </div>
+      <div id="table-requests-body" style="font-size:.85rem;color:var(--text-dim)">No pending requests</div>
+    </div>
+
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--gold)">Tables</h2>
       <button class="btn btn-gold btn-sm" onclick="openModal('create-table-modal')">+ Create Table</button>
@@ -297,9 +327,10 @@
       <span id="pd-username"></span>
     </h2>
     <div class="player-detail-grid" id="pd-grid"></div>
-    <div class="modal-footer">
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-outline" onclick="closeModal('player-detail-modal')">Close</button>
       <button class="btn btn-outline" id="pd-chips-btn">Add Chips</button>
+      <button class="btn btn-outline" id="pd-admin-btn" style="display:none">Make Admin</button>
       <button class="btn btn-gold" id="pd-edit-btn">Edit Player</button>
     </div>
   </div>

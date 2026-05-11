@@ -37,12 +37,32 @@ const sessionRake = { total: 0, byTable: new Map() };
 // Money puck state: tableId -> { holderId, holderSeat, holderName, value, autoDropMs, autoDropTimer, straddleTimeout }
 const tablePucks = new Map();
 
+// Admin notification feed (in-memory, resets on restart)
+const adminNotifs = [];
+let adminNotifSeq = 0;
+
+// Rail waiting queue: { id, userId, username, nickname, phone, chips, requestedAt }
+const railQueue = [];
+
+// Host table requests: { id, hostId, hostName, gameType, sb, bb, maxPlayers, rake, requestedAt, status }
+const tableRequests = [];
+let tableRequestSeq = 0;
+
 function getAdminSockets(io) {
   const sids = [];
   for (const [sid, info] of socketUsers) {
     if (info.isAdmin) sids.push(sid);
   }
   return sids;
+}
+
+function pushAdminNotif(io, { type, title, body, data = {} }) {
+  const notif = { id: ++adminNotifSeq, type, title, body, data, ts: Date.now(), read: false };
+  adminNotifs.unshift(notif);
+  if (adminNotifs.length > 300) adminNotifs.pop();
+  for (const sid of getAdminSockets(io)) {
+    io.to(sid).emit('admin:notification', notif);
+  }
 }
 
 function broadcastPuckState(io, tableId) {
@@ -448,6 +468,210 @@ function setupSocketHandlers(io) {
       io.to(tIdFinal).emit('chat', { username: 'system', message: '💰 Money Puck removed' });
     });
 
+    // ─── Cashout Flow ─────────────────────────────────────────────────────
+
+    socket.on('cashout_request', async ({ tableId: tId }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      const game = tIdFinal ? activeGames.get(tIdFinal) : null;
+      const chips = game?.getPlayer(userId)?.chips || 0;
+      const tableName = game?.tableName || tIdFinal || 'unknown';
+
+      // Return chips to DB
+      if (chips > 0) {
+        try {
+          const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', userId).single();
+          if (u) await supabaseAdmin.from('users').update({ chips: u.chips + chips }).eq('id', userId);
+        } catch {}
+      }
+
+      // Remove from game
+      if (game) {
+        const puck = tablePucks.get(tIdFinal);
+        if (puck && puck.holderId === userId) passMoneyPuck(io, tIdFinal, game);
+        game.removePlayer(userId);
+        broadcastGameState(io, tIdFinal, game);
+        if (game.players.size === 0) { game.destroy(); activeGames.delete(tIdFinal); }
+        try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tIdFinal).eq('user_id', userId); } catch {}
+      }
+
+      socket.leave(tIdFinal);
+      socket.currentTableId = null;
+      socket.emit('cashout_confirmed', { chips, tableId: tIdFinal });
+
+      // Notify admins
+      pushAdminNotif(io, {
+        type: 'cashout',
+        title: 'Player Cashing Out',
+        body: `${username} cashed out $${chips.toLocaleString()} chips from ${tableName}`,
+        data: { userId, username, chips, tableId: tIdFinal, tableName }
+      });
+    });
+
+    // ─── Rail / Waiting Room ──────────────────────────────────────────────
+
+    socket.on('rail:join', async ({ buyin }) => {
+      // Remove existing entry if re-joining
+      const existing = railQueue.findIndex(r => r.userId === userId);
+      if (existing !== -1) railQueue.splice(existing, 1);
+
+      // Fetch profile for display
+      let profile = { nickname: null, phone: null };
+      try {
+        const { data } = await supabaseAdmin.from('users').select('nickname, phone').eq('id', userId).single();
+        if (data) profile = data;
+      } catch {}
+
+      railQueue.push({ userId, username, nickname: profile.nickname, phone: profile.phone, requestedBuyin: buyin || 0, requestedAt: Date.now(), socketId: socket.id });
+      socket.emit('rail:position', { position: railQueue.length, total: railQueue.length });
+      socket.join('rail');
+
+      pushAdminNotif(io, {
+        type: 'rail_join',
+        title: 'Player Joined Rail',
+        body: `${username}${profile.nickname ? ` (${profile.nickname})` : ''} is waiting for a seat (buy-in: $${(buyin || 0).toLocaleString()})`,
+        data: { userId, username, buyin }
+      });
+
+      // Broadcast updated queue positions to all in rail
+      railQueue.forEach((entry, i) => {
+        const sid = userSockets.get(entry.userId);
+        if (sid) io.to(sid).emit('rail:position', { position: i + 1, total: railQueue.length });
+      });
+
+      // Notify admins of updated rail
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:rail_update', { queue: railQueue.map(r => ({ ...r, socketId: undefined })) });
+      }
+    });
+
+    socket.on('rail:approve', async ({ targetUserId, amount }) => {
+      if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      const idx = railQueue.findIndex(r => r.userId === targetUserId);
+      if (idx === -1) return socket.emit('error', { message: 'Player not in rail' });
+      const entry = railQueue[idx];
+      railQueue.splice(idx, 1);
+
+      // Grant chips
+      try {
+        const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', targetUserId).single();
+        if (u) await supabaseAdmin.from('users').update({ chips: u.chips + amount }).eq('id', targetUserId);
+      } catch {}
+
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('rail:approved', { amount, message: `Admin approved $${amount.toLocaleString()} chips! You can now join a table.` });
+
+      // Update remaining positions
+      railQueue.forEach((r, i) => {
+        const sid = userSockets.get(r.userId);
+        if (sid) io.to(sid).emit('rail:position', { position: i + 1, total: railQueue.length });
+      });
+
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:rail_update', { queue: railQueue.map(r => ({ ...r, socketId: undefined })) });
+      }
+    });
+
+    socket.on('rail:deny', ({ targetUserId, reason }) => {
+      if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      const idx = railQueue.findIndex(r => r.userId === targetUserId);
+      if (idx !== -1) railQueue.splice(idx, 1);
+
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('rail:denied', { message: reason || 'Your seat request was declined by admin.' });
+
+      railQueue.forEach((r, i) => {
+        const sid = userSockets.get(r.userId);
+        if (sid) io.to(sid).emit('rail:position', { position: i + 1, total: railQueue.length });
+      });
+
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:rail_update', { queue: railQueue.map(r => ({ ...r, socketId: undefined })) });
+      }
+    });
+
+    socket.on('rail:leave', () => {
+      const idx = railQueue.findIndex(r => r.userId === userId);
+      if (idx !== -1) railQueue.splice(idx, 1);
+      socket.leave('rail');
+      railQueue.forEach((r, i) => {
+        const sid = userSockets.get(r.userId);
+        if (sid) io.to(sid).emit('rail:position', { position: i + 1, total: railQueue.length });
+      });
+    });
+
+    // ─── Host Table Requests ──────────────────────────────────────────────
+
+    socket.on('table:request', ({ gameType, sb, bb, maxPlayers, rake }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host access required' });
+      const req = {
+        id: ++tableRequestSeq,
+        hostId: userId,
+        hostName: username,
+        gameType: gameType || 'holdem',
+        sb: sb || 5,
+        bb: bb || 10,
+        maxPlayers: maxPlayers || 9,
+        rake: rake || 5,
+        requestedAt: Date.now(),
+        status: 'pending'
+      };
+      tableRequests.unshift(req);
+      if (tableRequests.length > 50) tableRequests.pop();
+      socket.emit('table:request_submitted', { requestId: req.id });
+
+      pushAdminNotif(io, {
+        type: 'table_request',
+        title: 'Table Request',
+        body: `${username} requests a $${sb}/$${bb} ${gameType === 'plo' ? 'PLO' : "Hold'em"} table`,
+        data: { requestId: req.id, hostId: userId, hostName: username }
+      });
+
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:table_request', req);
+      }
+    });
+
+    socket.on('table:request_action', async ({ requestId, action, reason }) => {
+      if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      const req = tableRequests.find(r => r.id === requestId);
+      if (!req) return socket.emit('error', { message: 'Request not found' });
+      req.status = action; // 'approved' or 'denied'
+
+      const hostSid = userSockets.get(req.hostId);
+
+      if (action === 'approved') {
+        // Create the table
+        try {
+          const { data } = await supabaseAdmin.from('tables').insert({
+            name: `${req.hostName}'s Table`,
+            game_type: req.gameType,
+            stakes_small_blind: req.sb,
+            stakes_big_blind: req.bb,
+            max_players: req.maxPlayers,
+            rake_percent: req.rake,
+            status: 'active',
+            created_by: req.hostId
+          }).select('id').single();
+          req.tableId = data?.id;
+        } catch (e) { req.error = e.message; }
+
+        if (hostSid) io.to(hostSid).emit('table:request_approved', {
+          requestId,
+          tableId: req.tableId,
+          message: `Your table request ($${req.sb}/$${req.bb} ${req.gameType === 'plo' ? 'PLO' : "Hold'em"}) was approved! The table is now open.`
+        });
+      } else {
+        if (hostSid) io.to(hostSid).emit('table:request_denied', {
+          requestId,
+          message: reason ? `Your table request was denied: ${reason}` : 'Your table request was denied by admin.'
+        });
+      }
+
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:table_request_update', req);
+      }
+    });
+
     socket.on('lobby:join', () => {
       // Player is in the lobby — notify admins
       for (const sid of getAdminSockets(io)) {
@@ -612,6 +836,7 @@ async function startNewHand(io, tableId, game) {
   } catch (err) {
     return;
   }
+  game._allInNotified = new Set(); // reset per-hand all-in notifications
 
   broadcastGameState(io, tableId, game);
 
@@ -662,6 +887,20 @@ async function startNewHand(io, tableId, game) {
 
 function handleActionResult(io, tableId, game, result) {
   if (!result) return;
+
+  // All-in detection — notify admin for rebuy opportunity
+  if (!game._allInNotified) game._allInNotified = new Set();
+  for (const player of game.players.values()) {
+    if (player.isAllIn && !game._allInNotified.has(player.userId)) {
+      game._allInNotified.add(player.userId);
+      pushAdminNotif(jackpotIo, {
+        type: 'allin',
+        title: 'Player All-In',
+        body: `${player.username} went all-in with ${player.totalBetThisHand} chips at ${game.tableName || tableId}`,
+        data: { userId: player.userId, username: player.username, amount: player.totalBetThisHand, tableId }
+      });
+    }
+  }
 
   if (result.action === 'showdown' || result.action === 'hand_ended') {
     const handResult = result.result;
@@ -899,6 +1138,18 @@ async function leaveTable(socket, io, tableId, userId) {
   socket.leave(tableId);
   socket.currentTableId = null;
   socket.emit('left_table', { tableId });
+
+  // Notify admin of seat opening
+  if (jackpotIo) {
+    const leavingGame = activeGames.get(tableId);
+    const tableName = leavingGame?.tableName || tableId;
+    pushAdminNotif(jackpotIo, {
+      type: 'seat_open',
+      title: 'Seat Opened',
+      body: `A seat opened at ${tableName} (${leavingGame?.players?.size ?? '?'} players remaining)`,
+      data: { tableId, tableName }
+    });
+  }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests };

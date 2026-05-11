@@ -51,6 +51,49 @@
   <div id="tournaments-grid" class="tables-grid">
     <div class="empty-state">Loading tournaments…</div>
   </div>
+
+  <!-- Rail / Waiting Room -->
+  <div class="section-header" style="margin-top:32px">
+    <h2>🎟 Rail / Waiting Room</h2>
+    <button class="btn btn-sm btn-outline" onclick="joinRail()">Join Rail</button>
+  </div>
+  <p style="color:var(--text-dim);font-size:.85rem;margin:0 0 16px">No seats available? Join the rail and admin will seat you when a spot opens.</p>
+</div>
+
+<!-- Request Table Modal (host only) -->
+<div class="modal-overlay hidden" id="request-table-modal">
+  <div class="modal">
+    <h2>Request Table</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:14px">Your request will be sent to admin for approval.</p>
+    <div class="form-group">
+      <label>Game Type</label>
+      <select id="rt-type" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="holdem">Texas Hold'em</option>
+        <option value="plo">PLO</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Blinds (SB / BB)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="rt-sb" value="5" min="1" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <input type="number" id="rt-bb" value="10" min="2" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Max Players</label>
+      <select id="rt-max" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="2">2</option><option value="6">6</option><option value="9" selected>9</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Rake %</label>
+      <input type="number" id="rt-rake" value="5" min="0" max="10" step="0.5" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('request-table-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="submitTableRequest()">Send Request</button>
+    </div>
+  </div>
 </div>
 
 <!-- Create Table Modal -->

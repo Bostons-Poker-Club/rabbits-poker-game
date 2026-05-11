@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RabbsRoom – Waiting Room</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; background:radial-gradient(ellipse at center, #0d2a1a 0%, #050f09 100%); }
+    .rail-card { background:rgba(0,0,0,.5); border:1px solid var(--border); border-radius:16px; padding:40px 48px; text-align:center; max-width:440px; width:90%; }
+    .rail-logo { font-size:3rem; margin-bottom:8px; }
+    .rail-title { font-size:1.4rem; font-weight:700; color:var(--gold); margin-bottom:6px; }
+    .rail-sub { color:var(--text-dim); font-size:.9rem; margin-bottom:32px; }
+    .position-display { font-size:4rem; font-weight:900; color:var(--chip-green); line-height:1; }
+    .position-label { color:var(--text-dim); font-size:.85rem; margin:6px 0 24px; }
+    .queue-status { background:rgba(255,255,255,.05); border-radius:10px; padding:14px 20px; margin-bottom:24px; }
+    .music-toggle { cursor:pointer; color:var(--text-dim); font-size:.8rem; margin-top:16px; }
+    .pulse-ring { width:80px; height:80px; border-radius:50%; border:3px solid var(--chip-green); margin:0 auto 16px; animation:ring-pulse 2s ease-out infinite; }
+    @keyframes ring-pulse { 0%{transform:scale(1);opacity:1} 100%{transform:scale(1.4);opacity:0} }
+  </style>
+</head>
+<body>
+
+<div class="rail-card">
+  <div class="rail-logo">🎟</div>
+  <div class="rail-title">Waiting Room</div>
+  <div class="rail-sub">Admin will seat you when a table becomes available.</div>
+
+  <div class="pulse-ring"></div>
+
+  <div class="position-display" id="position-num">–</div>
+  <div class="position-label">YOUR POSITION IN QUEUE</div>
+
+  <div class="queue-status">
+    <div style="color:var(--text-dim);font-size:.82rem" id="queue-status-text">Connecting…</div>
+  </div>
+
+  <div style="color:var(--text-dim);font-size:.85rem;margin-bottom:16px" id="buyin-display"></div>
+
+  <button class="btn btn-outline btn-sm" onclick="leaveRail()" style="margin-top:4px">Leave Queue</button>
+  <div class="music-toggle" id="music-toggle" onclick="toggleMusic()">🎵 Ambient music: <span id="music-state">OFF</span></div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script src="/js/auth.js"></script>
+<script src="/js/rail.js"></script>
+</body>
+</html>

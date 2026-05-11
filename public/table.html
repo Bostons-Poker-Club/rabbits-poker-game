@@ -113,6 +113,19 @@
   </div>
 </div>
 
+<!-- Leave confirmation modal -->
+<div class="modal-overlay hidden" id="leave-confirm-modal">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <h2 style="color:var(--gold)">Leave Table?</h2>
+    <p style="color:var(--text);margin:12px 0 6px">Please cash out before leaving.</p>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:20px">Your chips will be returned to your account balance.</p>
+    <div class="modal-footer" style="justify-content:center;gap:12px">
+      <button class="btn btn-outline" onclick="stayAtTable()">Stay</button>
+      <button class="btn btn-gold" onclick="cashOutAndLeave()">Cash Out &amp; Leave</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 

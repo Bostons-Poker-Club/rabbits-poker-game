@@ -45,8 +45,9 @@ loadJackpot();
 
 // ─── Socket (notifications for all logged-in users) ───────────────────────
 
+let lobbySocket = null;
 if (typeof io !== 'undefined') {
-  const lobbySocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  lobbySocket = io({ auth: { token: localStorage.getItem('rp_token') } });
   lobbySocket.on('connect', () => lobbySocket.emit('lobby:join'));
 
   // Admin-only events
@@ -61,8 +62,8 @@ if (typeof io !== 'undefined') {
 
   // Host/player events
   lobbySocket.on('you:host_granted', ({ message }) => {
-    showToast('🎰 ' + message, 'success');
-    setTimeout(() => location.reload(), 1500);
+    showHostModal('granted', message);
+    setTimeout(() => location.reload(), 4000);
   });
   lobbySocket.on('you:host_revoked', ({ message }) => {
     showToast(message);
@@ -71,6 +72,27 @@ if (typeof io !== 'undefined') {
   lobbySocket.on('chips_received', ({ amount, from }) => {
     showToast(`🪙 ${fmtChips(amount)} chips added by ${from}`);
     setTimeout(refreshChips, 500);
+  });
+
+  // Table request responses
+  lobbySocket.on('table:request_submitted', () => {
+    showToast('Table request submitted — waiting for admin approval');
+  });
+  lobbySocket.on('table:request_approved', ({ tableId, message }) => {
+    showToast(`✅ ${message}`, 'success');
+    loadTables();
+  });
+  lobbySocket.on('table:request_denied', ({ message }) => {
+    showToast(message, 'error');
+  });
+
+  // Rail
+  lobbySocket.on('rail:approved', ({ amount, message }) => {
+    showToast(`✅ ${message}`, 'success');
+    setTimeout(() => window.location.href = '/lobby.html', 1500);
+  });
+  lobbySocket.on('rail:denied', ({ message }) => {
+    showToast(message, 'error');
   });
 }
 
@@ -202,7 +224,15 @@ function joinTable() {
   window.location.href = `/table.html?tableId=${tableId}&buyIn=${buyIn}`;
 }
 
-function openCreateTable() { openModal('create-table-modal'); }
+function openCreateTable() {
+  const u = getUser();
+  if (u?.isAdmin) {
+    openModal('create-table-modal');
+  } else {
+    // Host submits a request instead of creating directly
+    openModal('request-table-modal');
+  }
+}
 
 async function createTable() {
   const name = document.getElementById('ct-name').value.trim();
@@ -247,6 +277,44 @@ async function createTournament() {
   } catch (e) {
     showToast(e.message, 'error');
   }
+}
+
+function submitTableRequest() {
+  const sb = parseInt(document.getElementById('rt-sb').value);
+  const bb = parseInt(document.getElementById('rt-bb').value);
+  const gameType = document.getElementById('rt-type').value;
+  const maxPlayers = parseInt(document.getElementById('rt-max').value);
+  const rake = parseFloat(document.getElementById('rt-rake').value);
+  if (!lobbySocket) return showToast('Not connected', 'error');
+  lobbySocket.emit('table:request', { gameType, sb, bb, maxPlayers, rake });
+  closeModal('request-table-modal');
+}
+
+function showHostModal(type, message) {
+  const existing = document.getElementById('host-modal');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'host-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#0a190f;border:2px solid var(--chip-green);border-radius:16px;padding:32px 36px;max-width:420px;text-align:center">
+      <div style="font-size:2.5rem;margin-bottom:12px">🎰</div>
+      <h2 style="color:var(--chip-green);margin-bottom:10px">Host Status ${type === 'granted' ? 'Granted' : 'Updated'}</h2>
+      <p style="color:var(--text);line-height:1.6;margin-bottom:20px">${esc(message)}</p>
+      ${type === 'granted' ? '<p style="color:var(--text-dim);font-size:.85rem">You now see a gold HOST badge and a <strong>+ Create Table</strong> button (requires admin approval).</p>' : ''}
+      <button class="btn btn-green" onclick="document.getElementById(\'host-modal\').remove()" style="margin-top:16px">Got it!</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function joinRail() {
+  const buyin = parseInt(prompt('Requested buy-in amount:', '200') || '0');
+  if (buyin <= 0) return;
+  if (!lobbySocket) return showToast('Not connected', 'error');
+  lobbySocket.emit('rail:join', { buyin });
+  showToast('You joined the rail — waiting for admin to seat you');
+  // Redirect to waiting room
+  setTimeout(() => window.location.href = `/rail.html?buyin=${buyin}`, 1000);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
