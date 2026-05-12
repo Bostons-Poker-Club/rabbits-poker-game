@@ -94,4 +94,4 @@ async function sendBroadcastEmail({ from, message, recipients }) {
   return sent;
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail };
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, getTransporter };

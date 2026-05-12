@@ -83,41 +83,62 @@
 
   <!-- Jackpot -->
   <div class="admin-panel" id="panel-jackpot">
-    <div class="jackpot-admin-card">
+
+    <!-- Summary bar -->
+    <div class="jackpot-admin-card" style="margin-bottom:20px">
       <div>
-        <h3>🏆 High Hand Jackpot</h3>
+        <h3 style="margin:0 0 4px">🏆 High Hand Jackpot — All Tables</h3>
         <div class="jackpot-admin-amount" id="jp-amount">$0</div>
-        <div class="jackpot-admin-info" id="jp-info">No high hand recorded yet</div>
-        <div class="jackpot-admin-info" id="jp-holder" style="color:var(--gold);font-weight:600"></div>
-      </div>
-      <div class="jackpot-admin-actions">
-        <button class="btn btn-gold" onclick="awardJackpot()">Award Now</button>
-        <button class="btn btn-outline" onclick="resetJackpot()">Reset Timer</button>
+        <div class="jackpot-admin-info" style="color:var(--text-dim)">Total across all active tables</div>
       </div>
     </div>
 
-    <!-- Countdown clock -->
-    <div style="text-align:center;margin:20px 0 24px">
-      <div style="font-size:.75rem;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">Next jackpot reset in</div>
-      <div id="jp-countdown" style="font-size:3rem;font-weight:700;color:var(--gold);font-variant-numeric:tabular-nums;letter-spacing:.04em">30:00</div>
+    <!-- Per-table list -->
+    <div id="jp-tables-list" style="display:flex;flex-direction:column;gap:16px;margin-bottom:28px">
+      <div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No active tables yet. Tables appear here when players sit down.</div>
     </div>
 
     <!-- Set High Hand form -->
     <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:28px">
-      <h3 style="color:var(--gold);margin:0 0 16px">Set Current High Hand</h3>
+      <h3 style="color:var(--gold);margin:0 0 16px">Manually Set High Hand</h3>
       <div class="form-group">
+        <label>Table</label>
+        <select id="hh-table-id" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="">— Select a table —</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:12px">
         <label>Hand Description</label>
-        <input type="text" id="hh-description" placeholder="e.g. Aces Full of Deuces"
-          maxlength="120"
+        <input type="text" id="hh-description" placeholder="e.g. Aces Full of Deuces" maxlength="120"
           style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;box-sizing:border-box">
       </div>
       <div class="form-group" style="margin-top:12px">
-        <label>Player Nickname</label>
-        <input type="text" id="hh-holder" placeholder="e.g. Maverick"
-          maxlength="60"
+        <label>Player Name</label>
+        <input type="text" id="hh-holder" placeholder="e.g. Maverick" maxlength="60"
           style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;box-sizing:border-box">
       </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Hand Rank (0–9)</label>
+        <select id="hh-rank" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="9">9 — Royal Flush</option>
+          <option value="8">8 — Straight Flush</option>
+          <option value="7">7 — Four of a Kind</option>
+          <option value="6" selected>6 — Full House</option>
+          <option value="5">5 — Flush</option>
+          <option value="4">4 — Straight</option>
+          <option value="3">3 — Three of a Kind</option>
+          <option value="2">2 — Two Pair</option>
+          <option value="1">1 — One Pair</option>
+          <option value="0">0 — High Card</option>
+        </select>
+      </div>
       <button class="btn btn-gold" style="margin-top:14px;width:100%" onclick="setHighHand()">Set High Hand &amp; Reset Timer</button>
+    </div>
+
+    <!-- Expired jackpot confirmations -->
+    <div id="jp-expired-list" style="display:none;margin-bottom:24px">
+      <h3 style="color:var(--red);margin-bottom:12px">⏰ Expired — Pending Payout</h3>
+      <div id="jp-expired-items"></div>
     </div>
 
     <h2 style="color:var(--gold);margin-bottom:14px">Hand Rank Reference</h2>

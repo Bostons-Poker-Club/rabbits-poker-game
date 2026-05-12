@@ -135,6 +135,16 @@ if (typeof io !== 'undefined') {
     clearAuth();
     showBannedModal(message);
   });
+
+  // Live jackpot updates
+  lobbySocket.on('jackpot_state', (state) => {
+    handleJackpotState(state);
+  });
+
+  lobbySocket.on('jackpot_awarded', ({ amount, tableId }) => {
+    showToast(`🏆 High Hand Jackpot of $${fmtChips(amount)} awarded!`, 'success');
+    loadJackpot();
+  });
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────
@@ -160,6 +170,11 @@ function renderTables(tables) {
     const dots = Array.from({ length: t.max_players }, (_, i) =>
       `<span class="player-dot ${i < seated ? '' : 'empty'}"></span>`
     ).join('');
+    // Find this table's jackpot data
+    const jp = (jackpotData?.tables || []).find(j => j.tableId === t.id);
+    const jpLine = jp
+      ? `<div style="font-size:.78rem;color:var(--gold);margin-top:4px">🏆 Jackpot: $${fmtChips(jp.amount)}${jp.highHandUsername ? ` — ${esc(jp.highHandUsername)}` : ''}</div>`
+      : '';
 
     return `
     <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_big_blind})">
@@ -169,6 +184,7 @@ function renderTables(tables) {
       </div>
       <div class="table-stakes">$${t.stakes_small_blind}/$${t.stakes_big_blind}</div>
       <div class="table-info">Max Players: ${t.max_players} | Rake: ${t.rake_percent}%</div>
+      ${jpLine}
       <div class="player-count">${dots} <span style="margin-left:4px">${seated}/${t.max_players} seated</span></div>
       <button class="btn btn-gold btn-sm btn-full">Join Table →</button>
     </div>`;
@@ -222,24 +238,55 @@ async function registerTournament(id) {
 
 // ─── Jackpot ──────────────────────────────────────────────────────────────
 
+const JACKPOT_INTERVAL_MS = 30 * 60 * 1000;
+let jackpotTimerTick = null;
+
 async function loadJackpot() {
   try {
     jackpotData = await apiFetch('/api/jackpot');
-    updateJackpotDisplay();
+    updateJackpotDisplay(jackpotData.tables || []);
   } catch {}
-  setTimeout(loadJackpot, 30000);
+  setTimeout(loadJackpot, 60000);
 }
 
-function updateJackpotDisplay() {
-  if (!jackpotData) return;
-  document.getElementById('jackpot-amount').textContent = `$${jackpotData.current_amount || 0}`;
+function updateJackpotDisplay(tables) {
+  // Total across all tables in banner
+  const total = (tables || []).reduce((s, t) => s + (t.amount || 0), 0);
+  document.getElementById('jackpot-amount').textContent = `$${fmtChips(total)}`;
 
-  const timerStart = jackpotData.timer_started_at ? new Date(jackpotData.timer_started_at).getTime() : Date.now();
-  const intervalMs = 30 * 60 * 1000;
-  const remaining = Math.max(0, timerStart + intervalMs - Date.now());
-  const min = Math.floor(remaining / 60000);
-  const sec = Math.floor((remaining % 60000) / 1000);
-  document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+  // Timer: use the earliest-expiring table, or show — if none
+  if (tables && tables.length > 0) {
+    const earliest = tables.reduce((min, t) => t.timerRemainingMs < min.timerRemainingMs ? t : min, tables[0]);
+    if (jackpotTimerTick) clearInterval(jackpotTimerTick);
+    jackpotTimerTick = setInterval(() => {
+      const now = Date.now();
+      let minRemaining = Infinity;
+      (jackpotData?.tables || []).forEach(t => {
+        const remaining = Math.max(0, JACKPOT_INTERVAL_MS - (now - t.timerStart));
+        if (remaining < minRemaining) minRemaining = remaining;
+      });
+      if (minRemaining === Infinity) { document.getElementById('jackpot-timer').textContent = '–'; return; }
+      const min = Math.floor(minRemaining / 60000);
+      const sec = Math.floor((minRemaining % 60000) / 1000);
+      document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+    }, 1000);
+  } else {
+    document.getElementById('jackpot-timer').textContent = '–';
+  }
+}
+
+// Called when socket pushes jackpot_state
+function handleJackpotState(state) {
+  jackpotData = state;
+  const tables = state.tables || [];
+  const total = state.total || state.amount || 0;
+  document.getElementById('jackpot-amount').textContent = `$${fmtChips(total)}`;
+  if (tables.length > 0) {
+    const min30 = tables.reduce((a, t) => t.timerRemainingMs < a ? t.timerRemainingMs : a, Infinity);
+    const min = Math.floor(min30 / 60000);
+    const sec = Math.floor((min30 % 60000) / 1000);
+    document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+  }
 }
 
 // ─── Join / Create ─────────────────────────────────────────────────────────

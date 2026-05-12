@@ -27,9 +27,13 @@ const activeTournaments = new Map(); // tournamentId -> Tournament
 const socketUsers = new Map();       // socketId -> { userId, username, isAdmin }
 const userSockets = new Map();       // userId -> socketId
 
-// Jackpot state
-let jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
+// Per-table jackpot state
+// tableJackpots: Map<tableId, { tableName, amount, highHandRank, highHandUserId, highHandUsername, highHandDescription, timerStart }>
+const tableJackpots = new Map();
 let jackpotIo = null;
+
+// Keep legacy single `jackpot` for DB compat (used only for loadJackpotFromDB/saveJackpotToDB)
+let jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
 
 // Session rake tracking (resets on server restart)
 // byTable: Map<tableId, { tableName, total, hands[] }>
@@ -199,7 +203,7 @@ function setupSocketHandlers(io) {
     socketUsers.set(socket.id, { userId, username, isAdmin });
     userSockets.set(userId, socket.id);
 
-    socket.emit('jackpot_state', getJackpotPublicState());
+    socket.emit('jackpot_state', getAllJackpotState());
 
     // Deliver any queued broadcast messages for this player
     const queued = pendingMessages.get(userId);
@@ -322,7 +326,19 @@ function setupSocketHandlers(io) {
             if (sid) io.to(sid).emit(event, data);
           };
           game.onHandEnd = (result) => persistHandResult(tableId, result);
-          game.onJackpotCheck = (rank, uid) => checkJackpot(io, rank, uid);
+          game.onJackpotCheck = (rank, uid, uname, desc) => checkTableJackpot(io, tableId, rank, uid, uname, desc);
+          // Init per-table jackpot when game is created
+          if (!tableJackpots.has(tableId)) {
+            tableJackpots.set(tableId, {
+              tableName: game.tableName,
+              amount: 0,
+              highHandRank: -1,
+              highHandUserId: null,
+              highHandUsername: null,
+              highHandDescription: null,
+              timerStart: Date.now()
+            });
+          }
           game.onShotClockExpired = (uid) => {
             try {
               // Guard: only auto-fold if it is still this player's turn
@@ -881,6 +897,24 @@ function setupSocketHandlers(io) {
       socket.emit('messages:list', { messages: broadcastMessages.slice(0, 100) });
     });
 
+    // Admin: manually set high hand for a specific table
+    socket.on('jackpot:set_high_hand', ({ tableId: tId, description, holderName, handRank }) => {
+      if (!isAdmin) return;
+      const jp = tId ? getOrCreateTableJackpot(tId, activeGames.get(tId)?.tableName) : null;
+      if (!jp) return socket.emit('error', { message: 'Table not found' });
+      jp.highHandDescription = description || jp.highHandDescription;
+      jp.highHandUsername = holderName || jp.highHandUsername;
+      if (handRank !== undefined && handRank > jp.highHandRank) jp.highHandRank = handRank;
+      jp.timerStart = Date.now(); // reset timer on new high hand
+      broadcastJackpotState(io);
+      console.log(`[jackpot] Admin set high hand at ${jp.tableName}: ${description} by ${holderName}`);
+    });
+
+    // Admin: get full jackpot state for all tables
+    socket.on('jackpot:get_state', () => {
+      socket.emit('jackpot_state', getAllJackpotState());
+    });
+
     socket.on('get_table_state', ({ tableId }) => {
       const game = activeGames.get(tableId || socket.currentTableId);
       if (!game) return;
@@ -950,13 +984,36 @@ function setupSocketHandlers(io) {
           break;
         }
         case 'award_jackpot': {
-          await awardJackpot(io);
+          // payload: { tableId, amount, userId }
+          const awardTableId = tableId || data.tableId;
+          const jp = awardTableId ? tableJackpots.get(awardTableId) : null;
+          if (jp) {
+            const awardAmt = jp.amount;
+            const awardUid = jp.highHandUserId;
+            jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
+            jp.highHandUsername = null; jp.highHandDescription = null;
+            jp.timerStart = Date.now();
+            if (awardUid) await awardTableJackpot(io, awardTableId, awardAmt, awardUid);
+            broadcastJackpotState(io);
+          }
           break;
         }
         case 'reset_jackpot': {
-          jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
-          await saveJackpotToDB();
-          io.emit('jackpot_state', getJackpotPublicState());
+          const resetTableId = tableId || data.tableId;
+          if (resetTableId && tableJackpots.has(resetTableId)) {
+            const jp = tableJackpots.get(resetTableId);
+            jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
+            jp.highHandUsername = null; jp.highHandDescription = null;
+            jp.timerStart = Date.now();
+          } else {
+            // Reset all tables
+            for (const jp of tableJackpots.values()) {
+              jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
+              jp.highHandUsername = null; jp.highHandDescription = null;
+              jp.timerStart = Date.now();
+            }
+          }
+          broadcastJackpotState(io);
           break;
         }
         case 'close_table': {
@@ -1152,76 +1209,170 @@ function handleActionResult(io, tableId, game, result) {
   }
 }
 
-// ─── Jackpot ──────────────────────────────────────────────────────────────────
+// ─── Per-Table Jackpot ────────────────────────────────────────────────────────
 
-function checkJackpot(io, handRank, userId) {
-  if (handRank > jackpot.highHandRank) {
-    jackpot.highHandRank = handRank;
-    jackpot.highHandUserId = userId;
-    saveJackpotToDB();
-    io.emit('jackpot_state', getJackpotPublicState());
+function getOrCreateTableJackpot(tableId, tableName) {
+  if (!tableJackpots.has(tableId)) {
+    tableJackpots.set(tableId, {
+      tableName: tableName || tableId.slice(0, 8),
+      amount: 0,
+      highHandRank: -1,
+      highHandUserId: null,
+      highHandUsername: null,
+      highHandDescription: null,
+      timerStart: Date.now()
+    });
+  }
+  return tableJackpots.get(tableId);
+}
+
+function checkTableJackpot(io, tableId, handRank, userId, username, description) {
+  const jp = getOrCreateTableJackpot(tableId);
+  if (handRank > jp.highHandRank) {
+    jp.highHandRank = handRank;
+    jp.highHandUserId = userId;
+    jp.highHandUsername = username || null;
+    jp.highHandDescription = description || null;
+    broadcastJackpotState(io);
+    console.log(`[jackpot] New high hand at table ${jp.tableName}: rank=${handRank} by ${username}`);
   }
 }
 
-function addToJackpot(io, amount) {
-  jackpot.amount += amount;
-  io.emit('jackpot_state', getJackpotPublicState());
+function addToTableJackpot(io, tableId, amount) {
+  const jp = getOrCreateTableJackpot(tableId);
+  jp.amount += amount;
+  broadcastJackpotState(io);
 }
 
-function getJackpotPublicState() {
-  const elapsed = Date.now() - jackpot.timerStart;
-  const remaining = Math.max(0, JACKPOT_INTERVAL_MS - elapsed);
+function getAllJackpotState() {
+  const now = Date.now();
+  const tables = Array.from(tableJackpots.entries()).map(([tableId, jp]) => {
+    const remaining = Math.max(0, JACKPOT_INTERVAL_MS - (now - jp.timerStart));
+    return {
+      tableId,
+      tableName: jp.tableName,
+      amount: jp.amount,
+      highHandRank: jp.highHandRank,
+      highHandUserId: jp.highHandUserId,
+      highHandUsername: jp.highHandUsername,
+      highHandDescription: jp.highHandDescription,
+      timerStart: jp.timerStart,
+      timerRemainingMs: remaining,
+      timerRemainingMin: Math.ceil(remaining / 60000)
+    };
+  });
+  const total = tables.reduce((s, t) => s + t.amount, 0);
+  // Backward-compat fields (use total / first table for old clients)
+  const first = tables[0] || {};
   return {
-    amount: jackpot.amount,
-    highHandRank: jackpot.highHandRank,
-    highHandUserId: jackpot.highHandUserId,
-    timerRemainingMs: remaining,
-    timerRemainingMin: Math.ceil(remaining / 60000)
+    tables,
+    total,
+    amount: total,
+    timerRemainingMs: first.timerRemainingMs ?? JACKPOT_INTERVAL_MS,
+    timerRemainingMin: first.timerRemainingMin ?? 30
   };
+}
+
+function broadcastJackpotState(io) {
+  io.emit('jackpot_state', getAllJackpotState());
 }
 
 function startJackpotTimer(io) {
   setInterval(async () => {
-    const elapsed = Date.now() - jackpot.timerStart;
-    if (elapsed >= JACKPOT_INTERVAL_MS && jackpot.amount > 0) {
-      await awardJackpot(io);
-    } else {
-      io.emit('jackpot_state', getJackpotPublicState());
+    const now = Date.now();
+    for (const [tableId, jp] of tableJackpots) {
+      const elapsed = now - jp.timerStart;
+      if (elapsed >= JACKPOT_INTERVAL_MS) {
+        await expireTableJackpot(io, tableId, jp);
+      }
     }
-  }, 60000);
+    broadcastJackpotState(io);
+  }, 30000); // check every 30s
 }
 
-async function awardJackpot(io) {
-  if (jackpot.amount === 0) return;
+async function expireTableJackpot(io, tableId, jp) {
+  const tableName = jp.tableName;
+  const awarded = jp.amount;
+  const winner = jp.highHandUserId;
+  const winnerName = jp.highHandUsername || 'Unknown';
+  const winnerHand = jp.highHandDescription || `Rank ${jp.highHandRank}`;
 
-  const awarded = jackpot.amount;
-  const awardedTo = jackpot.highHandUserId;
+  console.log(`[jackpot] Timer expired for table ${tableName} — $${awarded} to ${winnerName} (${winnerHand})`);
 
-  if (awardedTo) {
+  // Notify admin via socket
+  const summary = {
+    tableId, tableName, awarded, winner, winnerName, winnerHand,
+    pendingConfirm: true
+  };
+  for (const sid of getAdminSockets(io)) {
+    io.to(sid).emit('jackpot:expired', summary);
+  }
+
+  // Push admin notification
+  pushAdminNotif(io, {
+    type: 'jackpot_expired',
+    title: `🏆 Jackpot Expired — ${tableName}`,
+    body: `High Hand: ${winnerHand} by ${winnerName} — $${awarded} to award`,
+    data: summary
+  });
+
+  // Send email to admin
+  try {
+    const { getTransporter } = require('../mail');
+    const t = getTransporter ? getTransporter() : null;
+    if (t) {
+      await t.sendMail({
+        from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
+        to: 'bostonspokerclub.amitureflops@gmail.com',
+        subject: `🏆 High Hand Jackpot Expired — ${tableName}`,
+        html: `
+          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+            <h2 style="color:#c8a800">🏆 High Hand Jackpot — ${tableName}</h2>
+            <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
+              <tr><td style="padding:8px 14px;color:#555;width:140px">Table</td><td style="padding:8px 14px;font-weight:700">${tableName}</td></tr>
+              <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${winnerName}</td></tr>
+              <tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${winnerHand}</td></tr>
+              <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;font-size:1.2rem;color:#c8a800">$${awarded}</td></tr>
+            </table>
+            <p style="margin-top:20px;color:#666">Log in to the <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> to confirm payout.</p>
+          </div>`
+      });
+      console.log(`[jackpot] Expiry email sent for ${tableName}`);
+    }
+  } catch (e) {
+    console.warn('[jackpot] Failed to send expiry email:', e.message);
+  }
+
+  // Reset this table's jackpot (admin still confirms payout manually)
+  jp.amount = 0;
+  jp.highHandRank = -1;
+  jp.highHandUserId = null;
+  jp.highHandUsername = null;
+  jp.highHandDescription = null;
+  jp.timerStart = Date.now();
+}
+
+async function awardTableJackpot(io, tableId, amount, awardedTo) {
+  if (!awardedTo || !amount) return;
+  try {
+    await supabaseAdmin.rpc('increment_chips', { user_id: awardedTo, amount });
+  } catch (_) {
     try {
-      await supabaseAdmin.rpc('increment_chips', { user_id: awardedTo, amount: awarded });
-    } catch (_) {
-      try {
-        const { data } = await supabaseAdmin.from('users').select('chips').eq('id', awardedTo).single();
-        if (data) await supabaseAdmin.from('users').update({ chips: data.chips + awarded }).eq('id', awardedTo);
-      } catch (_) {}
-    }
-
-    const sid = userSockets.get(awardedTo);
-    if (sid && io) {
-      io.to(sid).emit('jackpot_won', { amount: awarded, message: `You won the High Hand Jackpot: $${awarded}!` });
+      const { data } = await supabaseAdmin.from('users').select('chips').eq('id', awardedTo).single();
+      if (data) await supabaseAdmin.from('users').update({ chips: data.chips + amount }).eq('id', awardedTo);
+    } catch (_) {}
+  }
+  // Notify winner
+  for (const [, s] of io.sockets.sockets) {
+    if (s.user && s.user.id === awardedTo) {
+      s.emit('jackpot_won', { amount, message: `🏆 You won the High Hand Jackpot: $${amount}!` });
     }
   }
-
-  jackpot = { amount: 0, highHandRank: -1, highHandUserId: null, timerStart: Date.now() };
-  await saveJackpotToDB();
-
-  if (io) {
-    io.emit('jackpot_awarded', { amount: awarded, winnerId: awardedTo });
-    io.emit('jackpot_state', getJackpotPublicState());
-  }
+  io.emit('jackpot_awarded', { amount, winnerId: awardedTo, tableId });
+  broadcastJackpotState(io);
 }
 
+// Legacy DB helpers (kept for backward compat on server restart load)
 async function loadJackpotFromDB() {
   try {
     const { data } = await supabaseAdmin.from('jackpot').select('*').eq('id', 1).single();
@@ -1236,8 +1387,9 @@ async function loadJackpotFromDB() {
 
 async function saveJackpotToDB() {
   try {
+    const total = Array.from(tableJackpots.values()).reduce((s, jp) => s + jp.amount, 0);
     await supabaseAdmin.from('jackpot').update({
-      current_amount: jackpot.amount,
+      current_amount: total,
       highest_hand_rank: jackpot.highHandRank,
       highest_hand_user_id: jackpot.highHandUserId,
       timer_started_at: new Date(jackpot.timerStart).toISOString()
@@ -1283,8 +1435,7 @@ async function persistHandResult(tableId, result) {
     }
 
     if (jackpotContrib > 0 && jackpotIo) {
-      addToJackpot(jackpotIo, jackpotContrib);
-      await saveJackpotToDB();
+      addToTableJackpot(jackpotIo, tableId, jackpotContrib);
     }
 
     await supabaseAdmin.from('hands').update({
@@ -1358,4 +1509,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots };

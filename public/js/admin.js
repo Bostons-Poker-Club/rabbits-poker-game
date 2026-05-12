@@ -69,6 +69,20 @@ if (typeof io !== 'undefined') {
   adminSocket.on('admin:message_history', ({ messages }) => {
     renderMessages(messages);
   });
+
+  // Per-table jackpot events
+  adminSocket.on('jackpot_state', (state) => {
+    if (state.tables) renderJackpotTables(state.tables);
+    const total = state.total || state.amount || 0;
+    const jpAmt = document.getElementById('jp-amount');
+    const statJp = document.getElementById('stat-jackpot');
+    if (jpAmt) jpAmt.textContent = `$${fmt(total)}`;
+    if (statJp) statJp.textContent = `$${fmt(total)}`;
+  });
+
+  adminSocket.on('jackpot:expired', (data) => {
+    handleJackpotExpired(data);
+  });
 }
 
 async function loadAll() {
@@ -990,74 +1004,140 @@ async function deleteTournament(id, name) {
   } catch (e) { toast(e.message, 'error'); }
 }
 
-// ─── Jackpot ──────────────────────────────────────────────────────────────
+// ─── Per-Table Jackpot ────────────────────────────────────────────────────
 
-let countdownDeadline = null;
-let countdownInterval = null;
+const JACKPOT_INTERVAL_MS = 30 * 60 * 1000;
+let tableCountdownIntervals = {}; // tableId -> intervalId
+let currentJackpotTables = [];    // latest state from server
+const pendingPayouts = [];         // expired tables waiting for admin confirm
 
 async function loadJackpot() {
   try {
     const data = await apiFetch('/api/jackpot');
-    document.getElementById('jp-amount').textContent = `$${fmt(data.current_amount)}`;
-    document.getElementById('stat-jackpot').textContent = `$${fmt(data.current_amount)}`;
-
-    if (data.high_hand_description) {
-      document.getElementById('jp-info').textContent = `High hand: ${data.high_hand_description}`;
-      document.getElementById('jp-holder').textContent = `Held by: ${data.high_hand_holder}`;
-    } else {
-      document.getElementById('jp-info').textContent = 'No high hand recorded yet';
-      document.getElementById('jp-holder').textContent = '';
-    }
-
-    const timerStart = data.high_hand_set_at || data.timer_started_at;
-    countdownDeadline = timerStart ? new Date(timerStart).getTime() + 30 * 60 * 1000 : null;
-    startCountdown();
+    renderJackpotTables(data.tables || []);
+    const total = data.total || data.current_amount || 0;
+    document.getElementById('jp-amount').textContent = `$${fmt(total)}`;
+    document.getElementById('stat-jackpot').textContent = `$${fmt(total)}`;
   } catch {}
 }
 
-function startCountdown() {
-  if (countdownInterval) clearInterval(countdownInterval);
-  tickCountdown();
-  countdownInterval = setInterval(tickCountdown, 1000);
-}
+function renderJackpotTables(tables) {
+  currentJackpotTables = tables;
 
-function tickCountdown() {
-  const el = document.getElementById('jp-countdown');
-  if (!el) return;
-  if (!countdownDeadline) { el.textContent = '30:00'; return; }
-  const remaining = Math.max(0, countdownDeadline - Date.now());
-  const min = Math.floor(remaining / 60000);
-  const sec = Math.floor((remaining % 60000) / 1000);
-  el.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
-  el.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : 'var(--gold)';
+  // Update table selector in set-high-hand form
+  const sel = document.getElementById('hh-table-id');
+  if (sel) {
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">— Select a table —</option>' +
+      tables.map(t => `<option value="${t.tableId}" ${t.tableId === cur ? 'selected' : ''}>${esc(t.tableName)}</option>`).join('');
+  }
+
+  const container = document.getElementById('jp-tables-list');
+  if (!container) return;
+
+  // Clear per-table countdown intervals
+  Object.values(tableCountdownIntervals).forEach(clearInterval);
+  tableCountdownIntervals = {};
+
+  if (!tables.length) {
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No active tables yet.</div>';
+    return;
+  }
+
+  container.innerHTML = tables.map(t => {
+    const hasWinner = t.highHandUsername || t.highHandDescription;
+    const rankLabel = ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'][t.highHandRank] || `Rank ${t.highHandRank}`;
+    return `
+    <div id="jp-table-${t.tableId}" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px">🃏 ${esc(t.tableName)}</div>
+          <div style="font-size:1.6rem;font-weight:700;color:var(--chip-green)">$${fmt(t.amount)}</div>
+          ${hasWinner
+            ? `<div style="color:var(--text);margin-top:6px">🏆 <strong>${esc(t.highHandUsername || '—')}</strong> — ${esc(t.highHandDescription || rankLabel)}</div>`
+            : `<div style="color:var(--text-dim);margin-top:6px;font-size:.85rem">No high hand recorded yet</div>`}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Resets in</div>
+          <div id="jp-cd-${t.tableId}" style="font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--gold)">–:––</div>
+          <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
+            ${t.amount > 0 && hasWinner ? `<button class="btn btn-gold btn-sm" onclick="awardJackpot('${t.tableId}')">Award $${fmt(t.amount)}</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="resetJackpot('${t.tableId}')">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Start per-table countdowns
+  tables.forEach(t => {
+    const deadline = t.timerStart + JACKPOT_INTERVAL_MS;
+    const tick = () => {
+      const el = document.getElementById(`jp-cd-${t.tableId}`);
+      if (!el) { clearInterval(tableCountdownIntervals[t.tableId]); return; }
+      const remaining = Math.max(0, deadline - Date.now());
+      const min = Math.floor(remaining / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      el.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+      el.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : 'var(--gold)';
+    };
+    tick();
+    tableCountdownIntervals[t.tableId] = setInterval(tick, 1000);
+  });
 }
 
 async function setHighHand() {
+  const tableId = document.getElementById('hh-table-id').value;
   const description = document.getElementById('hh-description').value.trim();
   const holder = document.getElementById('hh-holder').value.trim();
+  const handRank = parseInt(document.getElementById('hh-rank').value);
+  if (!tableId) return toast('Select a table', 'error');
   if (!description) return toast('Enter a hand description', 'error');
-  if (!holder) return toast('Enter a player nickname', 'error');
+  if (!holder) return toast('Enter the player name', 'error');
   try {
-    await apiFetch('/api/jackpot/high-hand', { method: 'POST', body: { description, holder } });
-    toast(`High hand set: ${description} — ${holder}`);
+    await apiFetch('/api/jackpot/high-hand', { method: 'POST', body: { tableId, description, holder, handRank } });
+    toast(`High hand set at selected table: ${description} — ${holder}`);
     document.getElementById('hh-description').value = '';
     document.getElementById('hh-holder').value = '';
     loadJackpot();
   } catch (e) { toast(e.message, 'error'); }
 }
 
-async function awardJackpot() {
-  if (!confirm('Award jackpot to current high hand holder?')) return;
+async function awardJackpot(tableId) {
+  const table = currentJackpotTables.find(t => t.tableId === tableId);
+  const label = table ? `${table.tableName} — ${table.highHandUsername} ($${fmt(table.amount)})` : tableId;
+  if (!confirm(`Award jackpot for:\n${label}?`)) return;
   try {
-    const r = await apiFetch('/api/jackpot/award', { method: 'POST' });
-    toast(`Jackpot of $${fmt(r.awarded)} awarded!`);
+    const r = await apiFetch('/api/jackpot/award', { method: 'POST', body: { tableId } });
+    toast(`🏆 Jackpot of $${fmt(r.awarded)} awarded to ${table?.highHandUsername || 'winner'}!`);
     loadJackpot();
   } catch (e) { toast(e.message, 'error'); }
 }
 
-async function resetJackpot() {
-  if (!confirm('Reset jackpot timer and high hand?')) return;
-  toast('Jackpot reset (via admin socket action)');
+async function resetJackpot(tableId) {
+  if (!confirm('Reset this table\'s jackpot timer and high hand?')) return;
+  if (adminSocket) adminSocket.emit('admin:action', { action: 'reset_jackpot', tableId });
+  toast('Jackpot reset');
+  setTimeout(loadJackpot, 500);
+}
+
+// Handle jackpot expiry notification from server
+function handleJackpotExpired(data) {
+  const { tableName, awarded, winnerName, winnerHand } = data;
+  // Show banner notification
+  const banner = document.createElement('div');
+  banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:20px 28px;z-index:9999;text-align:center;min-width:320px;box-shadow:0 0 40px rgba(212,175,55,.3)';
+  banner.innerHTML = `
+    <div style="font-size:1.8rem;margin-bottom:8px">🏆</div>
+    <div style="font-weight:700;color:var(--gold);font-size:1.1rem;margin-bottom:4px">Jackpot Expired — ${esc(tableName)}</div>
+    <div style="color:var(--text);margin-bottom:4px">${esc(winnerHand)} by <strong>${esc(winnerName)}</strong></div>
+    <div style="font-size:1.4rem;font-weight:700;color:var(--chip-green);margin-bottom:14px">$${fmt(awarded)} to award</div>
+    <div style="display:flex;gap:8px;justify-content:center">
+      <button class="btn btn-gold" onclick="awardJackpot('${data.tableId}');this.closest('div[style]').remove()">Confirm Payout</button>
+      <button class="btn btn-outline" onclick="this.closest('div[style]').remove()">Dismiss</button>
+    </div>`;
+  document.body.appendChild(banner);
+  loadJackpot();
 }
 
 // ─── Admin Chip Refill ────────────────────────────────────────────────────
