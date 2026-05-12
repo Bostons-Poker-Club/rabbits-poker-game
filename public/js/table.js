@@ -47,6 +47,7 @@ const SEAT_POSITIONS = {
 
 function connect() {
   socket = io({ auth: { token: getToken() } });
+  window.tableSocket = socket; // expose globally for inline scripts
 
   socket.on('connect', () => {
     console.log('[socket] connected, socketId:', socket.id, '— emitting join_table for tableId:', tableId);

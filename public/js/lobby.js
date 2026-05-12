@@ -60,6 +60,7 @@ loadInbox();
 let lobbySocket = null;
 if (typeof io !== 'undefined') {
   lobbySocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  window.lobbySocket = lobbySocket; // expose globally for inline scripts
   lobbySocket.on('connect', () => lobbySocket.emit('lobby:join'));
 
   // Admin-only events
