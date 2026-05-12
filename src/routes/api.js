@@ -810,27 +810,25 @@ router.get('/test-broadcast', authMiddleware, adminMiddleware, (req, res) => {
 });
 
 router.get('/test-email', async (req, res) => {
-  const smtpUser = process.env.SMTP_USER;
-  const smtpPass = process.env.SMTP_PASS;
-  if (!smtpUser || !smtpPass) {
-    return res.status(500).json({ ok: false, error: 'SMTP not configured', SMTP_USER: smtpUser || 'NOT SET', SMTP_PASS: smtpPass ? 'SET' : 'NOT SET' });
+  const apiKey = process.env.SENDGRID_API_KEY;
+  if (!apiKey) {
+    return res.status(500).json({ ok: false, error: 'SENDGRID_API_KEY not set' });
   }
   try {
-    const { getTransporter } = require('../mail');
-    const t = getTransporter();
-    if (!t) return res.status(500).json({ ok: false, error: 'getTransporter() returned null' });
-    const info = await t.sendMail({
-      from: `"RabbsRoom" <${smtpUser}>`,
+    const sgMail = require('@sendgrid/mail');
+    sgMail.setApiKey(apiKey);
+    const [response] = await sgMail.send({
+      from: 'bostonspokerclub.amitureflops@gmail.com',
       to: 'bostonspokerclub.amitureflops@gmail.com',
       subject: '✅ RabbsRoom Email Test',
-      text: `Test email sent at ${new Date().toISOString()}. Email system is working!`,
-      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto"><h2 style="color:#1a7a3f">✅ Email System Working</h2><p>Test sent at <strong>${new Date().toISOString()}</strong>.</p><p style="color:#666">RabbsRoom email delivery is confirmed.</p></div>`
+      text: `Test email sent at ${new Date().toISOString()}. SendGrid email system is working!`,
+      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto"><h2 style="color:#1a7a3f">✅ Email System Working</h2><p>Test sent at <strong>${new Date().toISOString()}</strong>.</p><p style="color:#666">RabbsRoom SendGrid delivery is confirmed.</p></div>`
     });
-    console.log(`[test-email] Sent OK — messageId: ${info.messageId}`);
-    res.json({ ok: true, sentTo: 'bostonspokerclub.amitureflops@gmail.com', smtpUser, messageId: info.messageId });
+    console.log(`[test-email] SendGrid OK — status: ${response.statusCode}`);
+    res.json({ ok: true, sentTo: 'bostonspokerclub.amitureflops@gmail.com', statusCode: response.statusCode });
   } catch (e) {
     console.error('[test-email] FAILED:', e.message);
-    res.status(500).json({ ok: false, error: e.message, smtpUser });
+    res.status(500).json({ ok: false, error: e.message });
   }
 });
 
@@ -895,28 +893,28 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
 
   // Send email + SMS to admin
   try {
-    const { getTransporter } = require('../mail');
-    const t = getTransporter ? getTransporter() : null;
-    if (t) {
-      const subject = `💰 Buy-In Request — ${req.user.username} ($${amount})`;
-      const html = `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-          <h2 style="color:#1a7a3f">💰 Buy-In Request — RabbsRoom</h2>
-          <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
-            <tr><td style="padding:8px 14px;color:#555;width:140px">Player</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
-            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem">$${amount} chips</td></tr>
-            <tr><td style="padding:8px 14px;color:#555">Payment</td><td style="padding:8px 14px">${request.paymentMethod}</td></tr>
-            ${notes ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Notes</td><td style="padding:8px 14px">${notes}</td></tr>` : ''}
-          </table>
-          <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>
-        </div>`;
-      const text = `Buy-In Request: ${req.user.username} wants $${amount} chips via ${request.paymentMethod}${notes ? '. Notes: ' + notes : ''}. Approve at rabbsroom.com/admin.html`;
-
-      // Email to admin
-      await t.sendMail({ from: `"RabbsRoom" <${process.env.SMTP_USER}>`, to: 'bostonspokerclub.amitureflops@gmail.com', subject, html }).catch(() => {});
-      // SMS via Verizon email gateway
-      await t.sendMail({ from: `"RabbsRoom" <${process.env.SMTP_USER}>`, to: '5085219176@vtext.com', subject: `Buy-In: ${req.user.username} $${amount}`, text }).catch(() => {});
-      console.log(`[buyin] Notification sent for ${req.user.username} $${amount}`);
+    const { sendAdminEmail } = require('../mail');
+    const subject = `💰 Buy-In Request — ${req.user.username} ($${amount})`;
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#1a7a3f">💰 Buy-In Request — RabbsRoom</h2>
+        <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
+          <tr><td style="padding:8px 14px;color:#555;width:140px">Player</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
+          <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem">$${amount} chips</td></tr>
+          <tr><td style="padding:8px 14px;color:#555">Payment</td><td style="padding:8px 14px">${request.paymentMethod}</td></tr>
+          ${notes ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Notes</td><td style="padding:8px 14px">${notes}</td></tr>` : ''}
+        </table>
+        <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>
+      </div>`;
+    const text = `Buy-In Request: ${req.user.username} wants $${amount} chips via ${request.paymentMethod}${notes ? '. Notes: ' + notes : ''}. Approve at rabbsroom.com/admin.html`;
+    await sendAdminEmail({ subject, text, html });
+    // SMS via Verizon email gateway (SendGrid)
+    if (process.env.SENDGRID_API_KEY) {
+      const sgMail = require('@sendgrid/mail');
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+      await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: `Buy-In: ${req.user.username} $${amount}`, text }).catch(() => {});
+    }
+    console.log(`[buyin] Notification sent for ${req.user.username} $${amount}`);
     }
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);

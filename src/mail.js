@@ -1,36 +1,26 @@
 'use strict';
 
-const nodemailer = require('nodemailer');
+const sgMail = require('@sendgrid/mail');
 
+const FROM = 'bostonspokerclub.amitureflops@gmail.com';
 const ADMIN_EMAIL = 'bostonspokerclub.amitureflops@gmail.com';
 
-let transporter = null;
-
-function getTransporter() {
-  if (transporter) return transporter;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!user || !pass) return null;
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT) || 465,
-    secure: true,
-    auth: { user, pass }
-  });
-  return transporter;
+function isConfigured() {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log('[mail] SENDGRID_API_KEY not set — skipping email');
+    return false;
+  }
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  return true;
 }
 
 async function sendTableRequestEmail({ hostName, tableName, gameType, sb, bb, maxPlayers, rake }) {
-  const t = getTransporter();
-  if (!t) {
-    console.log('[mail] SMTP not configured — skipping table request email');
-    return;
-  }
+  if (!isConfigured()) return;
   const displayName = tableName || `${hostName}'s Table`;
   const gameLabel = gameType === 'plo' ? 'PLO' : "Texas Hold'em";
   try {
-    await t.sendMail({
-      from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
+    await sgMail.send({
+      from: FROM,
       to: ADMIN_EMAIL,
       subject: `🎰 Table Request — ${displayName} by ${hostName}`,
       text: [
@@ -64,20 +54,16 @@ async function sendTableRequestEmail({ hostName, tableName, gameType, sb, bb, ma
 }
 
 async function sendBroadcastEmail({ from, message, recipients }) {
-  const t = getTransporter();
-  if (!t) {
-    console.log('[mail] SMTP not configured — skipping broadcast email');
-    return 0;
-  }
+  if (!isConfigured()) return 0;
   let sent = 0;
   for (const r of recipients) {
     if (!r.email) continue;
     try {
-      await t.sendMail({
-        from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
+      await sgMail.send({
+        from: FROM,
         to: r.email,
         subject: `📨 Message from ${from} — RabbsRoom`,
-        text: `Hi ${r.username || 'there'},\n\n${from} sent a message:\n\n"${message}"\n\nLog in at https://rabbsroom.com to respond or view more messages.`,
+        text: `Hi ${r.username || 'there'},\n\n${from} sent a message:\n\n"${message}"\n\nLog in at https://rabbsroom.com to view more messages.`,
         html: `
           <div style="font-family:sans-serif;max-width:500px;margin:0 auto">
             <h2 style="color:#1a7a3f">📨 Message from ${from}</h2>
@@ -94,4 +80,14 @@ async function sendBroadcastEmail({ from, message, recipients }) {
   return sent;
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, getTransporter };
+async function sendAdminEmail({ subject, text, html }) {
+  if (!isConfigured()) return;
+  try {
+    await sgMail.send({ from: FROM, to: ADMIN_EMAIL, subject, text, html });
+    console.log(`[mail] Admin email sent: ${subject}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send admin email:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail };

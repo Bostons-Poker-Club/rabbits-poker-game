@@ -1318,27 +1318,22 @@ async function expireTableJackpot(io, tableId, jp) {
 
   // Send email to admin
   try {
-    const { getTransporter } = require('../mail');
-    const t = getTransporter ? getTransporter() : null;
-    if (t) {
-      await t.sendMail({
-        from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
-        to: 'bostonspokerclub.amitureflops@gmail.com',
-        subject: `🏆 High Hand Jackpot Expired — ${tableName}`,
-        html: `
-          <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-            <h2 style="color:#c8a800">🏆 High Hand Jackpot — ${tableName}</h2>
-            <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
-              <tr><td style="padding:8px 14px;color:#555;width:140px">Table</td><td style="padding:8px 14px;font-weight:700">${tableName}</td></tr>
-              <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${winnerName}</td></tr>
-              <tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${winnerHand}</td></tr>
-              <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;font-size:1.2rem;color:#c8a800">$${awarded}</td></tr>
-            </table>
-            <p style="margin-top:20px;color:#666">Log in to the <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> to confirm payout.</p>
-          </div>`
-      });
-      console.log(`[jackpot] Expiry email sent for ${tableName}`);
-    }
+    const { sendAdminEmail } = require('../mail');
+    await sendAdminEmail({
+      subject: `🏆 High Hand Jackpot Expired — ${tableName}`,
+      text: `High Hand Jackpot expired at ${tableName}. Winner: ${winnerName} (${winnerHand}) — $${awarded} to award. Log in to admin panel to confirm payout.`,
+      html: `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#c8a800">🏆 High Hand Jackpot — ${tableName}</h2>
+          <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
+            <tr><td style="padding:8px 14px;color:#555;width:140px">Table</td><td style="padding:8px 14px;font-weight:700">${tableName}</td></tr>
+            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${winnerName}</td></tr>
+            <tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${winnerHand}</td></tr>
+            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;font-size:1.2rem;color:#c8a800">$${awarded}</td></tr>
+          </table>
+          <p style="margin-top:20px;color:#666">Log in to the <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> to confirm payout.</p>
+        </div>`
+    });
   } catch (e) {
     console.warn('[jackpot] Failed to send expiry email:', e.message);
   }
