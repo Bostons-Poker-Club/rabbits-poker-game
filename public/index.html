@@ -72,7 +72,7 @@
 <script src="/js/auth.js"></script>
 <script>
   // Redirect if already logged in
-  if (localStorage.getItem('rp_token')) window.location.href = '/lobby.html';
+  if (sessionStorage.getItem('rp_token')) window.location.href = '/lobby.html';
 
   function showTab(tab) {
     document.getElementById('tab-login').classList.toggle('active', tab === 'login');

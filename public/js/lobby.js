@@ -39,7 +39,7 @@ apiFetch('/api/profile').then(profile => {
   const isHost = !!(profile.is_host);
   applyRoleUI(isAdmin, isHost);
   const u = getUser();
-  if (u) { u.isAdmin = isAdmin; u.isHost = isHost; u.chips = profile.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
+  if (u) { u.isAdmin = isAdmin; u.isHost = isHost; u.chips = profile.chips; sessionStorage.setItem('rp_user', JSON.stringify(u)); }
   // Always show actual chip count so admin can join tables
   document.getElementById('header-chips').textContent = isAdmin
     ? `♛ ${fmtChips(profile.chips)}`
@@ -59,7 +59,7 @@ loadInbox();
 
 let lobbySocket = null;
 if (typeof io !== 'undefined') {
-  lobbySocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  lobbySocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
   window.lobbySocket = lobbySocket; // expose globally for inline scripts
   lobbySocket.on('connect', () => lobbySocket.emit('lobby:join'));
 
@@ -416,7 +416,7 @@ async function refreshChips() {
     const profile = await apiFetch('/api/profile');
     const u = getUser();
     u.chips = profile.chips;
-    localStorage.setItem('rp_user', JSON.stringify(u));
+    sessionStorage.setItem('rp_user', JSON.stringify(u));
     document.getElementById('header-chips').textContent = u.isAdmin ? '♛ Admin' : fmtChips(profile.chips);
   } catch {}
 }

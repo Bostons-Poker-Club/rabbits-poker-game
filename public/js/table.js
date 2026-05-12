@@ -132,14 +132,14 @@ function connect() {
   socket.on('you:host_granted', ({ message }) => {
     toast('🎰 ' + message);
     const u = getUser();
-    if (u) { u.isHost = true; localStorage.setItem('rp_user', JSON.stringify(u)); }
+    if (u) { u.isHost = true; sessionStorage.setItem('rp_user', JSON.stringify(u)); }
     renderHostControls();
   });
 
   socket.on('you:host_revoked', ({ message }) => {
     toast(message);
     const u = getUser();
-    if (u) { u.isHost = false; localStorage.setItem('rp_user', JSON.stringify(u)); }
+    if (u) { u.isHost = false; sessionStorage.setItem('rp_user', JSON.stringify(u)); }
     renderHostControls();
   });
 

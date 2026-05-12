@@ -17,7 +17,7 @@ loadAll();
 
 let adminSocket = null;
 if (typeof io !== 'undefined') {
-  adminSocket = io({ auth: { token: localStorage.getItem('rp_token') } });
+  adminSocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
   adminSocket.on('connect', () => adminSocket.emit('lobby:join'));
 
   adminSocket.on('admin:new_player', ({ username }) => {
@@ -1162,7 +1162,7 @@ async function refillAdminChips() {
     toast(`Chips refilled to ${fmt(r.chips)}`);
     // Update local display
     const u = getUser();
-    if (u) { u.chips = r.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
+    if (u) { u.chips = r.chips; sessionStorage.setItem('rp_user', JSON.stringify(u)); }
   } catch (e) { toast(e.message, 'error'); }
 }
 
