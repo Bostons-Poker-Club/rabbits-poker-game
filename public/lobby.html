@@ -67,12 +67,49 @@
     <div class="empty-state">Loading tournaments…</div>
   </div>
 
+  <!-- Buy-In Request -->
+  <div class="section-header" style="margin-top:32px">
+    <h2>💰 Need Chips?</h2>
+    <button class="btn btn-gold btn-sm" onclick="openBuyInModal()">Request Buy-In</button>
+  </div>
+  <p style="color:var(--text-dim);font-size:.85rem;margin:0 0 16px">Submit a buy-in request — admin will add chips after receiving payment.</p>
+
   <!-- Rail / Waiting Room -->
   <div class="section-header" style="margin-top:32px">
     <h2>🎟 Rail / Waiting Room</h2>
     <button class="btn btn-sm btn-outline" onclick="joinRail()">Join Rail</button>
   </div>
   <p style="color:var(--text-dim);font-size:.85rem;margin:0 0 16px">No seats available? Join the rail and admin will seat you when a spot opens.</p>
+</div>
+
+<!-- Buy-In Request Modal -->
+<div class="modal-overlay hidden" id="buyin-request-modal">
+  <div class="modal">
+    <h2>💰 Request Buy-In</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:14px">Admin will receive an email + text and add your chips after payment is confirmed.</p>
+    <div class="form-group">
+      <label>Amount (chips) <span style="color:var(--gold)">*</span></label>
+      <input type="number" id="bi-amount" value="200" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Payment Method</label>
+      <select id="bi-method" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+        <option value="Cash">Cash</option>
+        <option value="Venmo">Venmo</option>
+        <option value="Zelle">Zelle</option>
+        <option value="PayPal">PayPal</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label>Notes (optional)</label>
+      <input type="text" id="bi-notes" placeholder="e.g. Paying cash at table" maxlength="200" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('buyin-request-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="submitBuyInRequest()">Send Request</button>
+    </div>
+  </div>
 </div>
 
 <!-- Request Table Modal (host only) -->

@@ -12,6 +12,7 @@
   <span class="logo">🐇 RabbsRoom Admin</span>
   <button class="admin-tab-btn active" onclick="showPanel('overview')">Overview</button>
   <button class="admin-tab-btn" onclick="showPanel('alerts')">🔔 Alerts <span id="alert-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
+  <button class="admin-tab-btn" onclick="showPanel('buyins')">💰 Buy-Ins <span id="buyin-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
   <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
   <button class="admin-tab-btn" onclick="showPanel('hosts')">🎰 Hosts <span id="hosts-badge" style="display:none;background:var(--gold);color:#111;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
@@ -20,6 +21,9 @@
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
   <button class="admin-tab-btn" onclick="showPanel('messages')">📨 Messages</button>
   <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
+  <button id="mute-btn" class="admin-tab-btn" onclick="toggleMute()" title="Toggle notification sounds" style="font-size:1.1rem;position:relative">
+    🔊<span id="muted-badge" style="display:none;position:absolute;top:-4px;right:-4px;background:var(--red);color:#fff;font-size:.55rem;font-weight:700;min-width:14px;height:14px;border-radius:7px;display:none;align-items:center;justify-content:center;padding:0 2px">0</span>
+  </button>
   <button class="admin-tab-btn" onclick="logout()">Logout</button>
 </nav>
 
@@ -67,6 +71,17 @@
         <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Players</th><th>Session Rake</th><th>Actions</th></tr></thead>
         <tbody id="active-tables-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Pending Buy-Ins -->
+  <div class="admin-panel" id="panel-buyins">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <h2 style="color:var(--gold)">💰 Pending Buy-In Requests</h2>
+      <button class="btn btn-sm btn-outline" onclick="loadBuyInRequests()">↻ Refresh</button>
+    </div>
+    <div id="buyin-list">
+      <div style="text-align:center;padding:24px;color:var(--text-dim)">No pending buy-in requests</div>
     </div>
   </div>
 

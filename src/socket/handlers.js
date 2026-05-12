@@ -1509,4 +1509,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots, getAdminSockets };

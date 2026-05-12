@@ -36,6 +36,7 @@ if (typeof io !== 'undefined') {
   });
 
   adminSocket.on('admin:notification', (notif) => {
+    playNotificationSound();
     prependAlertRow(notif);
     bumpAlertBadge();
   });
@@ -83,10 +84,23 @@ if (typeof io !== 'undefined') {
   adminSocket.on('jackpot:expired', (data) => {
     handleJackpotExpired(data);
   });
+
+  // Real-time buy-in request notification
+  adminSocket.on('admin:buyin_request', (req) => {
+    playNotificationSound();
+    prependBuyInRow(req);
+    const badge = document.getElementById('buyin-badge');
+    if (badge) {
+      badge.textContent = parseInt(badge.textContent || 0) + 1;
+      badge.style.display = '';
+    }
+    toast(`💰 Buy-In Request: ${req.username} wants $${fmt(req.amount)} chips (${req.paymentMethod})`, 'success');
+  });
+
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests()]);
 }
 
 async function loadPendingPlayers() {
@@ -1179,6 +1193,132 @@ function openModal(id) { document.getElementById(id).classList.remove('hidden');
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 function fmt(n) { return Number(n || 0).toLocaleString(); }
 function esc(s) { return String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
+// ─── Sound Notifications ──────────────────────────────────────────────────
+
+const MUTE_KEY = 'rp_admin_muted';
+let adminMuted = localStorage.getItem(MUTE_KEY) === 'true';
+let mutedCount = 0;
+
+function toggleMute() {
+  adminMuted = !adminMuted;
+  localStorage.setItem(MUTE_KEY, adminMuted);
+  const btn = document.getElementById('mute-btn');
+  if (btn) btn.textContent = adminMuted ? '🔇' : '🔊';
+  if (!adminMuted) {
+    mutedCount = 0;
+    const badge = document.getElementById('muted-badge');
+    if (badge) badge.style.display = 'none';
+  }
+  toast(adminMuted ? 'Notifications muted' : 'Notifications unmuted');
+}
+
+function playNotificationSound() {
+  if (adminMuted) {
+    mutedCount++;
+    const badge = document.getElementById('muted-badge');
+    if (badge) { badge.textContent = mutedCount > 9 ? '9+' : mutedCount; badge.style.display = 'inline-flex'; }
+    return;
+  }
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    // Poker chip chime: two quick tones
+    [[880, 0, 0.12], [1100, 0.12, 0.12]].forEach(([freq, start, dur]) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, ctx.currentTime + start);
+      gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + start + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+      osc.start(ctx.currentTime + start);
+      osc.stop(ctx.currentTime + start + dur + 0.05);
+    });
+  } catch {}
+}
+
+// Apply initial mute state to button
+(function() {
+  const btn = document.getElementById('mute-btn');
+  if (btn && adminMuted) btn.textContent = '🔇';
+})();
+
+// ─── Buy-In Requests ──────────────────────────────────────────────────────
+
+async function loadBuyInRequests() {
+  try {
+    const requests = await apiFetch('/api/admin/buyin-requests');
+    renderBuyInRequests(requests);
+    const badge = document.getElementById('buyin-badge');
+    if (badge) {
+      if (requests.length > 0) { badge.textContent = requests.length; badge.style.display = ''; }
+      else badge.style.display = 'none';
+    }
+  } catch {}
+}
+
+function renderBuyInRequests(requests) {
+  const el = document.getElementById('buyin-list');
+  if (!el) return;
+  if (!requests.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim)">No pending buy-in requests</div>';
+    return;
+  }
+  el.innerHTML = requests.map(r => `
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:700;font-size:1rem;color:var(--text)">${esc(r.username)}</div>
+        <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
+        <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
+        <div style="color:var(--text-dim);font-size:.75rem">${new Date(r.requestedAt).toLocaleTimeString()}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-gold btn-sm" onclick="approveBuyIn(${r.id}, '${esc(r.username)}', ${r.amount})">✓ Add $${fmt(r.amount)} Chips</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="denyBuyIn(${r.id})">✗ Deny</button>
+      </div>
+    </div>`).join('');
+}
+
+function prependBuyInRow(r) {
+  const el = document.getElementById('buyin-list');
+  if (!el) return;
+  const empty = el.querySelector('[style*="No pending"]');
+  if (empty) empty.remove();
+  const div = document.createElement('div');
+  div.id = `bi-${r.id}`;
+  div.style.cssText = 'background:rgba(0,200,80,.08);border:1px solid rgba(0,200,80,.3);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px';
+  div.innerHTML = `
+    <div>
+      <div style="font-weight:700;font-size:1rem;color:var(--chip-green)">🆕 ${esc(r.username)}</div>
+      <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
+      <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-gold btn-sm" onclick="approveBuyIn(${r.id}, '${esc(r.username)}', ${r.amount})">✓ Add $${fmt(r.amount)} Chips</button>
+      <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="denyBuyIn(${r.id})">✗ Deny</button>
+    </div>`;
+  el.prepend(div);
+}
+
+async function approveBuyIn(id, username, amount) {
+  if (!confirm(`Add ${fmt(amount)} chips to ${username}?`)) return;
+  try {
+    const r = await apiFetch(`/api/admin/buyin-requests/${id}/approve`, { method: 'POST' });
+    toast(`✅ ${username} received $${fmt(amount)} chips (new total: $${fmt(r.chips)})`);
+    document.getElementById(`bi-${id}`)?.remove();
+    loadBuyInRequests();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function denyBuyIn(id) {
+  try {
+    await apiFetch(`/api/admin/buyin-requests/${id}/deny`, { method: 'POST' });
+    document.getElementById(`bi-${id}`)?.remove();
+    toast('Buy-in request denied');
+    loadBuyInRequests();
+  } catch (e) { toast(e.message, 'error'); }
+}
 
 const toastContainer = document.getElementById('toast-container');
 function toast(msg, type = '') {

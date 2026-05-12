@@ -12,6 +12,10 @@ const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 // In-memory high hand state
 let highHandState = { description: '', holder: '', setAt: null };
 
+// In-memory buy-in requests: { id, userId, username, amount, paymentMethod, notes, requestedAt, status }
+const buyInRequests = [];
+let buyInSeq = 0;
+
 // In-memory host set — admin grants host status; resets on server restart
 const hostSet = new Set();
 
@@ -829,6 +833,118 @@ router.get('/messages', authMiddleware, (req, res) => {
     const inbox = broadcastMessages.filter(m => m.targetAll || m.targetUserId === userId);
     res.json(inbox.slice(0, 100));
   } catch { res.json([]); }
+});
+
+// ─── Buy-In Requests ──────────────────────────────────────────────────────────
+
+// Player submits a buy-in request
+router.post('/buyin-request', authMiddleware, async (req, res) => {
+  const { amount, paymentMethod, notes } = req.body;
+  if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount required' });
+
+  const req_id = ++buyInSeq;
+  const request = {
+    id: req_id,
+    userId: req.user.id,
+    username: req.user.username,
+    amount: parseInt(amount),
+    paymentMethod: String(paymentMethod || 'Cash').slice(0, 50),
+    notes: String(notes || '').slice(0, 200),
+    requestedAt: Date.now(),
+    status: 'pending'
+  };
+  buyInRequests.unshift(request);
+
+  // Notify all admin sockets in real-time
+  const io = req.app.get('io');
+  if (io) {
+    const { getAdminSockets } = require('../socket/handlers');
+    if (getAdminSockets) {
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:buyin_request', request);
+      }
+    }
+    // Also push as admin notification
+    io.emit('admin:notification_buyin', request);
+  }
+
+  // Send email + SMS to admin
+  try {
+    const { getTransporter } = require('../mail');
+    const t = getTransporter ? getTransporter() : null;
+    if (t) {
+      const subject = `💰 Buy-In Request — ${req.user.username} ($${amount})`;
+      const html = `
+        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+          <h2 style="color:#1a7a3f">💰 Buy-In Request — RabbsRoom</h2>
+          <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
+            <tr><td style="padding:8px 14px;color:#555;width:140px">Player</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
+            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem">$${amount} chips</td></tr>
+            <tr><td style="padding:8px 14px;color:#555">Payment</td><td style="padding:8px 14px">${request.paymentMethod}</td></tr>
+            ${notes ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Notes</td><td style="padding:8px 14px">${notes}</td></tr>` : ''}
+          </table>
+          <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>
+        </div>`;
+      const text = `Buy-In Request: ${req.user.username} wants $${amount} chips via ${request.paymentMethod}${notes ? '. Notes: ' + notes : ''}. Approve at rabbsroom.com/admin.html`;
+
+      // Email to admin
+      await t.sendMail({ from: `"RabbsRoom" <${process.env.SMTP_USER}>`, to: 'bostonspokerclub.amitureflops@gmail.com', subject, html }).catch(() => {});
+      // SMS via Verizon email gateway
+      await t.sendMail({ from: `"RabbsRoom" <${process.env.SMTP_USER}>`, to: '5085219176@vtext.com', subject: `Buy-In: ${req.user.username} $${amount}`, text }).catch(() => {});
+      console.log(`[buyin] Notification sent for ${req.user.username} $${amount}`);
+    }
+  } catch (e) {
+    console.warn('[buyin] Notification error:', e.message);
+  }
+
+  res.json({ ok: true, requestId: req_id });
+});
+
+// Admin: list pending buy-in requests
+router.get('/admin/buyin-requests', authMiddleware, adminMiddleware, (req, res) => {
+  res.json(buyInRequests.filter(r => r.status === 'pending'));
+});
+
+// Admin: approve buy-in request (add chips to player)
+router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const request = buyInRequests.find(r => r.id === id);
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  if (request.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
+
+  // Add chips to player
+  const { data: user, error: fetchErr } = await supabaseAdmin.from('users').select('chips').eq('id', request.userId).single();
+  if (fetchErr || !user) return res.status(404).json({ error: 'Player not found' });
+  const newChips = (user.chips || 0) + request.amount;
+  const { error: updateErr } = await supabaseAdmin.from('users').update({ chips: newChips }).eq('id', request.userId);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  request.status = 'approved';
+  request.approvedAt = Date.now();
+  request.approvedBy = req.user.username;
+
+  // Notify player via socket
+  const io = req.app.get('io');
+  if (io) {
+    for (const [, s] of io.sockets.sockets) {
+      if (s.user && s.user.id === request.userId) {
+        s.emit('chips_received', { amount: request.amount, from: 'Admin', newTotal: newChips });
+      }
+    }
+  }
+
+  console.log(`[buyin] Approved: ${request.username} +$${request.amount} chips (now ${newChips})`);
+  res.json({ ok: true, chips: newChips, request });
+});
+
+// Admin: deny buy-in request
+router.post('/admin/buyin-requests/:id/deny', authMiddleware, adminMiddleware, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const request = buyInRequests.find(r => r.id === id);
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  request.status = 'denied';
+  request.deniedAt = Date.now();
+  res.json({ ok: true });
 });
 
 module.exports = router;

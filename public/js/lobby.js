@@ -423,6 +423,28 @@ async function refreshChips() {
 
 function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// ─── Buy-In Request ────────────────────────────────────────────────────────
+
+function openBuyInModal() {
+  openModal('buyin-request-modal');
+}
+
+async function submitBuyInRequest() {
+  const amount = parseInt(document.getElementById('bi-amount').value);
+  const paymentMethod = document.getElementById('bi-method').value;
+  const notes = document.getElementById('bi-notes').value.trim();
+  if (!amount || amount <= 0) return showToast('Enter a valid amount', 'error');
+  try {
+    await apiFetch('/api/buyin-request', { method: 'POST', body: { amount, paymentMethod, notes } });
+    closeModal('buyin-request-modal');
+    showToast('✅ Buy-in request sent! Admin will add your chips shortly.');
+    document.getElementById('bi-amount').value = '200';
+    document.getElementById('bi-notes').value = '';
+  } catch (e) {
+    showToast(e.message || 'Failed to send request', 'error');
+  }
+}
 function fmtChips(n) { return Number(n).toLocaleString(); }
 function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 
