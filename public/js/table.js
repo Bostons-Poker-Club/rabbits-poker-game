@@ -49,6 +49,7 @@ function connect() {
   socket = io({ auth: { token: getToken() } });
 
   socket.on('connect', () => {
+    console.log('[socket] connected, socketId:', socket.id, '— emitting join_table for tableId:', tableId);
     socket.emit('join_table', { tableId, buyInChips: buyIn });
     checkMicPermission();
     renderHostControls();
@@ -64,6 +65,7 @@ function connect() {
   });
 
   socket.on('game_state', (state) => {
+    console.log('[game_state] hand:', state.handActive, 'street:', state.currentStreet, 'players:', state.players?.length, 'currentSeat:', state.currentPlayerSeat);
     // Detect new bets for chip animation before re-render
     if (state.players) {
       for (const p of state.players) {
@@ -77,6 +79,11 @@ function connect() {
     gameState = state;
     renderTable(state);
     updateHeader(state);
+    // Keep header chip count in sync with table stack
+    const me = state.players?.find(p => p.userId === user.id);
+    if (me != null) {
+      document.getElementById('hdr-chips').textContent = fmt(me.chips);
+    }
   });
 
   socket.on('my_state', (state) => {
@@ -86,6 +93,7 @@ function connect() {
   });
 
   socket.on('hand_started', ({ handNumber, dealerSeat }) => {
+    console.log('[hand_started] hand:', handNumber, 'dealer seat:', dealerSeat);
     chatMsg('system', `Hand #${handNumber} started`);
     hideHandResult();
   });
@@ -94,8 +102,9 @@ function connect() {
     renderMyHoleCards(holeCards);
   });
 
-  socket.on('action_required', ({ seatNumber, userId, callAmount, pot }) => {
-    const isMe = userId === user.id;
+  socket.on('action_required', ({ seatNumber, userId: actingUserId, callAmount, pot }) => {
+    console.log('[action_required] seat:', seatNumber, 'userId:', actingUserId, 'callAmt:', callAmount);
+    const isMe = actingUserId === user.id;
     if (isMe) toast('Your turn!');
   });
 
@@ -143,6 +152,7 @@ function connect() {
   });
 
   socket.on('hand_ended', (result) => {
+    console.log('[hand_ended] winners:', result.winners?.map(w => w.username), 'folded:', result.folded, 'rake:', result.rakeCollected);
     stopShotClock();
     clearSeatTimer();
     prevBets = {};
@@ -512,7 +522,7 @@ function renderSeats(state) {
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
-            <div class="seat-chips">🪙 ${fmt(player.chips)}</div>
+            <div class="seat-chips" style="font-weight:700;color:var(--chip-green)">${player.chips > 0 ? `🪙 ${fmt(player.chips)}` : '<span style="color:var(--red)">🪙 0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}
             ${player.isSittingOut ? '<div style="color:#888;font-size:.65rem">away</div>' : ''}
@@ -751,7 +761,7 @@ function cardHtml(card, appear = false, large = false) {
   </div>`;
 }
 
-function fmt(n) { return Number(n).toLocaleString(); }
+function fmt(n) { const v = Number(n); return (isNaN(v) || n == null) ? '0' : v.toLocaleString(); }
 function esc(s) { return String(s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
 
 const toastContainer = document.getElementById('toast-container');

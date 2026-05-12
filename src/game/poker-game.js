@@ -115,8 +115,10 @@ class PokerGame {
   }
 
   getHandPlayers() {
-    // Players who are still in the hand (not folded, not sitting out)
-    return Array.from(this.players.values()).filter(p => !p.hasFolded && !p.isSittingOut && p.isConnected);
+    // Players still in the hand. Disconnected players are NOT excluded —
+    // they stay in until the shot clock auto-folds them, preventing a
+    // false "everyone folded" when someone briefly loses connection.
+    return Array.from(this.players.values()).filter(p => !p.hasFolded && !p.isSittingOut);
   }
 
   getSortedSeats() {

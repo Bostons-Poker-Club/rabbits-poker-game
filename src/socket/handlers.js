@@ -11,7 +11,7 @@ const appEvents = require('../events');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JACKPOT_INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
 const JACKPOT_CONTRIB = parseFloat(process.env.JACKPOT_CONTRIBUTION_PERCENT) || 1;
-const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 20;
+const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 60;
 
 // Tiered rake: keyed by big blind thresholds
 function getRakeConfig(bigBlind) {
@@ -214,6 +214,36 @@ function setupSocketHandlers(io) {
 
     socket.on('join_table', async ({ tableId, seatNumber, buyInChips }) => {
       try {
+        // ── Reconnect shortcut: player already seated in this game ─────────
+        // Must happen BEFORE any chip deduction or player removal.
+        const existingGame = activeGames.get(tableId);
+        if (existingGame) {
+          const existingPlayer = existingGame.getPlayer(userId);
+          if (existingPlayer) {
+            existingPlayer.isConnected = true;
+            socket.join(tableId);
+            socket.currentTableId = tableId;
+            socket.emit('joined_table', {
+              tableId,
+              seatNumber: existingPlayer.seatNumber,
+              chips: existingPlayer.chips
+            });
+            broadcastGameState(io, tableId, existingGame);
+            broadcastPuckState(io, tableId);
+            // Re-send action prompt if it was their turn
+            if (existingGame.handActive && existingGame.currentPlayerSeat === existingPlayer.seatNumber) {
+              socket.emit('action_required', {
+                seatNumber: existingPlayer.seatNumber,
+                userId,
+                callAmount: Math.max(0, existingGame.currentBet - existingPlayer.currentBet),
+                pot: existingGame.pot
+              });
+            }
+            return;
+          }
+        }
+
+        // ── Fresh join ────────────────────────────────────────────────────
         const { data: dbTable } = await supabaseAdmin
           .from('tables')
           .select('*')
@@ -221,7 +251,6 @@ function setupSocketHandlers(io) {
           .single();
 
         // Fall back to config from existing in-memory game if Supabase unavailable
-        const existingGame = activeGames.get(tableId);
         const table = dbTable || (existingGame ? {
           id: tableId,
           game_type: existingGame.gameType,
@@ -296,6 +325,10 @@ function setupSocketHandlers(io) {
           game.onJackpotCheck = (rank, uid) => checkJackpot(io, rank, uid);
           game.onShotClockExpired = (uid) => {
             try {
+              // Guard: only auto-fold if it is still this player's turn
+              const currentPlayer = game.getPlayerBySeat(game.currentPlayerSeat);
+              if (!currentPlayer || currentPlayer.userId !== uid) return;
+              if (!game.handActive) return;
               const result = game.processAction(uid, 'fold');
               broadcastGameState(io, tableId, game);
               handleActionResult(io, tableId, game, result);
@@ -304,9 +337,6 @@ function setupSocketHandlers(io) {
 
           activeGames.set(tableId, game);
         }
-
-        // Remove player if already seated (reconnect)
-        if (game.getPlayer(userId)) game.removePlayer(userId);
 
         const finalSeat = seatNumber || findOpenSeat(game, table.max_players);
         if (!finalSeat) return socket.emit('error', { message: 'No open seats' });
