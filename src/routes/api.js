@@ -809,6 +809,26 @@ router.get('/test-broadcast', authMiddleware, adminMiddleware, (req, res) => {
   res.json({ ok: true, socketCount: count, msg });
 });
 
+router.get('/test-email', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { getTransporter } = require('../mail');
+    const t = getTransporter();
+    if (!t) return res.status(500).json({ ok: false, error: 'SMTP not configured — check SMTP_USER and SMTP_PASS env vars' });
+    await t.sendMail({
+      from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
+      to: 'bostonspokerclub.amitureflops@gmail.com',
+      subject: '✅ RabbsRoom Email Test',
+      text: `Test email sent at ${new Date().toISOString()} by ${req.user.username}. Email system is working!`,
+      html: `<div style="font-family:sans-serif;max-width:400px;margin:0 auto"><h2 style="color:#1a7a3f">✅ Email System Working</h2><p>Test sent at <strong>${new Date().toISOString()}</strong> by <strong>${req.user.username}</strong>.</p><p style="color:#666">RabbsRoom email delivery is confirmed.</p></div>`
+    });
+    console.log(`[test-email] Sent successfully by ${req.user.username}`);
+    res.json({ ok: true, sentTo: 'bostonspokerclub.amitureflops@gmail.com', smtpUser: process.env.SMTP_USER });
+  } catch (e) {
+    console.error('[test-email] Failed:', e.message);
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('hands')
