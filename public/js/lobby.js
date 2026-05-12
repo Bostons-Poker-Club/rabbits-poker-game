@@ -18,8 +18,13 @@ function applyRoleUI(isAdmin, isHost) {
     document.getElementById('admin-link').style.display = '';
     document.getElementById('create-table-btn').style.display = '';
     document.getElementById('create-tournament-btn').style.display = '';
+    const banner = document.getElementById('host-request-banner');
+    if (banner) banner.style.display = 'none';
   } else if (isHost) {
-    document.getElementById('create-table-btn').style.display = '';
+    const btn = document.getElementById('create-table-btn');
+    if (btn) { btn.style.display = ''; btn.textContent = '📋 Request Table'; }
+    const banner = document.getElementById('host-request-banner');
+    if (banner) banner.style.display = '';
   }
 }
 
@@ -80,14 +85,19 @@ if (typeof io !== 'undefined') {
 
   // Table request responses
   lobbySocket.on('table:request_submitted', () => {
-    showToast('Table request submitted — waiting for admin approval');
+    showToast('✅ Request sent to admin — you\'ll be notified when it\'s approved');
   });
-  lobbySocket.on('table:request_approved', ({ tableId, message }) => {
-    showToast(`✅ ${message}`, 'success');
+  lobbySocket.on('table:request_approved', ({ tableId, tableName, message }) => {
+    showTableApprovedModal(tableName, message, tableId);
     loadTables();
   });
-  lobbySocket.on('table:request_denied', ({ message }) => {
-    showToast(message, 'error');
+  lobbySocket.on('table:request_denied', ({ tableName, message }) => {
+    showTableDeniedModal(tableName, message);
+  });
+
+  // A new table was opened (broadcast to all players)
+  lobbySocket.on('tables:updated', () => {
+    loadTables();
   });
 
   // Rail
@@ -296,13 +306,15 @@ async function createTournament() {
 }
 
 function submitTableRequest() {
+  const tableName = document.getElementById('rt-name').value.trim();
+  if (!tableName) { document.getElementById('rt-name').focus(); showToast('Please enter a table name', 'error'); return; }
   const sb = parseInt(document.getElementById('rt-sb').value);
   const bb = parseInt(document.getElementById('rt-bb').value);
   const gameType = document.getElementById('rt-type').value;
   const maxPlayers = parseInt(document.getElementById('rt-max').value);
   const rake = parseFloat(document.getElementById('rt-rake').value);
   if (!lobbySocket) return showToast('Not connected', 'error');
-  lobbySocket.emit('table:request', { gameType, sb, bb, maxPlayers, rake });
+  lobbySocket.emit('table:request', { tableName, gameType, sb, bb, maxPlayers, rake });
   closeModal('request-table-modal');
 }
 
@@ -400,6 +412,45 @@ function showAdminMessage(from, message, pending) {
       <p style="color:var(--text);line-height:1.6;font-size:.95rem;margin-bottom:20px">${esc(message)}</p>
       <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Dismiss</button>
     </div>`;
+  document.body.appendChild(div);
+}
+
+function showTableApprovedModal(tableName, message, tableId) {
+  const existing = document.getElementById('table-approved-modal');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'table-approved-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9500;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#061a0e;border:2px solid var(--chip-green);border-radius:20px;padding:36px 40px;max-width:460px;width:90%;text-align:center;box-shadow:0 0 60px rgba(0,200,80,.25)">
+      <div style="font-size:3rem;margin-bottom:14px">🎉</div>
+      <h2 style="color:var(--chip-green);margin:0 0 10px;font-size:1.4rem">Table Request Approved!</h2>
+      <p style="color:var(--text);line-height:1.6;font-size:1rem;margin-bottom:8px">${esc(message)}</p>
+      <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:24px">Your table is now live in the lobby — players can join immediately.</p>
+      <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+        ${tableId ? `<button class="btn btn-gold" onclick="openJoinModal('${tableId}',10);document.getElementById('table-approved-modal').remove()">Go to Table →</button>` : ''}
+        <button class="btn btn-outline" onclick="document.getElementById('table-approved-modal').remove()">Back to Lobby</button>
+      </div>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
+}
+
+function showTableDeniedModal(tableName, message) {
+  const existing = document.getElementById('table-denied-modal');
+  if (existing) existing.remove();
+  const div = document.createElement('div');
+  div.id = 'table-denied-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9500;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#1a0606;border:2px solid var(--red);border-radius:20px;padding:36px 40px;max-width:460px;width:90%;text-align:center;box-shadow:0 0 60px rgba(200,0,0,.2)">
+      <div style="font-size:3rem;margin-bottom:14px">❌</div>
+      <h2 style="color:var(--red);margin:0 0 10px;font-size:1.4rem">Table Request Denied</h2>
+      ${tableName ? `<p style="color:var(--gold);font-weight:700;margin-bottom:8px">"${esc(tableName)}"</p>` : ''}
+      <p style="color:var(--text);line-height:1.6;font-size:.95rem;margin-bottom:24px">${esc(message)}</p>
+      <button class="btn btn-outline" onclick="document.getElementById('table-denied-modal').remove()">Dismiss</button>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
   document.body.appendChild(div);
 }
 

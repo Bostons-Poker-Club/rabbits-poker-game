@@ -371,7 +371,8 @@ async function loadHosts() {
     populatePromoteSelector();
     const badge = document.getElementById('hosts-badge');
     if (badge) {
-      if (allHosts.length) { badge.textContent = allHosts.length; badge.style.display = ''; }
+      const pendingCount = allHosts.reduce((sum, h) => sum + (h.tableRequests || []).filter(r => r.status === 'pending').length, 0);
+      if (pendingCount) { badge.textContent = pendingCount; badge.style.display = ''; }
       else badge.style.display = 'none';
     }
     const cnt = document.getElementById('hosts-count');

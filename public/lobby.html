@@ -34,6 +34,18 @@
 
 <!-- Body -->
 <div class="lobby-body">
+
+  <!-- Host Request Banner (visible only to hosts, hidden from admins) -->
+  <div id="host-request-banner" style="display:none;background:linear-gradient(135deg,rgba(0,160,60,.12),rgba(0,100,40,.08));border:1px solid rgba(0,200,80,.3);border-radius:var(--radius);padding:18px 22px;margin-bottom:24px;display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:1rem;font-weight:700;color:var(--chip-green);margin-bottom:4px">🎰 Host Controls</div>
+        <div style="font-size:.85rem;color:var(--text-dim)">Request a new table — admin reviews and opens it instantly.</div>
+      </div>
+      <button class="btn btn-gold" onclick="openCreateTable()" style="white-space:nowrap;padding:10px 20px">📋 Request a Table</button>
+    </div>
+  </div>
+
   <!-- Cash Game Tables -->
   <div class="section-header">
     <h2>🃏 Cash Games</h2>
@@ -63,17 +75,22 @@
 <!-- Request Table Modal (host only) -->
 <div class="modal-overlay hidden" id="request-table-modal">
   <div class="modal">
-    <h2>Request Table</h2>
-    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:14px">Your request will be sent to admin for approval.</p>
+    <h2>📋 Request a Table</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:14px">Admin will review and open your table immediately upon approval.</p>
+    <div class="form-group">
+      <label>Table Name <span style="color:var(--gold)">*</span></label>
+      <input type="text" id="rt-name" placeholder="e.g. Rabbit's Den, High Stakes" maxlength="50"
+        style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    </div>
     <div class="form-group">
       <label>Game Type</label>
       <select id="rt-type" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         <option value="holdem">Texas Hold'em</option>
-        <option value="plo">PLO</option>
+        <option value="plo">PLO (Pot Limit Omaha)</option>
       </select>
     </div>
     <div class="form-group">
-      <label>Blinds (SB / BB)</label>
+      <label>Blinds (Small / Big)</label>
       <div style="display:flex;gap:8px">
         <input type="number" id="rt-sb" value="5" min="1" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
         <input type="number" id="rt-bb" value="10" min="2" style="flex:1;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
@@ -82,7 +99,7 @@
     <div class="form-group">
       <label>Max Players</label>
       <select id="rt-max" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
-        <option value="2">2</option><option value="6">6</option><option value="9" selected>9</option>
+        <option value="2">2 (Heads Up)</option><option value="6">6</option><option value="9" selected>9</option>
       </select>
     </div>
     <div class="form-group">
@@ -91,7 +108,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('request-table-modal')">Cancel</button>
-      <button class="btn btn-gold" onclick="submitTableRequest()">Send Request</button>
+      <button class="btn btn-gold" onclick="submitTableRequest()">Send Request to Admin</button>
     </div>
   </div>
 </div>

@@ -3,6 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
+const { sendTableRequestEmail } = require('../mail');
 const { supabaseAdmin } = require('../db/supabase');
 
 const appEvents = require('../events');
@@ -662,12 +663,14 @@ function setupSocketHandlers(io) {
 
     // ─── Host Table Requests ──────────────────────────────────────────────
 
-    socket.on('table:request', ({ gameType, sb, bb, maxPlayers, rake }) => {
+    socket.on('table:request', ({ tableName, gameType, sb, bb, maxPlayers, rake }) => {
       if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host access required' });
+      const displayName = (tableName || '').trim() || `${username}'s Table`;
       const req = {
         id: ++tableRequestSeq,
         hostId: userId,
         hostName: username,
+        tableName: displayName,
         gameType: gameType || 'holdem',
         sb: sb || 5,
         bb: bb || 10,
@@ -680,16 +683,28 @@ function setupSocketHandlers(io) {
       if (tableRequests.length > 50) tableRequests.pop();
       socket.emit('table:request_submitted', { requestId: req.id });
 
+      const gameLabel = req.gameType === 'plo' ? 'PLO' : "Hold'em";
       pushAdminNotif(io, {
         type: 'table_request',
         title: 'Table Request',
-        body: `${username} requests a $${sb}/$${bb} ${gameType === 'plo' ? 'PLO' : "Hold'em"} table`,
-        data: { requestId: req.id, hostId: userId, hostName: username }
+        body: `${username} requests "${displayName}" — $${req.sb}/$${req.bb} ${gameLabel}`,
+        data: { requestId: req.id, hostId: userId, hostName: username, tableName: displayName }
       });
 
       for (const sid of getAdminSockets(io)) {
         io.to(sid).emit('admin:table_request', req);
       }
+
+      // Email notification (non-blocking)
+      sendTableRequestEmail({
+        hostName: username,
+        tableName: displayName,
+        gameType: req.gameType,
+        sb: req.sb,
+        bb: req.bb,
+        maxPlayers: req.maxPlayers,
+        rake: req.rake
+      }).catch(() => {});
     });
 
     socket.on('table:request_action', async ({ requestId, action, reason }) => {
@@ -699,12 +714,14 @@ function setupSocketHandlers(io) {
       req.status = action; // 'approved' or 'denied'
 
       const hostSid = userSockets.get(req.hostId);
+      const gameLabel = req.gameType === 'plo' ? 'PLO' : "Hold'em";
+      const tableName = req.tableName || `${req.hostName}'s Table`;
 
       if (action === 'approved') {
-        // Create the table
+        // Create the table in DB
         try {
           const { data } = await supabaseAdmin.from('tables').insert({
-            name: `${req.hostName}'s Table`,
+            name: tableName,
             game_type: req.gameType,
             stakes_small_blind: req.sb,
             stakes_big_blind: req.bb,
@@ -719,12 +736,19 @@ function setupSocketHandlers(io) {
         if (hostSid) io.to(hostSid).emit('table:request_approved', {
           requestId,
           tableId: req.tableId,
-          message: `Your table request ($${req.sb}/$${req.bb} ${req.gameType === 'plo' ? 'PLO' : "Hold'em"}) was approved! The table is now open.`
+          tableName,
+          message: `Your table "${tableName}" ($${req.sb}/$${req.bb} ${gameLabel}) was approved! It is now live in the lobby.`
         });
+
+        // Notify all connected players that a new table opened
+        io.emit('tables:updated');
       } else {
         if (hostSid) io.to(hostSid).emit('table:request_denied', {
           requestId,
-          message: reason ? `Your table request was denied: ${reason}` : 'Your table request was denied by admin.'
+          tableName,
+          message: reason
+            ? `Your table request for "${tableName}" was denied: ${reason}`
+            : `Your table request for "${tableName}" was denied by admin.`
         });
       }
 
