@@ -113,8 +113,8 @@ if (typeof io !== 'undefined') {
   });
 
   // Admin broadcast messages
-  lobbySocket.on('broadcast:message', (msg) => {
-    // Add to local inbox
+  lobbySocket.on('broadcast_message', (msg) => {
+    console.log('[lobby] broadcast_message received:', msg);
     if (!inboxMessages.find(m => m.id === msg.id)) {
       inboxMessages.unshift(msg);
     }

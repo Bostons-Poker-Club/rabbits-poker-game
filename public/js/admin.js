@@ -57,6 +57,7 @@ if (typeof io !== 'undefined') {
   });
 
   adminSocket.on('admin:message_sent', ({ id, delivered, queued }) => {
+    console.log(`[admin] message_sent — delivered: ${delivered}, queued: ${queued}`);
     const status = document.getElementById('msg-status');
     if (status) {
       const total = (delivered || 0) + (queued || 0);

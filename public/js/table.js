@@ -230,7 +230,8 @@ function connect() {
     setTimeout(() => window.location.href = '/lobby.html', 2000);
   });
 
-  socket.on('broadcast:message', ({ from, message, pending }) => {
+  socket.on('broadcast_message', ({ from, message, pending }) => {
+    console.log('[table] broadcast_message received:', { from, message });
     showAdminMessageToast(from, message, pending);
   });
 

@@ -205,7 +205,7 @@ function setupSocketHandlers(io) {
     const queued = pendingMessages.get(userId);
     if (queued && queued.length) {
       for (const msg of queued) {
-        socket.emit('broadcast:message', { ...msg, pending: true });
+        socket.emit('broadcast_message', { ...msg, pending: true });
       }
       pendingMessages.delete(userId);
     }
@@ -811,43 +811,55 @@ function setupSocketHandlers(io) {
       broadcastMessages.unshift(msg);
       if (broadcastMessages.length > 200) broadcastMessages.pop();
 
+      // Count total connected sockets (all users, all pages)
+      const totalSockets = io.sockets.sockets.size;
+      console.log(`[broadcast] admin "${username}" → ${targetUserId ? 'user ' + targetUserId : 'ALL'} | ${totalSockets} sockets connected`);
+
       let delivered = 0;
       let queued = 0;
-      const onlineCount = userSockets.size;
-
-      console.log(`[broadcast] admin "${username}" sending to ${targetUserId ? 'user ' + targetUserId : 'ALL'} — ${onlineCount} sockets online`);
 
       if (targetUserId) {
-        const targetSid = userSockets.get(targetUserId);
-        if (targetSid) {
-          io.to(targetSid).emit('broadcast:message', msg);
-          console.log(`[broadcast] delivered to ${targetUserId} (sid ${targetSid})`);
-          delivered++;
-        } else {
+        // Targeted message — find any socket belonging to this user
+        let sent = false;
+        for (const [sid, s] of io.sockets.sockets) {
+          if (s.user && s.user.id === targetUserId) {
+            s.emit('broadcast_message', msg);
+            console.log(`[broadcast] targeted → uid=${targetUserId} sid=${sid}`);
+            delivered++;
+            sent = true;
+          }
+        }
+        if (!sent) {
           if (!pendingMessages.has(targetUserId)) pendingMessages.set(targetUserId, []);
           pendingMessages.get(targetUserId).push(msg);
           queued++;
-          console.log(`[broadcast] queued for offline user ${targetUserId}`);
+          console.log(`[broadcast] queued for offline uid=${targetUserId}`);
         }
       } else {
-        // Send to ALL connected sockets except self
-        for (const [uid, sid] of userSockets) {
-          if (uid === userId) continue;
-          io.to(sid).emit('broadcast:message', msg);
-          console.log(`[broadcast] delivered to uid=${uid} sid=${sid}`);
-          delivered++;
+        // Broadcast to ALL sockets except the sending admin's own socket
+        // Use io.emit() which hits every connected socket regardless of room/page
+        const adminSid = socket.id;
+        for (const [sid, s] of io.sockets.sockets) {
+          if (sid === adminSid) continue; // don't echo back to self
+          if (s.user) {
+            s.emit('broadcast_message', msg);
+            console.log(`[broadcast] → uid=${s.user.id} (${s.user.username}) sid=${sid}`);
+            delivered++;
+          }
         }
-        // Queue for ALL users not currently connected — fetch from DB
+        // Queue for offline users and send emails
         try {
           const { data: allUsers } = await supabaseAdmin.from('users').select('id, email, username').eq('is_banned', false);
-          const onlineIds = new Set(userSockets.keys());
+          const onlineIds = new Set();
+          for (const [, s] of io.sockets.sockets) {
+            if (s.user) onlineIds.add(s.user.id);
+          }
           const offlineUsers = (allUsers || []).filter(u => !onlineIds.has(u.id) && u.id !== userId);
           for (const u of offlineUsers) {
             if (!pendingMessages.has(u.id)) pendingMessages.set(u.id, []);
             pendingMessages.get(u.id).push(msg);
             queued++;
           }
-          // Send email to all players who have email addresses
           const emailRecipients = (allUsers || []).filter(u => u.email && u.id !== userId);
           if (emailRecipients.length > 0) {
             sendBroadcastEmail({ from: username, message: msg.message, recipients: emailRecipients }).catch(() => {});
