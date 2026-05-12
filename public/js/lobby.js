@@ -364,6 +364,28 @@ function showToast(msg, type = '') {
   setTimeout(() => t.remove(), 3500);
 }
 
+function showHostPrivileges() {
+  const existing = document.getElementById('host-priv-modal');
+  if (existing) { existing.remove(); return; }
+  const div = document.createElement('div');
+  div.id = 'host-priv-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9000;display:flex;align-items:center;justify-content:center';
+  div.innerHTML = `
+    <div style="background:#0a190f;border:2px solid var(--chip-green);border-radius:16px;padding:28px 32px;max-width:460px;width:90%">
+      <h2 style="color:var(--chip-green);margin:0 0 16px;display:flex;align-items:center;gap:10px"><span>🎰</span> Your Host Privileges</h2>
+      <ul style="color:var(--text);line-height:1.9;margin:0 0 20px;padding-left:20px;font-size:.92rem">
+        <li><strong style="color:var(--gold)">Create Tables</strong> — Request new cash game tables (admin approves)</li>
+        <li><strong style="color:var(--gold)">Add Chips</strong> — Add chips to players at your table mid-session</li>
+        <li><strong style="color:var(--gold)">Drop Money Puck</strong> — Activate the money puck / straddle mechanic</li>
+        <li><strong style="color:var(--gold)">Join Rail</strong> — Join the waiting queue like any player</li>
+      </ul>
+      <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:16px">Tap the <strong style="color:var(--chip-green)">+ Create Table</strong> button to submit a table request. Admin will approve or deny it.</p>
+      <button class="btn btn-green" onclick="document.getElementById('host-priv-modal').remove()">Got it</button>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
+}
+
 function showAdminMessage(from, message, pending) {
   const existing = document.getElementById('admin-msg-modal');
   if (existing) existing.remove();

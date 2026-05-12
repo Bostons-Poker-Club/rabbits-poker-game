@@ -14,6 +14,7 @@
   <button class="admin-tab-btn" onclick="showPanel('alerts')">🔔 Alerts <span id="alert-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
   <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
+  <button class="admin-tab-btn" onclick="showPanel('hosts')">🎰 Hosts <span id="hosts-badge" style="display:none;background:var(--gold);color:#111;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
@@ -170,6 +171,37 @@
         <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
         <tbody id="players-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Hosts -->
+  <div class="admin-panel" id="panel-hosts">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--gold)">🎰 Hosts</h2>
+      <button class="btn btn-sm btn-outline" onclick="loadHosts()">Refresh</button>
+    </div>
+
+    <!-- Pending Table Requests from Hosts -->
+    <div id="hosts-pending-requests" style="margin-bottom:24px;background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.3);border-radius:var(--radius);padding:14px">
+      <h3 style="color:var(--gold);font-size:.9rem;margin:0 0 10px">📋 Pending Table Requests <span id="hosts-pending-count" style="color:var(--text-dim);font-size:.8rem"></span></h3>
+      <div id="hosts-pending-body" style="font-size:.85rem;color:var(--text-dim)">Loading…</div>
+    </div>
+
+    <!-- Promote Player to Host -->
+    <div style="background:rgba(0,255,0,.04);border:1px solid rgba(0,200,0,.2);border-radius:var(--radius);padding:14px;margin-bottom:24px">
+      <h3 style="color:var(--chip-green);font-size:.9rem;margin:0 0 10px">⬆ Promote Player to Host</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="promote-player-select" style="flex:1;min-width:180px;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="">Select a player…</option>
+        </select>
+        <button class="btn btn-green btn-sm" onclick="promotePlayerToHost()">Grant Host</button>
+      </div>
+    </div>
+
+    <!-- Current Hosts List -->
+    <h3 style="color:var(--gold);font-size:.9rem;margin-bottom:12px">Current Hosts <span id="hosts-count" style="color:var(--text-dim);font-size:.8rem"></span></h3>
+    <div id="hosts-list" style="display:flex;flex-direction:column;gap:12px">
+      <div style="color:var(--text-dim);text-align:center;padding:24px">Loading…</div>
     </div>
   </div>
 
@@ -364,6 +396,7 @@
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-outline" onclick="closeModal('player-detail-modal')">Close</button>
       <button class="btn btn-outline" id="pd-chips-btn">Add Chips</button>
+      <button class="btn btn-green" id="pd-host-btn" style="display:none">Make Host</button>
       <button class="btn btn-outline" id="pd-admin-btn" style="display:none">Make Admin</button>
       <button class="btn btn-gold" id="pd-edit-btn">Edit Player</button>
     </div>

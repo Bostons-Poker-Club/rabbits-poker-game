@@ -610,6 +610,47 @@ router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (
   res.json({ success: true, is_admin: !!makeAdmin });
 });
 
+router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => {
+  const hostIds = Array.from(hostSet);
+  if (!hostIds.length) return res.json([]);
+
+  let { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone')
+    .in('id', hostIds);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  try {
+    const { sessionRake, tableRequests } = require('../socket/handlers');
+
+    const hosts = (data || []).map(host => {
+      const hostReqs = tableRequests.filter(r => r.hostId === host.id);
+      const pendingReqs = hostReqs.filter(r => r.status === 'pending');
+      const approvedReqs = hostReqs.filter(r => r.status === 'approved' && r.tableId);
+
+      // Session rake from their approved tables
+      let rakeContrib = 0;
+      for (const r of approvedReqs) {
+        const entry = sessionRake.byTable.get(r.tableId);
+        if (entry) rakeContrib += entry.total;
+      }
+
+      return {
+        ...host,
+        is_host: true,
+        tableRequests: hostReqs.slice(0, 20),
+        pendingCount: pendingReqs.length,
+        sessionRakeContrib: rakeContrib
+      };
+    });
+
+    res.json(hosts);
+  } catch {
+    res.json((data || []).map(h => ({ ...h, is_host: true, tableRequests: [], pendingCount: 0, sessionRakeContrib: 0 })));
+  }
+});
+
 router.get('/admin/messages', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { broadcastMessages } = require('../socket/handlers');
