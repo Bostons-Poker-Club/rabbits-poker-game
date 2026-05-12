@@ -915,7 +915,6 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
       await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: `Buy-In: ${req.user.username} $${amount}`, text }).catch(() => {});
     }
     console.log(`[buyin] Notification sent for ${req.user.username} $${amount}`);
-    }
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);
   }
