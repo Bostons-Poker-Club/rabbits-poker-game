@@ -230,9 +230,15 @@ function connect() {
     setTimeout(() => window.location.href = '/lobby.html', 2000);
   });
 
-  socket.on('broadcast_message', ({ from, message, pending }) => {
-    console.log('[table] broadcast_message received:', { from, message });
-    showAdminMessageToast(from, message, pending);
+  socket.on('broadcast_message', (data) => {
+    console.log('[table] broadcast_message received:', data);
+    alert('Message from ' + (data.from || 'Admin') + ': ' + data.message);
+    showAdminMessageToast(data.from, data.message, data.pending);
+  });
+  socket.on('broadcast:message', (data) => {
+    console.log('[table] broadcast:message (legacy) received:', data);
+    alert('Message from ' + (data.from || 'Admin') + ': ' + data.message);
+    showAdminMessageToast(data.from, data.message, data.pending);
   });
 
   socket.on('banned', ({ message }) => {

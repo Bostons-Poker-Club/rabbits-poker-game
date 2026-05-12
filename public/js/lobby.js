@@ -115,9 +115,17 @@ if (typeof io !== 'undefined') {
   // Admin broadcast messages
   lobbySocket.on('broadcast_message', (msg) => {
     console.log('[lobby] broadcast_message received:', msg);
+    alert('Message from ' + (msg.from || 'Admin') + ': ' + msg.message);
     if (!inboxMessages.find(m => m.id === msg.id)) {
       inboxMessages.unshift(msg);
     }
+    updateInboxBadge();
+    showAdminMessage(msg.from, msg.message, msg.pending);
+  });
+  // Legacy event name fallback
+  lobbySocket.on('broadcast:message', (msg) => {
+    console.log('[lobby] broadcast:message (legacy) received:', msg);
+    if (!inboxMessages.find(m => m.id === msg.id)) inboxMessages.unshift(msg);
     updateInboxBadge();
     showAdminMessage(msg.from, msg.message, msg.pending);
   });

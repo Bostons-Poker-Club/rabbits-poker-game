@@ -20,6 +20,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+app.set('io', io);
 app.use('/api', apiRoutes);
 
 // Catch-all: serve index.html for SPA-style routing

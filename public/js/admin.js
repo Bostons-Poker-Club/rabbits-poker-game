@@ -556,13 +556,30 @@ function renderMessages(list) {
   }).join('');
 }
 
-function sendAdminMessage() {
-  if (!adminSocket) return toast('Not connected', 'error');
+async function sendAdminMessage() {
   const targetUserId = document.getElementById('msg-recipient').value || null;
   const message = document.getElementById('msg-text').value.trim();
   if (!message) return toast('Enter a message', 'error');
-  adminSocket.emit('admin:send_message', { targetUserId, message });
-  document.getElementById('msg-text').value = '';
+  const status = document.getElementById('msg-status');
+  if (status) status.textContent = 'Sending…';
+  try {
+    const result = await apiFetch('/api/admin/send-message', {
+      method: 'POST',
+      body: { message, targetUserId }
+    });
+    console.log('[admin] send-message result:', result);
+    document.getElementById('msg-text').value = '';
+    if (status) {
+      status.textContent = `Sent! ${result.delivered} sockets reached`;
+      setTimeout(() => { status.textContent = ''; }, 5000);
+    }
+    // Refresh history
+    if (adminSocket) adminSocket.emit('admin:get_messages');
+  } catch (e) {
+    console.error('[admin] send-message error:', e);
+    if (status) status.textContent = 'Error: ' + e.message;
+    toast('Failed to send: ' + e.message, 'error');
+  }
 }
 
 // ─── Panel Navigation ─────────────────────────────────────────────────────

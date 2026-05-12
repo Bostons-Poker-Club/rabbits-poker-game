@@ -676,6 +676,88 @@ router.get('/admin/messages', authMiddleware, adminMiddleware, (req, res) => {
   } catch { res.json([]); }
 });
 
+// Send a broadcast message to all connected sockets (or a specific user)
+router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, res) => {
+  const { message, targetUserId } = req.body;
+  if (!message || !message.trim()) return res.status(400).json({ error: 'Message is required' });
+
+  const io = req.app.get('io');
+  const { broadcastMessages } = require('../socket/handlers');
+
+  // Build next sequence ID
+  const id = Date.now();
+  const msg = {
+    id,
+    from: req.user.username,
+    message: message.trim().slice(0, 500),
+    targetUserId: targetUserId || null,
+    targetAll: !targetUserId,
+    sentAt: Date.now()
+  };
+
+  // Persist in memory
+  broadcastMessages.unshift(msg);
+  if (broadcastMessages.length > 200) broadcastMessages.pop();
+
+  console.log(`[broadcast/api] "${req.user.username}" → ${targetUserId ? 'uid=' + targetUserId : 'ALL'} | "${msg.message}"`);
+
+  let delivered = 0;
+  if (io) {
+    if (targetUserId) {
+      // Send to every socket belonging to this user
+      for (const [, s] of io.sockets.sockets) {
+        if (s.user && s.user.id === targetUserId) {
+          s.emit('broadcast_message', msg);
+          delivered++;
+        }
+      }
+    } else {
+      // Send to every connected socket — no exceptions, no filtering
+      io.emit('broadcast_message', msg);
+      delivered = io.sockets.sockets.size;
+      console.log(`[broadcast/api] io.emit sent to ${delivered} sockets`);
+    }
+  } else {
+    console.warn('[broadcast/api] io not available on app');
+  }
+
+  // Email offline players
+  try {
+    const { sendBroadcastEmail } = require('../mail');
+    const { data: allUsers } = await supabaseAdmin
+      .from('users')
+      .select('id, email, username')
+      .eq('is_banned', false)
+      .not('email', 'is', null);
+    const recipients = (allUsers || []).filter(u => u.id !== req.user.id && u.email);
+    if (recipients.length > 0) {
+      sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients }).catch(() => {});
+      console.log(`[broadcast/api] email queued for ${recipients.length} players`);
+    }
+  } catch (e) {
+    console.warn('[broadcast/api] email error:', e.message);
+  }
+
+  res.json({ ok: true, delivered, message: msg });
+});
+
+// Test endpoint — sends a test broadcast to all connected sockets
+router.get('/test-broadcast', authMiddleware, adminMiddleware, (req, res) => {
+  const io = req.app.get('io');
+  if (!io) return res.status(500).json({ error: 'io not available' });
+  const msg = {
+    id: Date.now(),
+    from: 'System',
+    message: 'TEST BROADCAST — if you see this, socket delivery is working!',
+    targetAll: true,
+    sentAt: Date.now()
+  };
+  io.emit('broadcast_message', msg);
+  const count = io.sockets.sockets.size;
+  console.log(`[test-broadcast] sent to ${count} sockets`);
+  res.json({ ok: true, socketCount: count, msg });
+});
+
 router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, res) => {
   const { data, error } = await supabaseAdmin
     .from('hands')
