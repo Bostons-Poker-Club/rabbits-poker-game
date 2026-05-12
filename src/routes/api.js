@@ -465,8 +465,24 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
     updates.chips = Math.max(0, (current.chips || 0) + chips_adj);
   }
 
-  const { error } = await supabaseAdmin.from('users').update(updates).eq('id', targetId);
-  if (error) return res.status(500).json({ error: error.message });
+  // Attempt update; if a column doesn't exist yet, strip it and retry
+  let updateError = null;
+  const remaining = { ...updates };
+  for (let attempt = 0; attempt < 10; attempt++) {
+    if (!Object.keys(remaining).length) break;
+    const { error } = await supabaseAdmin.from('users').update(remaining).eq('id', targetId);
+    if (!error) { updateError = null; break; }
+    updateError = error;
+    const missing = error.message.match(/column (?:[\w.]*\.)?["']?(\w+)["']? does not exist/);
+    if (missing) {
+      const col = missing[1];
+      console.warn(`[editPlayer] column "${col}" missing in users table — skipping`);
+      delete remaining[col];
+    } else {
+      break;
+    }
+  }
+  if (updateError) return res.status(500).json({ error: updateError.message });
 
   // Fire side effects
   if (roleChanged) {
