@@ -269,11 +269,7 @@ input, select, textarea { font-family: inherit; }
   grid-template-columns: 1fr 260px;
   overflow: hidden;
 }
-@media (max-width: 700px) {
-  .table-main { grid-template-columns: 1fr; }
-  .chat-panel { display: none; }
-  .chat-panel.open { display: flex; position: fixed; inset: 0; z-index: 100; }
-}
+/* Chat responsive handled in mobile breakpoints below */
 
 /* ─── Poker Table Canvas Area ────────────────────────────────────────────── */
 .poker-area {
@@ -334,8 +330,8 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */
 .card {
-  width: 44px;
-  height: 64px;
+  width: 48px;
+  height: 68px;
   background: var(--card-bg);
   border-radius: 6px;
   border: 1px solid #ddd;
@@ -343,16 +339,17 @@ input, select, textarea { font-family: inherit; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   font-weight: bold;
   box-shadow: 1px 2px 6px rgba(0,0,0,0.5);
   position: relative;
   transition: transform 0.1s;
   flex-shrink: 0;
+  user-select: none;
 }
-.card.large { width: 56px; height: 80px; font-size: 1rem; }
-.card .rank { line-height: 1; }
-.card .suit { line-height: 1; font-size: 1.2em; }
+.card.large { width: 66px; height: 96px; font-size: 1.25rem; }
+.card .rank { line-height: 1; font-weight: 900; letter-spacing: -0.02em; }
+.card .suit { line-height: 1; font-size: 1.15em; margin-top: 1px; }
 .card.red { color: var(--red); }
 .card.black { color: #222; }
 .card.back {
@@ -407,8 +404,9 @@ input, select, textarea { font-family: inherit; }
 .seat-chips { color: var(--gold); font-size: 0.82rem; }
 .seat-bet { color: var(--chip-green); font-size: 0.78rem; min-height: 14px; }
 .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
-.seat-cards .card { width: 22px; height: 32px; font-size: 0.55rem; border-radius: 3px; }
-.seat-cards .card .suit { font-size: 0.7em; }
+.seat-cards .card { width: 30px; height: 44px; font-size: 0.62rem; border-radius: 3px; }
+.seat-cards .card .rank { font-size: 1.05em; }
+.seat-cards .card .suit { font-size: 0.85em; }
 
 .dealer-puck {
   position: absolute;
@@ -842,14 +840,89 @@ input, select, textarea { font-family: inherit; }
   margin-right: 2px;
 }
 
-/* ─── Responsive Tweaks ──────────────────────────────────────────────────── */
-@media (max-width: 500px) {
-  .auth-card { padding: 24px 16px; }
-  .poker-table-oval { border-radius: 40%; }
-  .action-btn { min-width: 64px; font-size: 0.85rem; }
-  .my-cards-area { padding: 8px; gap: 8px; }
-  .lobby-header { padding: 10px 14px; }
+/* ─── Responsive: Tablet ≤768px ──────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .table-main { grid-template-columns: 1fr; }
+  .chat-panel { display: none; }
+  .chat-panel.open { display: flex; position: fixed; inset: 0; z-index: 100; }
+
+  .table-header { padding: 6px 10px; font-size: 0.78rem; flex-wrap: wrap; gap: 4px; }
+  .table-header .table-info-bar { gap: 8px; flex-wrap: wrap; }
+
+  .poker-area { padding: 4px; }
+  .poker-table-wrap { max-width: 100%; }
+
+  .seat-box { min-width: 74px; padding: 4px 6px; font-size: 0.72rem; }
+  .seat-name { max-width: 70px; font-size: 0.72rem; }
+  .seat-chips { font-size: 0.68rem; }
+
+  .my-cards-area { padding: 8px 10px; gap: 8px; }
+  .action-btn { min-width: 72px; min-height: 54px; font-size: 0.92rem; }
+  .ptt-btn { padding: 10px 18px; font-size: 0.85rem; min-height: 44px; }
+  .tables-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+}
+
+/* ─── Responsive: Phone ≤480px ───────────────────────────────────────────── */
+@media (max-width: 480px) {
+  /* Auth */
+  .auth-card { padding: 22px 14px; }
+
+  /* Table header: compact two-line */
+  .table-header { flex-direction: column; align-items: flex-start; padding: 5px 10px; gap: 3px; }
+  .table-header .table-info-bar { font-size: 0.72rem; gap: 6px; flex-wrap: wrap; }
+
+  /* Oval */
+  .poker-table-oval { border-radius: 40%; border-width: 4px; }
+  .seats-container { inset: -48px; }
+  .seat-box { min-width: 62px; padding: 3px 5px; font-size: 0.64rem; border-radius: 7px; }
+  .seat-name { max-width: 56px; font-size: 0.64rem; }
+  .seat-chips { font-size: 0.6rem; }
+  .seat-cards .card { width: 24px; height: 34px; font-size: 0.52rem; }
+  .dealer-puck { width: 18px; height: 18px; font-size: 0.52rem; top: -9px; right: -9px; }
+
+  /* My cards strip */
+  .my-cards-area { padding: 6px 8px; gap: 6px; flex-direction: column; align-items: stretch; }
+  .my-hole-cards { gap: 10px; justify-content: center; }
+  .card.large { width: 66px; height: 96px; font-size: 1.2rem; }
+
+  /* Action buttons: 4-column grid, big touch targets */
+  .action-area { flex-wrap: wrap; justify-content: center; gap: 5px; }
+  .action-btn { flex: 1 1 calc(25% - 5px); min-height: 62px; min-width: 0; font-size: 0.82rem; padding: 6px 2px; }
+  .raise-controls { flex: 1 1 100%; flex-wrap: wrap; justify-content: center; gap: 6px; }
+  .raise-controls input[type=range] { flex: 1; min-width: 100px; }
+  .raise-controls input[type=number] { width: 68px; }
+
+  /* PTT — full-width thumb button */
+  .ptt-btn { flex: 1 1 100%; min-height: 52px; font-size: 0.92rem; border-radius: 12px; padding: 14px; text-align: center; }
+
+  .break-btn { font-size: 0.7rem; padding: 5px 8px; }
+
+  /* Lobby */
+  .lobby-header { flex-direction: column; align-items: flex-start; padding: 10px 12px; gap: 8px; }
+  .lobby-header .player-info { flex-wrap: wrap; gap: 6px; }
+  .lobby-body { padding: 12px; }
   .tables-grid { grid-template-columns: 1fr; }
+  .section-header h2 { font-size: 1rem; }
+  .jackpot-banner { font-size: 0.82rem; padding: 8px 12px; }
+
+  /* Modal */
+  .modal { padding: 18px 14px; }
+  .modal h2 { font-size: 1.05rem; margin-bottom: 14px; }
+  .modal-footer { flex-direction: column; gap: 8px; }
+  .modal-footer .btn { width: 100%; }
+
+  /* Toast */
+  .toast-container { right: 8px; left: 8px; }
+  .toast { font-size: 0.82rem; padding: 10px 12px; }
+
+  /* Shot clock */
+  .shot-clock { width: 38px; height: 38px; }
+  .shot-clock-number { font-size: 0.75rem; }
+
+  /* Hand result */
+  .hand-result-box { padding: 20px 18px; max-width: 300px; }
+  .hand-result-box .winner-name { font-size: 1.2rem; }
+  .hand-result-box .won-amount { font-size: 1.6rem; }
 }
 
 /* Scrollbar */

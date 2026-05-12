@@ -983,6 +983,10 @@ function sendPersonalizedState(io, socket, game, userId) {
 
 async function startNewHand(io, tableId, game) {
   if (game.handActive || !game.canStartHand()) return;
+  // Guard against concurrent calls (e.g. two setTimeout callbacks firing close together)
+  if (game._startingHand) return;
+  game._startingHand = true;
+  setTimeout(() => { game._startingHand = false; }, 500);
 
   // Create hand record in DB
   let handId = null;

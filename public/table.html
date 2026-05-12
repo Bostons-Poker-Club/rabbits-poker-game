@@ -107,8 +107,8 @@
       <input type="number" id="raise-input" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
     </div>
     <button class="break-btn" id="btn-break" onclick="requestBreak()">☕ Break (3)</button>
-    <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()">🎙 Hold to Talk</button>
-    <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px">🎚 Mic Test</button>
+    <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()" ontouchcancel="stopPTT()">🎙 Hold to Talk</button>
+    <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px" id="mic-test-btn">🎚 Mic</button>
     <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
 </div>

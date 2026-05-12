@@ -755,7 +755,8 @@ function toggleChat() {
 function cardHtml(card, appear = false, large = false) {
   if (!card || card.rank === '?') return '<div class="card back"></div>';
   const isRed = card.suit === '♥' || card.suit === '♦';
-  return `<div class="card ${isRed ? 'red' : 'black'} ${large ? 'large' : ''} ${appear ? 'card-appear' : ''}">
+  const label = `${card.rank}${card.suit}`;
+  return `<div class="card ${isRed ? 'red' : 'black'} ${large ? 'large' : ''} ${appear ? 'card-appear' : ''}" title="${label}">
     <div class="rank">${card.rank}</div>
     <div class="suit">${card.suit}</div>
   </div>`;
