@@ -412,7 +412,7 @@ router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
 });
 
 router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  const { full_name, nickname, phone, email, address, city, state, zip, username, role, is_banned, chips_adj } = req.body;
+  const { full_name, nickname, phone, email, address, city, state, zip, username, role, is_banned, chips_adj, chips_set } = req.body;
   const targetId = req.params.id;
 
   // Fetch current state to derive changes
@@ -460,8 +460,10 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
     banChanged = true;
   }
 
-  // Chip adjustment
-  if (chips_adj && chips_adj !== 0 && current) {
+  // Chip update: set takes priority over adjust
+  if (chips_set !== undefined && chips_set !== null) {
+    updates.chips = Math.max(0, Number(chips_set));
+  } else if (chips_adj && chips_adj !== 0 && current) {
     updates.chips = Math.max(0, (current.chips || 0) + chips_adj);
   }
 

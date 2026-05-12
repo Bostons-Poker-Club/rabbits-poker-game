@@ -600,6 +600,12 @@ function renderPlayers(list) {
       <td style="color:var(--gold)">${fmt(p.chips)}</td>
       <td>${roleLabel}</td>
       <td><span style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></td>
+      <td onclick="event.stopPropagation()" style="white-space:nowrap">
+        <div style="display:flex;align-items:center;gap:4px">
+          <input type="number" id="sc-${p.id}" min="0" placeholder="0" style="width:72px;padding:4px 6px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--gold);font-size:.8rem" onclick="event.stopPropagation()">
+          <button class="btn btn-sm btn-gold" style="padding:4px 8px;font-size:.75rem" onclick="event.stopPropagation();setChipsInline('${p.id}','${esc(p.username)}')">Set</button>
+        </div>
+      </td>
       <td onclick="event.stopPropagation()"><div class="actions">
         <button class="btn btn-sm btn-outline" onclick="openEditModal('${p.id}')">Edit</button>
         ${!isSelf ? `<button class="btn btn-sm ${p.is_banned ? 'btn-green' : 'btn-red'}" onclick="toggleBan('${p.id}',${!p.is_banned})">${p.is_banned ? 'Unban' : 'Ban'}</button>` : ''}
@@ -617,6 +623,20 @@ function filterPlayers() {
     (p.email || '').toLowerCase().includes(q) ||
     (p.phone || '').includes(q)
   ));
+}
+
+async function setChipsInline(id, username) {
+  const input = document.getElementById(`sc-${id}`);
+  const val = input ? input.value.trim() : '';
+  if (val === '' || isNaN(Number(val))) return toast('Enter a valid chip amount', 'error');
+  const amount = Math.max(0, parseInt(val));
+  if (!confirm(`Set ${username}'s chips to ${amount.toLocaleString()}?`)) return;
+  try {
+    await apiFetch(`/api/admin/players/${id}`, { method: 'PUT', body: { chips_set: amount } });
+    if (input) input.value = '';
+    toast(`${username} set to ${amount.toLocaleString()} chips`);
+    loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 function openChipsModal(id, name) {
@@ -752,6 +772,7 @@ async function openEditModal(id) {
     // Chip display
     document.getElementById('ep-chips-display').textContent = fmt(p.chips || 0) + ' chips';
     document.getElementById('ep-chips-adj').value = '';
+    document.getElementById('ep-chips-set').value = '';
 
     openModal('edit-player-modal');
   } catch (e) { toast(e.message, 'error'); }
@@ -762,7 +783,9 @@ async function submitEditPlayer() {
   const firstName = document.getElementById('ep-firstname').value.trim();
   const lastName  = document.getElementById('ep-lastname').value.trim();
   const fullName  = [firstName, lastName].filter(Boolean).join(' ') || null;
-  const chipsAdj  = parseInt(document.getElementById('ep-chips-adj').value) || 0;
+  const chipsAdj = parseInt(document.getElementById('ep-chips-adj').value) || 0;
+  const chipsSetRaw = document.getElementById('ep-chips-set').value.trim();
+  const chipsSet = chipsSetRaw !== '' ? Math.max(0, parseInt(chipsSetRaw)) : undefined;
 
   try {
     await apiFetch(`/api/admin/players/${id}`, {
@@ -779,7 +802,8 @@ async function submitEditPlayer() {
         zip:       document.getElementById('ep-zip').value.trim()       || null,
         role:      document.getElementById('ep-role').disabled ? undefined : document.getElementById('ep-role').value,
         is_banned: document.getElementById('ep-status').disabled ? undefined : document.getElementById('ep-status').value === 'banned',
-        chips_adj: chipsAdj || undefined
+        chips_set: chipsSet,
+        chips_adj: chipsSet !== undefined ? undefined : (chipsAdj || undefined)
       }
     });
     closeModal('edit-player-modal');

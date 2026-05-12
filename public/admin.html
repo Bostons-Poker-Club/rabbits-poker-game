@@ -168,7 +168,7 @@
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Status</th><th>Set Chips</th><th>Actions</th></tr></thead>
         <tbody id="players-body"></tbody>
       </table>
     </div>
@@ -487,8 +487,13 @@
         <label style="color:var(--gold)">Chip Balance</label>
         <div style="display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap">
           <span id="ep-chips-display" style="color:var(--gold);font-weight:700;font-size:1rem;min-width:100px">– chips</span>
-          <input type="number" id="ep-chips-adj" placeholder="±  amount" style="flex:1;min-width:100px;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
-          <span style="color:var(--text-dim);font-size:.8rem">Positive adds, negative deducts</span>
+          <input type="number" id="ep-chips-adj" placeholder="±  adjust" style="flex:1;min-width:90px;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <span style="color:var(--text-dim);font-size:.8rem">Adds/deducts</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap">
+          <span style="color:var(--text-dim);font-size:.82rem;min-width:100px">Set exact total:</span>
+          <input type="number" id="ep-chips-set" placeholder="e.g. 0 or 5000" min="0" style="flex:1;min-width:90px;padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid rgba(255,200,0,.4);border-radius:var(--radius);color:var(--gold)">
+          <span style="color:var(--text-dim);font-size:.8rem">Overwrites balance</span>
         </div>
       </div>
 
