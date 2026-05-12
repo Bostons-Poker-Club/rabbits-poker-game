@@ -5,6 +5,8 @@ requireAuth();
 const user = getUser();
 let jackpotTimerInterval = null;
 let jackpotData = null;
+let inboxMessages = [];
+const INBOX_READ_KEY = 'rp_inbox_read_at';
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 
@@ -51,6 +53,7 @@ apiFetch('/api/profile').then(profile => {
 loadTables();
 loadTournaments();
 loadJackpot();
+loadInbox();
 
 // ─── Socket (notifications for all logged-in users) ───────────────────────
 
@@ -110,8 +113,13 @@ if (typeof io !== 'undefined') {
   });
 
   // Admin broadcast messages
-  lobbySocket.on('broadcast:message', ({ from, message, pending }) => {
-    showAdminMessage(from, message, pending);
+  lobbySocket.on('broadcast:message', (msg) => {
+    // Add to local inbox
+    if (!inboxMessages.find(m => m.id === msg.id)) {
+      inboxMessages.unshift(msg);
+    }
+    updateInboxBadge();
+    showAdminMessage(msg.from, msg.message, msg.pending);
   });
 
   // Ban enforcement
@@ -398,20 +406,82 @@ function showHostPrivileges() {
   document.body.appendChild(div);
 }
 
+// ─── Inbox ────────────────────────────────────────────────────────────────
+
+async function loadInbox() {
+  try {
+    const msgs = await apiFetch('/api/messages');
+    inboxMessages = msgs || [];
+    updateInboxBadge();
+  } catch {}
+}
+
+function updateInboxBadge() {
+  const badge = document.getElementById('inbox-badge');
+  if (!badge) return;
+  const lastRead = parseInt(localStorage.getItem(INBOX_READ_KEY) || '0');
+  const unread = inboxMessages.filter(m => m.sentAt > lastRead).length;
+  if (unread > 0) {
+    badge.textContent = unread > 9 ? '9+' : unread;
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openInbox() {
+  const existing = document.getElementById('inbox-modal');
+  if (existing) { existing.remove(); return; }
+
+  // Mark all as read
+  localStorage.setItem(INBOX_READ_KEY, Date.now().toString());
+  updateInboxBadge();
+
+  const div = document.createElement('div');
+  div.id = 'inbox-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  const msgs = inboxMessages.length
+    ? inboxMessages.map(m => `
+        <div style="border-bottom:1px solid rgba(255,255,255,.08);padding:12px 0">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="color:var(--gold);font-weight:700;font-size:.85rem">📨 ${esc(m.from)}</span>
+            <span style="color:var(--text-dim);font-size:.72rem">${new Date(m.sentAt).toLocaleString()}</span>
+          </div>
+          <div style="color:var(--text);font-size:.9rem;line-height:1.5">${esc(m.message)}</div>
+        </div>`).join('')
+    : '<div style="color:var(--text-dim);text-align:center;padding:30px">No messages yet</div>';
+
+  div.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:24px;max-width:500px;width:100%;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h2 style="color:var(--gold);margin:0">📬 Message Inbox</h2>
+        <button onclick="document.getElementById('inbox-modal').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">${msgs}</div>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
+}
+
 function showAdminMessage(from, message, pending) {
   const existing = document.getElementById('admin-msg-modal');
   if (existing) existing.remove();
   const div = document.createElement('div');
   div.id = 'admin-msg-modal';
-  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9500;display:flex;align-items:center;justify-content:center';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
   div.innerHTML = `
-    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:28px 32px;max-width:420px;width:90%;text-align:center;box-shadow:0 0 40px rgba(212,175,55,.2)">
-      <div style="font-size:2rem;margin-bottom:10px">📨</div>
-      <div style="font-size:.75rem;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">${pending ? 'Message (while you were offline)' : 'Message from Admin'}</div>
-      <div style="font-size:.9rem;color:var(--gold);font-weight:700;margin-bottom:12px">From: ${esc(from)}</div>
-      <p style="color:var(--text);line-height:1.6;font-size:.95rem;margin-bottom:20px">${esc(message)}</p>
-      <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Dismiss</button>
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:28px 32px;max-width:440px;width:100%;text-align:center;box-shadow:0 0 40px rgba(212,175,55,.25)">
+      <div style="font-size:2.2rem;margin-bottom:10px">📨</div>
+      <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">${pending ? 'Missed message' : 'Message from Admin'}</div>
+      <div style="font-size:.9rem;color:var(--gold);font-weight:700;margin-bottom:14px">From: ${esc(from)}</div>
+      <p style="color:var(--text);line-height:1.7;font-size:.95rem;margin-bottom:22px;white-space:pre-wrap">${esc(message)}</p>
+      <div style="display:flex;gap:10px;justify-content:center">
+        <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Got it</button>
+        <button class="btn btn-outline" onclick="document.getElementById('admin-msg-modal').remove();openInbox()">View Inbox</button>
+      </div>
     </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
   document.body.appendChild(div);
 }
 

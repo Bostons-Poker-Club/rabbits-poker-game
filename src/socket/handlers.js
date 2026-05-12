@@ -3,7 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
-const { sendTableRequestEmail } = require('../mail');
+const { sendTableRequestEmail, sendBroadcastEmail } = require('../mail');
 const { supabaseAdmin } = require('../db/supabase');
 
 const appEvents = require('../events');
@@ -795,7 +795,7 @@ function setupSocketHandlers(io) {
     });
 
     // ─── Broadcast Messaging ──────────────────────────────────────────────
-    socket.on('admin:send_message', ({ targetUserId, message }) => {
+    socket.on('admin:send_message', async ({ targetUserId, message }) => {
       if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
       if (!message || !message.trim()) return;
 
@@ -813,34 +813,60 @@ function setupSocketHandlers(io) {
 
       let delivered = 0;
       let queued = 0;
+      const onlineCount = userSockets.size;
+
+      console.log(`[broadcast] admin "${username}" sending to ${targetUserId ? 'user ' + targetUserId : 'ALL'} — ${onlineCount} sockets online`);
 
       if (targetUserId) {
-        // Send to specific player
         const targetSid = userSockets.get(targetUserId);
         if (targetSid) {
           io.to(targetSid).emit('broadcast:message', msg);
+          console.log(`[broadcast] delivered to ${targetUserId} (sid ${targetSid})`);
           delivered++;
         } else {
-          // Player offline — queue
           if (!pendingMessages.has(targetUserId)) pendingMessages.set(targetUserId, []);
           pendingMessages.get(targetUserId).push(msg);
           queued++;
+          console.log(`[broadcast] queued for offline user ${targetUserId}`);
         }
       } else {
-        // Broadcast to all connected (non-admin) players
+        // Send to ALL connected sockets except self
         for (const [uid, sid] of userSockets) {
-          if (uid === userId) continue; // skip self (the admin)
+          if (uid === userId) continue;
           io.to(sid).emit('broadcast:message', msg);
+          console.log(`[broadcast] delivered to uid=${uid} sid=${sid}`);
           delivered++;
+        }
+        // Queue for ALL users not currently connected — fetch from DB
+        try {
+          const { data: allUsers } = await supabaseAdmin.from('users').select('id, email, username').eq('is_banned', false);
+          const onlineIds = new Set(userSockets.keys());
+          const offlineUsers = (allUsers || []).filter(u => !onlineIds.has(u.id) && u.id !== userId);
+          for (const u of offlineUsers) {
+            if (!pendingMessages.has(u.id)) pendingMessages.set(u.id, []);
+            pendingMessages.get(u.id).push(msg);
+            queued++;
+          }
+          // Send email to all players who have email addresses
+          const emailRecipients = (allUsers || []).filter(u => u.email && u.id !== userId);
+          if (emailRecipients.length > 0) {
+            sendBroadcastEmail({ from: username, message: msg.message, recipients: emailRecipients }).catch(() => {});
+          }
+        } catch (e) {
+          console.warn('[broadcast] DB query failed for offline queue:', e.message);
         }
       }
 
-      socket.emit('admin:message_sent', { id: msg.id, delivered, queued });
+      console.log(`[broadcast] done — delivered: ${delivered}, queued: ${queued}`);
+      socket.emit('admin:message_sent', { id: msg.id, delivered, queued, total: delivered + queued });
 
-      // Update all admin UIs with new message
       for (const sid of getAdminSockets(io)) {
         io.to(sid).emit('admin:message_history', { messages: broadcastMessages.slice(0, 50) });
       }
+    });
+
+    socket.on('messages:get', () => {
+      socket.emit('messages:list', { messages: broadcastMessages.slice(0, 100) });
     });
 
     socket.on('get_table_state', ({ tableId }) => {

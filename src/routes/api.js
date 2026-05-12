@@ -691,4 +691,15 @@ router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, re
   res.json({ hands: data, totalRake, totalJackpot });
 });
 
+// Any authenticated player can fetch their message inbox
+router.get('/messages', authMiddleware, (req, res) => {
+  try {
+    const { broadcastMessages } = require('../socket/handlers');
+    // Return messages relevant to this player (broadcast to all, or directly targeted)
+    const userId = req.user.id;
+    const inbox = broadcastMessages.filter(m => m.targetAll || m.targetUserId === userId);
+    res.json(inbox.slice(0, 100));
+  } catch { res.json([]); }
+});
+
 module.exports = router;

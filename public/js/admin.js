@@ -59,8 +59,9 @@ if (typeof io !== 'undefined') {
   adminSocket.on('admin:message_sent', ({ id, delivered, queued }) => {
     const status = document.getElementById('msg-status');
     if (status) {
-      status.textContent = `Sent! ${delivered} delivered${queued ? `, ${queued} queued (offline)` : ''}`;
-      setTimeout(() => { status.textContent = ''; }, 4000);
+      const total = (delivered || 0) + (queued || 0);
+      status.textContent = `Sent! ${delivered} online + ${queued} queued (${total} total)`;
+      setTimeout(() => { status.textContent = ''; }, 5000);
     }
   });
 

@@ -63,4 +63,35 @@ async function sendTableRequestEmail({ hostName, tableName, gameType, sb, bb, ma
   }
 }
 
-module.exports = { sendTableRequestEmail };
+async function sendBroadcastEmail({ from, message, recipients }) {
+  const t = getTransporter();
+  if (!t) {
+    console.log('[mail] SMTP not configured — skipping broadcast email');
+    return 0;
+  }
+  let sent = 0;
+  for (const r of recipients) {
+    if (!r.email) continue;
+    try {
+      await t.sendMail({
+        from: `"RabbsRoom" <${process.env.SMTP_USER}>`,
+        to: r.email,
+        subject: `📨 Message from ${from} — RabbsRoom`,
+        text: `Hi ${r.username || 'there'},\n\n${from} sent a message:\n\n"${message}"\n\nLog in at https://rabbsroom.com to respond or view more messages.`,
+        html: `
+          <div style="font-family:sans-serif;max-width:500px;margin:0 auto">
+            <h2 style="color:#1a7a3f">📨 Message from ${from}</h2>
+            <p style="background:#f5f5f5;padding:16px;border-radius:8px;font-size:1rem;line-height:1.6">${message.replace(/\n/g, '<br>')}</p>
+            <p style="color:#666;font-size:.85rem">Log in to <a href="https://rabbsroom.com" style="color:#1a7a3f">RabbsRoom</a> to see your message inbox.</p>
+          </div>`
+      });
+      sent++;
+    } catch (e) {
+      console.warn(`[mail] Failed to send broadcast email to ${r.email}:`, e.message);
+    }
+  }
+  console.log(`[mail] Broadcast email sent to ${sent}/${recipients.length} players`);
+  return sent;
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail };
