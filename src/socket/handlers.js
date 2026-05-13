@@ -436,8 +436,10 @@ function setupSocketHandlers(io) {
 
     socket.on('ptt:join', () => {
       const tId = socket.currentTableId;
-      if (!tId) return;
-      // Collect peer list for the speaker (everyone else in the room)
+      if (!tId) {
+        console.log(`[PTT] ${username} sent ptt:join but has no currentTableId — ignoring`);
+        return;
+      }
       const sids = io.sockets.adapter.rooms.get(tId) || new Set();
       const peers = [];
       for (const sid of sids) {
@@ -446,17 +448,24 @@ function setupSocketHandlers(io) {
           peers.push({ userId: peer.userId, username: peer.username });
         }
       }
+      console.log(`[PTT] ${username} joined as speaker on table ${tId} — ${peers.length} peer(s) in room:`, peers.map(p => p.username));
       socket.emit('ptt:peers', { peers });
       socket.to(tId).emit('ptt:speaker_active', { userId, username });
     });
 
     socket.on('ptt:signal', ({ targetUserId, signal }) => {
       const targetSid = userSockets.get(targetUserId);
-      if (targetSid) io.to(targetSid).emit('ptt:signal', { fromUserId: userId, signal });
+      if (targetSid) {
+        console.log(`[PTT] signal relay: ${username} → ${targetUserId} (type=${signal.type}) via socket ${targetSid}`);
+        io.to(targetSid).emit('ptt:signal', { fromUserId: userId, signal });
+      } else {
+        console.warn(`[PTT] signal relay FAILED: no socket found for targetUserId=${targetUserId} (type=${signal.type})`);
+      }
     });
 
     socket.on('ptt:stop', () => {
       const tId = socket.currentTableId;
+      console.log(`[PTT] ${username} stopped talking on table ${tId}`);
       if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
     });
 

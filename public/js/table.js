@@ -263,39 +263,79 @@ function connect() {
 
   // ─── WebRTC PTT ─────────────────────────────────────────────────────────
 
+  function pttLog(...args) { console.log('[PTT]', ...args); }
+  function pttWarn(...args) { console.warn('[PTT]', ...args); }
+
+  function attachPcDebugHandlers(pc, role, peerId) {
+    pc.oniceconnectionstatechange = () => {
+      const s = pc.iceConnectionState;
+      pttLog(`ICE connection [${role} → ${peerId}]: ${s}`);
+      if (s === 'connected' || s === 'completed') {
+        pttLog(`✅ Audio stream ESTABLISHED with ${peerId}`);
+      } else if (s === 'failed') {
+        pttWarn(`❌ ICE FAILED with ${peerId} — check STUN reachability or firewall`);
+      } else if (s === 'disconnected') {
+        pttWarn(`⚠️  ICE disconnected from ${peerId} — may recover`);
+      }
+    };
+    pc.onicegatheringstatechange = () => {
+      pttLog(`ICE gathering [${role} → ${peerId}]: ${pc.iceGatheringState}`);
+    };
+    pc.onsignalingstatechange = () => {
+      pttLog(`Signaling state [${role} → ${peerId}]: ${pc.signalingState}`);
+    };
+    pc.onconnectionstatechange = () => {
+      pttLog(`Connection state [${role} → ${peerId}]: ${pc.connectionState}`);
+    };
+  }
+
   // Server tells speaker which peers to connect to
   socket.on('ptt:peers', async ({ peers }) => {
-    if (!pttStream) return;
+    if (!pttStream) { pttWarn('ptt:peers received but pttStream is null — ignoring'); return; }
+    pttLog(`ptt:peers received — ${peers.length} peer(s):`, peers.map(p => p.username));
     for (const peer of peers) {
+      pttLog(`Creating RTCPeerConnection as OFFERER → ${peer.username} (${peer.userId})`);
       const pc = new RTCPeerConnection(STUN_CFG);
       const peerData = { pc, pendingIce: [] };
       pttPeers.set(peer.userId, peerData);
+      attachPcDebugHandlers(pc, 'offerer', peer.username);
 
-      pttStream.getTracks().forEach(t => pc.addTrack(t, pttStream));
+      const tracks = pttStream.getTracks();
+      pttLog(`Adding ${tracks.length} audio track(s) to PC for ${peer.username}`);
+      tracks.forEach(t => pc.addTrack(t, pttStream));
 
       pc.onicecandidate = e => {
         if (e.candidate) {
+          const { type, protocol, address } = e.candidate;
+          pttLog(`ICE candidate → ${peer.username}: type=${type} proto=${protocol} addr=${address}`);
           socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'ice', candidate: e.candidate } });
+        } else {
+          pttLog(`ICE gathering complete for ${peer.username}`);
         }
       };
 
       try {
+        pttLog(`Creating offer for ${peer.username}…`);
         const offer = await pc.createOffer({ offerToReceiveAudio: false });
         await pc.setLocalDescription(offer);
+        pttLog(`Offer created (${offer.sdp.split('\n').length} SDP lines) — sending to ${peer.username}`);
         socket.emit('ptt:signal', { targetUserId: peer.userId, signal: { type: 'offer', sdp: offer.sdp } });
       } catch (err) {
-        console.warn('[PTT] offer error:', err);
+        pttWarn(`offer error for ${peer.username}:`, err);
       }
     }
   });
 
   // Receive WebRTC signaling messages
   socket.on('ptt:signal', async ({ fromUserId, signal }) => {
+    pttLog(`ptt:signal received from ${fromUserId} — type: ${signal.type}`);
+
     if (signal.type === 'offer') {
-      // We are a listener — create PC, answer the offer, receive audio
+      pttLog(`Creating RTCPeerConnection as ANSWERER ← ${fromUserId}`);
       const pc = new RTCPeerConnection(STUN_CFG);
       const peerData = { pc, pendingIce: [] };
       pttPeers.set(fromUserId, peerData);
+      attachPcDebugHandlers(pc, 'answerer', fromUserId);
 
       const audio = document.createElement('audio');
       audio.autoplay = true;
@@ -304,55 +344,78 @@ function connect() {
       pttAudioEls.set(fromUserId, audio);
 
       pc.ontrack = e => {
+        pttLog(`✅ ontrack fired from ${fromUserId} — streams:`, e.streams.length, '— attaching to <audio>');
         audio.srcObject = e.streams[0];
-        audio.play().catch(() => {});
+        audio.play().then(() => {
+          pttLog(`audio.play() resolved — audio is playing from ${fromUserId}`);
+        }).catch(err => {
+          pttWarn(`audio.play() rejected for ${fromUserId}:`, err.message, '— browser may require user gesture first');
+        });
       };
 
       pc.onicecandidate = e => {
         if (e.candidate) {
+          const { type, protocol, address } = e.candidate;
+          pttLog(`ICE candidate ← ${fromUserId}: type=${type} proto=${protocol} addr=${address}`);
           socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'ice', candidate: e.candidate } });
+        } else {
+          pttLog(`ICE gathering complete (answerer side) for ${fromUserId}`);
         }
       };
 
       try {
+        pttLog(`setRemoteDescription(offer) from ${fromUserId}`);
         await pc.setRemoteDescription({ type: 'offer', sdp: signal.sdp });
-        // Flush buffered ICE candidates
-        for (const ice of peerData.pendingIce) {
-          try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch {}
-        }
-        peerData.pendingIce = [];
 
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'answer', sdp: answer.sdp } });
-      } catch (err) {
-        console.warn('[PTT] answer error:', err);
-      }
-
-    } else if (signal.type === 'answer') {
-      const peerData = pttPeers.get(fromUserId);
-      if (!peerData) return;
-      const { pc } = peerData;
-      if (pc.signalingState === 'have-local-offer') {
-        try {
-          await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
-          // Flush buffered ICE candidates
+        if (peerData.pendingIce.length) {
+          pttLog(`Flushing ${peerData.pendingIce.length} buffered ICE candidate(s) for ${fromUserId}`);
           for (const ice of peerData.pendingIce) {
             try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch {}
           }
           peerData.pendingIce = [];
-        } catch (err) {
-          console.warn('[PTT] setRemoteDescription (answer) error:', err);
         }
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        pttLog(`Answer created — sending back to ${fromUserId}`);
+        socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'answer', sdp: answer.sdp } });
+      } catch (err) {
+        pttWarn(`answer error for ${fromUserId}:`, err);
+      }
+
+    } else if (signal.type === 'answer') {
+      const peerData = pttPeers.get(fromUserId);
+      if (!peerData) { pttWarn(`answer from ${fromUserId} but no peerData — ignoring`); return; }
+      const { pc } = peerData;
+      pttLog(`setRemoteDescription(answer) from ${fromUserId} — signalingState: ${pc.signalingState}`);
+      if (pc.signalingState === 'have-local-offer') {
+        try {
+          await pc.setRemoteDescription({ type: 'answer', sdp: signal.sdp });
+          pttLog(`Remote description set (answer) from ${fromUserId}`);
+          if (peerData.pendingIce.length) {
+            pttLog(`Flushing ${peerData.pendingIce.length} buffered ICE candidate(s) after answer from ${fromUserId}`);
+            for (const ice of peerData.pendingIce) {
+              try { await pc.addIceCandidate(new RTCIceCandidate(ice)); } catch {}
+            }
+            peerData.pendingIce = [];
+          }
+        } catch (err) {
+          pttWarn(`setRemoteDescription(answer) error from ${fromUserId}:`, err);
+        }
+      } else {
+        pttWarn(`Unexpected signalingState '${pc.signalingState}' when receiving answer from ${fromUserId} — skipping`);
       }
 
     } else if (signal.type === 'ice') {
       const peerData = pttPeers.get(fromUserId);
-      if (!peerData) return;
+      if (!peerData) { pttWarn(`ICE from ${fromUserId} but no peerData — ignoring`); return; }
       const { pc, pendingIce } = peerData;
       if (pc.remoteDescription && pc.remoteDescription.type) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); } catch {}
+        pttLog(`Adding ICE candidate from ${fromUserId} (remoteDescription set)`);
+        try { await pc.addIceCandidate(new RTCIceCandidate(signal.candidate)); }
+        catch (err) { pttWarn(`addIceCandidate error from ${fromUserId}:`, err.message); }
       } else {
+        pttLog(`Buffering ICE candidate from ${fromUserId} (remoteDescription not yet set)`);
         pendingIce.push(signal.candidate);
       }
     }
@@ -360,10 +423,12 @@ function connect() {
 
   // Visual indicator: someone started/stopped speaking
   socket.on('ptt:speaker_active', ({ userId: speakerId, username: speakerName }) => {
+    pttLog(`ptt:speaker_active — ${speakerName} (${speakerId}) started talking`);
     setSpeakingIndicator(speakerId, true, speakerName);
   });
 
   socket.on('ptt:speaker_stopped', ({ userId: speakerId }) => {
+    pttLog(`ptt:speaker_stopped — ${speakerId} stopped talking, closing PC`);
     const peerData = pttPeers.get(speakerId);
     if (peerData) { peerData.pc.close(); pttPeers.delete(speakerId); }
     const audio = pttAudioEls.get(speakerId);
@@ -801,13 +866,21 @@ function showAdminMessageToast(from, message, pending) {
 async function startPTT(e) {
   if (e) e.preventDefault();
   if (pttStream) return;
+  console.log('[PTT] startPTT() called — requesting microphone…');
   try {
-    pttStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+    pttStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: false
+    });
+    const tracks = pttStream.getAudioTracks();
+    console.log('[PTT] Mic acquired:', tracks.map(t => `"${t.label}" enabled=${t.enabled} muted=${t.muted}`));
     const btn = document.getElementById('ptt-btn');
     btn.classList.add('speaking');
     btn.textContent = '🔴 Talking…';
+    console.log('[PTT] Emitting ptt:join to server');
     socket.emit('ptt:join');
   } catch (err) {
+    console.error('[PTT] getUserMedia error:', err.name, err.message);
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
       toast('Microphone blocked — allow access in browser settings', 'error');
       showMicDeniedBanner();
@@ -820,7 +893,9 @@ async function startPTT(e) {
 async function checkMicPermission() {
   try {
     const status = await navigator.permissions.query({ name: 'microphone' });
+    console.log('[PTT] Mic permission state:', status.state);
     if (status.state === 'denied') showMicDeniedBanner();
+    status.onchange = () => console.log('[PTT] Mic permission changed to:', status.state);
   } catch {}
 }
 
@@ -834,30 +909,161 @@ function showMicDeniedBanner() {
   setTimeout(() => banner.remove(), 8000);
 }
 
-async function testMic() {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    toast('✅ Microphone working!');
-    stream.getTracks().forEach(t => t.stop());
-  } catch {
-    toast('Microphone not available — check browser permissions', 'error');
-    showMicDeniedBanner();
-  }
-}
-
 function stopPTT() {
   if (!pttStream) return;
+  console.log('[PTT] stopPTT() — stopping tracks, closing', pttPeers.size, 'peer connection(s)');
   pttStream.getTracks().forEach(t => t.stop());
   pttStream = null;
   const btn = document.getElementById('ptt-btn');
   btn.classList.remove('speaking');
   btn.textContent = '🎙 Hold to Talk';
-  pttPeers.forEach(({ pc }) => pc.close());
+  pttPeers.forEach(({ pc }, uid) => { console.log('[PTT] Closing PC for', uid); pc.close(); });
   pttPeers.clear();
   pttAudioEls.forEach(a => { a.srcObject = null; a.remove(); });
   pttAudioEls.clear();
   socket.emit('ptt:stop');
   document.querySelectorAll('.ptt-speaking').forEach(el => el.remove());
+  console.log('[PTT] ptt:stop emitted, all peers cleared');
+}
+
+// ─── Mic Test (loopback with volume meter) ────────────────────────────────
+
+let _micTestStream = null;
+let _micTestCtx = null;
+
+async function testMic() {
+  // If test is already running, close it
+  if (_micTestStream) { closeMicTest(); return; }
+
+  const btn = document.getElementById('mic-test-btn');
+  if (btn) { btn.textContent = '⏳ Testing…'; btn.disabled = true; }
+
+  console.log('[MIC TEST] Requesting microphone for loopback test…');
+  try {
+    // echoCancellation OFF so you actually hear yourself
+    _micTestStream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      video: false
+    });
+    const track = _micTestStream.getAudioTracks()[0];
+    console.log('[MIC TEST] Stream acquired — track:', track.label, '| settings:', JSON.stringify(track.getSettings()));
+
+    _micTestCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = _micTestCtx.createMediaStreamSource(_micTestStream);
+
+    // Analyser for level meter
+    const analyser = _micTestCtx.createAnalyser();
+    analyser.fftSize = 512;
+    source.connect(analyser);
+
+    // Short delay to break feedback loop (speakers → mic)
+    const delay = _micTestCtx.createDelay(1.0);
+    delay.delayTime.value = 0.25;
+    source.connect(delay);
+    delay.connect(_micTestCtx.destination);
+
+    console.log('[MIC TEST] AudioContext state:', _micTestCtx.state, '— loopback active (250ms delay)');
+    showMicTestUI(analyser);
+    if (btn) { btn.textContent = '🔴 Stop Test'; btn.disabled = false; }
+  } catch (err) {
+    console.error('[MIC TEST] Failed:', err.name, err.message);
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      toast('Microphone blocked — allow access in browser settings', 'error');
+      showMicDeniedBanner();
+    } else {
+      toast('Mic error: ' + err.message, 'error');
+    }
+    if (btn) { btn.textContent = '🎚 Mic'; btn.disabled = false; }
+  }
+}
+
+function showMicTestUI(analyser) {
+  const existing = document.getElementById('mic-test-panel');
+  if (existing) existing.remove();
+
+  const panel = document.createElement('div');
+  panel.id = 'mic-test-panel';
+  panel.style.cssText = [
+    'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%)',
+    'background:#0a1a12;border:2px solid var(--gold);border-radius:16px',
+    'padding:24px 28px;z-index:9999;text-align:center;min-width:300px',
+    'box-shadow:0 8px 40px rgba(0,0,0,.8)'
+  ].join(';');
+  panel.innerHTML = `
+    <div style="font-size:2rem;margin-bottom:6px">🎙</div>
+    <div style="color:var(--gold);font-weight:700;font-size:1.05rem;margin-bottom:4px">Mic Test — Loopback Active</div>
+    <div style="color:rgba(255,255,255,.5);font-size:.8rem;margin-bottom:18px">
+      Speak into your mic — you'll hear yourself after a 250ms delay.<br>
+      Watch the level bar below for signal.
+    </div>
+    <canvas id="mic-level-canvas" width="260" height="36"
+      style="display:block;margin:0 auto 10px;border-radius:8px;background:rgba(0,0,0,.4)"></canvas>
+    <div id="mic-level-label" style="font-family:monospace;font-size:.78rem;color:var(--chip-green);margin-bottom:20px">
+      Level: –
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeMicTest()" class="btn btn-outline" style="flex:1">Stop Test</button>
+      <button onclick="closeMicTest();startPTT()" class="btn btn-gold" style="flex:1">✅ Mic OK — Talk</button>
+    </div>`;
+  document.body.appendChild(panel);
+
+  const canvas = document.getElementById('mic-level-canvas');
+  const ctx = canvas.getContext('2d');
+  const bufLen = analyser.frequencyBinCount;
+  const timeData = new Uint8Array(bufLen);
+
+  let rafId;
+  function draw() {
+    rafId = requestAnimationFrame(draw);
+    analyser.getByteTimeDomainData(timeData);
+
+    // RMS amplitude
+    let sum = 0;
+    for (let i = 0; i < bufLen; i++) { const v = (timeData[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / bufLen);
+    const level = Math.min(1, rms * 4); // scale up for visibility
+
+    // Draw meter bar
+    ctx.clearRect(0, 0, 260, 36);
+    ctx.fillStyle = 'rgba(0,0,0,.3)';
+    ctx.fillRect(0, 0, 260, 36);
+    const barW = level * 260;
+    const hue = level < 0.6 ? 120 : level < 0.85 ? 60 : 0;
+    ctx.fillStyle = `hsl(${hue},80%,48%)`;
+    ctx.fillRect(0, 6, barW, 24);
+
+    // Threshold marker at -18 dBFS ≈ 0.126 RMS scaled → ~13%
+    ctx.strokeStyle = 'rgba(255,255,255,.3)';
+    ctx.beginPath(); ctx.moveTo(34, 4); ctx.lineTo(34, 32); ctx.stroke();
+
+    const pct = Math.round(level * 100);
+    const label = document.getElementById('mic-level-label');
+    if (label) {
+      label.textContent = `Level: ${pct}% ${level > 0.04 ? '🟢 Signal detected' : '🔴 No signal — speak or check mic'}`;
+      label.style.color = level > 0.04 ? 'var(--chip-green)' : '#e63946';
+    }
+  }
+  draw();
+  panel._stopMeter = () => cancelAnimationFrame(rafId);
+}
+
+function closeMicTest() {
+  const panel = document.getElementById('mic-test-panel');
+  if (panel) {
+    if (panel._stopMeter) panel._stopMeter();
+    panel.remove();
+  }
+  if (_micTestStream) {
+    _micTestStream.getTracks().forEach(t => t.stop());
+    _micTestStream = null;
+    console.log('[MIC TEST] Stream stopped');
+  }
+  if (_micTestCtx) {
+    _micTestCtx.close();
+    _micTestCtx = null;
+  }
+  const btn = document.getElementById('mic-test-btn');
+  if (btn) { btn.textContent = '🎚 Mic'; btn.disabled = false; }
 }
 
 function setSpeakingIndicator(userId, active, username) {
