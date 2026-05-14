@@ -20,6 +20,10 @@ let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
 let straddleCountdown = null;
 
+// Raise limits — updated each time it becomes the player's turn
+let currentMaxRaise = 0;
+let currentMinRaise = 0;
+
 // WebRTC PTT state
 let pttStream = null;
 const pttPeers = new Map();    // userId -> { pc: RTCPeerConnection, pendingIce: [] }
@@ -634,6 +638,7 @@ function updateActionButtons(state) {
   const btnCheck = document.getElementById('btn-check');
   const btnCall = document.getElementById('btn-call');
   const btnRaise = document.getElementById('btn-raise');
+  const btnAllIn = document.getElementById('btn-allin');
   const callAmountEl = document.getElementById('call-amount');
   const raiseSlider = document.getElementById('raise-slider');
   const raiseInput = document.getElementById('raise-input');
@@ -642,13 +647,18 @@ function updateActionButtons(state) {
   btnCheck.disabled = !isMyTurn || !state.canCheck;
   btnCall.disabled = !isMyTurn || state.canCheck;
   btnRaise.disabled = !isMyTurn;
+  if (btnAllIn) btnAllIn.disabled = !isMyTurn;
 
   if (isMyTurn) {
     const callAmt = state.callAmount || 0;
     callAmountEl.textContent = callAmt ? `$${fmt(callAmt)}` : '';
 
     const min = state.minRaiseAmount || 0;
-    const max = state.maxRaiseAmount || 0;
+    const max = state.maxRaiseAmount || 0;  // always = player.chips + player.currentBet
+    currentMinRaise = min;
+    currentMaxRaise = max;
+
+    // Set slider bounds to exact chip stack
     raiseSlider.min = min;
     raiseSlider.max = max;
     raiseSlider.value = min;
@@ -658,9 +668,13 @@ function updateActionButtons(state) {
     updateRaiseDisplay();
 
     if (state.potLimitMax) {
-      // PLO indicator
-      document.getElementById('raise-display').textContent = `up to $${fmt(state.potLimitMax)}`;
+      // PLO: show pot-limit cap but still enforce chip stack
+      document.getElementById('raise-display').textContent = `up to $${fmt(Math.min(state.potLimitMax, max))}`;
     }
+  } else {
+    // Not our turn — reset limits so stale values don't leak into validation
+    currentMinRaise = 0;
+    currentMaxRaise = 0;
   }
 }
 
@@ -677,27 +691,51 @@ function act(action) {
   if (!socket) return;
   let amount = undefined;
   if (action === 'raise') {
-    amount = parseInt(document.getElementById('raise-input').value);
+    amount = parseInt(document.getElementById('raise-input').value) || 0;
     if (!amount) return toast('Enter raise amount', 'error');
+    if (currentMaxRaise > 0 && amount > currentMaxRaise) {
+      return toast(`Maximum raise is $${fmt(currentMaxRaise)}`, 'error');
+    }
+    if (currentMinRaise > 0 && amount < currentMinRaise && amount < currentMaxRaise) {
+      return toast(`Minimum raise is $${fmt(currentMinRaise)}`, 'error');
+    }
   }
   socket.emit('player_action', { tableId, action, amount });
 }
 
+function setAllIn() {
+  if (!currentMaxRaise) return;
+  document.getElementById('raise-input').value = currentMaxRaise;
+  document.getElementById('raise-slider').value = currentMaxRaise;
+  updateRaiseDisplay();
+}
+
 function onRaiseSlider() {
-  const v = document.getElementById('raise-slider').value;
+  const slider = document.getElementById('raise-slider');
+  // Browser already enforces slider min/max — just sync
+  const v = parseInt(slider.value) || 0;
   document.getElementById('raise-input').value = v;
   updateRaiseDisplay();
 }
 
 function onRaiseInput() {
-  const v = document.getElementById('raise-input').value;
+  const input = document.getElementById('raise-input');
+  let v = parseInt(input.value) || 0;
+  // Hard-cap at the player's chip stack
+  if (currentMaxRaise > 0 && v > currentMaxRaise) {
+    v = currentMaxRaise;
+    input.value = v;
+    toast(`Maximum raise is $${fmt(currentMaxRaise)}`, 'error');
+  }
   document.getElementById('raise-slider').value = v;
   updateRaiseDisplay();
 }
 
 function updateRaiseDisplay() {
-  const v = document.getElementById('raise-input').value;
-  document.getElementById('raise-display').textContent = v ? `$${fmt(v)}` : '–';
+  const v = parseInt(document.getElementById('raise-input').value) || 0;
+  const isAllIn = currentMaxRaise > 0 && v >= currentMaxRaise;
+  document.getElementById('raise-display').textContent =
+    isAllIn ? `$${fmt(v)} ALL IN` : (v ? `$${fmt(v)}` : '–');
 }
 
 function requestBreak() {
