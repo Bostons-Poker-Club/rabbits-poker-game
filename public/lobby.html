@@ -221,13 +221,15 @@
 <div class="modal-overlay hidden" id="join-table-modal">
   <div class="modal">
     <h2>Join Table</h2>
+    <p id="join-modal-stakes" style="color:var(--gold);font-size:.9rem;margin:-8px 0 14px;font-weight:700"></p>
     <input type="hidden" id="join-table-id">
     <input type="hidden" id="join-table-bb">
+    <input type="hidden" id="join-table-min">
     <div class="form-group">
       <label>Buy-In Amount (chips)</label>
       <input type="number" id="join-buyin" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
     </div>
-    <p style="color:var(--text-dim);font-size:.85rem;margin-top:6px" id="join-balance-info"></p>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-top:8px;line-height:1.7" id="join-balance-info"></p>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('join-table-modal')">Cancel</button>
       <button class="btn btn-gold" onclick="joinTable()">Join</button>

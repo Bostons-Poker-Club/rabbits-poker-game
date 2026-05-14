@@ -177,14 +177,15 @@ function renderTables(tables) {
       ? `<div style="font-size:.78rem;color:var(--gold);margin-top:4px">🏆 Jackpot: $${fmtChips(jp.amount)}${jp.highHandUsername ? ` — ${esc(jp.highHandUsername)}` : ''}</div>`
       : '';
 
+    const minBuyIn = getMinBuyIn(t.stakes_small_blind, t.stakes_big_blind, t.game_type);
     return `
-    <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_big_blind})">
+    <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_small_blind}, ${t.stakes_big_blind}, '${t.game_type}')">
       <div class="table-card-header">
         <div class="table-name">${esc(t.name)}</div>
         <span class="game-badge">${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</span>
       </div>
       <div class="table-stakes">$${t.stakes_small_blind}/$${t.stakes_big_blind}</div>
-      <div class="table-info">Max Players: ${t.max_players} | Rake: ${t.rake_percent}%</div>
+      <div class="table-info">Max Players: ${t.max_players} | Rake: ${t.rake_percent}% | Min: $${fmtChips(minBuyIn)}</div>
       ${jpLine}
       <div class="player-count">${dots} <span style="margin-left:4px">${seated}/${t.max_players} seated</span></div>
       <button class="btn btn-gold btn-sm btn-full">Join Table →</button>
@@ -290,27 +291,65 @@ function handleJackpotState(state) {
   }
 }
 
+// ─── Buy-In Rules ──────────────────────────────────────────────────────────
+
+function getMinBuyIn(sb, bb, gameType) {
+  sb = Number(sb); bb = Number(bb);
+  if (gameType === 'plo') {
+    if (sb === 2 && bb === 2) return 100;
+    return bb * 50;          // generic PLO fallback
+  }
+  // No Limit Hold'em exact house rules
+  if (sb === 1 && bb === 3)  return 60;
+  if (sb === 2 && bb === 5)  return 200;
+  if (sb === 5 && bb === 5)  return 500;
+  if (sb === 5 && bb === 10) return 500;
+  return bb * 20;             // generic NL fallback
+}
+
 // ─── Join / Create ─────────────────────────────────────────────────────────
 
-function openJoinModal(tableId, bb) {
+function openJoinModal(tableId, sb, bb, gameType) {
   const u = getUser();
-  if (!u.isAdmin && (!u.chips || u.chips <= 0)) {
+  const chips = u.chips || (u.isAdmin ? 100000 : 0);
+  const minBuyIn = getMinBuyIn(sb, bb, gameType);
+
+  if (!u.isAdmin && chips < minBuyIn) {
+    showToast(`Insufficient chips. Minimum buy-in for this table is $${fmtChips(minBuyIn)}. Contact admin to add chips.`, 'error');
+    return;
+  }
+  if (!u.isAdmin && chips <= 0) {
     showToast('You have 0 chips. Contact the admin to receive chips before joining a table.', 'error');
     return;
   }
-  const chips = u.chips || (u.isAdmin ? 100000 : 0);
+
   document.getElementById('join-table-id').value = tableId;
   document.getElementById('join-table-bb').value = bb;
-  document.getElementById('join-buyin').value = bb * 20;
-  document.getElementById('join-buyin').min = bb * 10;
-  document.getElementById('join-buyin').max = chips;
-  document.getElementById('join-balance-info').textContent = `Your balance: ${fmtChips(chips)} chips. Min buy-in: ${fmtChips(bb * 10)}`;
+  document.getElementById('join-table-min').value = minBuyIn;
+
+  const input = document.getElementById('join-buyin');
+  input.value = minBuyIn;
+  input.min = minBuyIn;
+  input.max = chips;
+
+  const gameLabel = gameType === 'plo' ? 'PLO' : "Hold'em";
+  document.getElementById('join-modal-stakes').textContent = `$${sb}/$${bb} ${gameLabel}`;
+  document.getElementById('join-balance-info').innerHTML =
+    `<strong style="color:var(--chip-green)">Min buy-in: $${fmtChips(minBuyIn)}</strong> &nbsp;·&nbsp; Your balance: $${fmtChips(chips)} &nbsp;·&nbsp; Max: $${fmtChips(chips)}`;
+
   openModal('join-table-modal');
 }
 
 function joinTable() {
   const tableId = document.getElementById('join-table-id').value;
   const buyIn = parseInt(document.getElementById('join-buyin').value);
+  const minBuyIn = parseInt(document.getElementById('join-table-min').value) || 0;
+
+  if (minBuyIn && buyIn < minBuyIn) {
+    showToast(`Minimum buy-in for this table is $${fmtChips(minBuyIn)}`, 'error');
+    document.getElementById('join-buyin').value = minBuyIn;
+    return;
+  }
   window.location.href = `/table.html?tableId=${tableId}&buyIn=${buyIn}`;
 }
 

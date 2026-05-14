@@ -21,6 +21,20 @@ function getRakeConfig(bigBlind) {
   return { rakePercent: 4, rakeCap: 20 };  // $10/$20+
 }
 
+// Minimum buy-in per table stakes — must mirror the client-side version in lobby.js
+function getMinBuyIn(sb, bb, gameType) {
+  sb = Number(sb); bb = Number(bb);
+  if (gameType === 'plo') {
+    if (sb === 2 && bb === 2) return 100;
+    return bb * 50;
+  }
+  if (sb === 1 && bb === 3)  return 60;
+  if (sb === 2 && bb === 5)  return 200;
+  if (sb === 5 && bb === 5)  return 500;
+  if (sb === 5 && bb === 10) return 500;
+  return bb * 20;
+}
+
 // In-memory state
 const activeGames = new Map();       // tableId -> PokerGame
 const activeTournaments = new Map(); // tournamentId -> Tournament
@@ -285,8 +299,18 @@ function setupSocketHandlers(io) {
           return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
         }
 
-        const chips = buyInChips || table.stakes_big_blind * 20;
-        if (user.chips < chips) return socket.emit('error', { message: 'Insufficient chips' });
+        const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
+        const chips = Math.max(buyInChips || minBuyIn, minBuyIn);
+
+        if (!isLocalAdmin && user.chips < minBuyIn) {
+          return socket.emit('error', { message: `Insufficient chips. Minimum buy-in for this table is $${minBuyIn}. Contact admin to add chips.` });
+        }
+        if (!isLocalAdmin && user.chips < chips) {
+          return socket.emit('error', { message: `Insufficient chips. You need $${chips} to join with that buy-in.` });
+        }
+        if (!isLocalAdmin && chips < minBuyIn) {
+          return socket.emit('error', { message: `Minimum buy-in for this table is $${minBuyIn}.` });
+        }
 
         // Deduct chips from bank (only if user exists in DB)
         if (dbUser) {
