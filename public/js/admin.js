@@ -1268,7 +1268,8 @@ function renderBuyInRequests(requests) {
   el.innerHTML = requests.map(r => `
     <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
       <div>
-        <div style="font-weight:700;font-size:1rem;color:var(--text)">${esc(r.username)}</div>
+        <div style="font-weight:700;font-size:1rem;color:var(--text)">${esc(r.username)}${r.nickname ? ` <span style="color:var(--text-dim);font-weight:400;font-size:.88rem">(${esc(r.nickname)})</span>` : ''}</div>
+        ${r.phone ? `<div style="color:var(--text-dim);font-size:.8rem">📱 ${esc(r.phone)}</div>` : ''}
         <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
         <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
         <div style="color:var(--text-dim);font-size:.75rem">${new Date(r.requestedAt).toLocaleTimeString()}</div>
@@ -1290,7 +1291,8 @@ function prependBuyInRow(r) {
   div.style.cssText = 'background:rgba(0,200,80,.08);border:1px solid rgba(0,200,80,.3);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px';
   div.innerHTML = `
     <div>
-      <div style="font-weight:700;font-size:1rem;color:var(--chip-green)">🆕 ${esc(r.username)}</div>
+      <div style="font-weight:700;font-size:1rem;color:var(--chip-green)">🆕 ${esc(r.username)}${r.nickname ? ` <span style="color:var(--text-dim);font-weight:400;font-size:.88rem">(${esc(r.nickname)})</span>` : ''}</div>
+      ${r.phone ? `<div style="color:var(--text-dim);font-size:.8rem">📱 ${esc(r.phone)}</div>` : ''}
       <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
       <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
     </div>

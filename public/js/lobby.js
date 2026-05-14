@@ -321,11 +321,11 @@ function openJoinModal(tableId, sb, bb, gameType) {
   const minBuyIn = getMinBuyIn(sb, bb, gameType);
 
   if (!u.isAdmin && chips < minBuyIn) {
-    showToast(`Insufficient chips. Minimum buy-in for this table is $${fmtChips(minBuyIn)}. Contact admin to add chips.`, 'error');
+    _openBuyInFromTable(minBuyIn, chips);
     return;
   }
   if (!u.isAdmin && chips <= 0) {
-    showToast('You have 0 chips. Contact the admin to receive chips before joining a table.', 'error');
+    _openBuyInFromTable(minBuyIn, 0);
     return;
   }
 
@@ -472,6 +472,21 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 // ─── Buy-In Request ────────────────────────────────────────────────────────
 
 function openBuyInModal() {
+  const ctx = document.getElementById('bi-table-context');
+  if (ctx) ctx.style.display = 'none';
+  openModal('buyin-request-modal');
+}
+
+function _openBuyInFromTable(minBuyIn, currentChips) {
+  const ctx = document.getElementById('bi-table-context');
+  if (ctx) {
+    const need = minBuyIn - Math.max(currentChips, 0);
+    ctx.innerHTML = currentChips <= 0
+      ? `You have <strong style="color:var(--red)">0 chips</strong>. Request a buy-in below and Roger will add chips right away.`
+      : `You need <strong style="color:var(--gold)">$${fmtChips(need)}</strong> more chips to join this table &mdash; min buy-in is <strong>$${fmtChips(minBuyIn)}</strong>, you have <strong>$${fmtChips(currentChips)}</strong>.`;
+    ctx.style.display = '';
+  }
+  document.getElementById('bi-amount').value = minBuyIn;
   openModal('buyin-request-modal');
 }
 
@@ -483,9 +498,11 @@ async function submitBuyInRequest() {
   try {
     await apiFetch('/api/buyin-request', { method: 'POST', body: { amount, paymentMethod, notes } });
     closeModal('buyin-request-modal');
-    showToast('✅ Buy-in request sent! Admin will add your chips shortly.');
+    showToast('✅ Request sent! Roger will add your chips shortly.');
     document.getElementById('bi-amount').value = '200';
     document.getElementById('bi-notes').value = '';
+    const ctx = document.getElementById('bi-table-context');
+    if (ctx) ctx.style.display = 'none';
   } catch (e) {
     showToast(e.message || 'Failed to send request', 'error');
   }

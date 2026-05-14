@@ -865,11 +865,22 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
   const { amount, paymentMethod, notes } = req.body;
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount required' });
 
+  // Fetch nickname + phone so admin sees full player details
+  let nickname = '', phone = '';
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('users').select('nickname, phone').eq('id', req.user.id).single();
+    nickname = profile?.nickname || '';
+    phone = profile?.phone || '';
+  } catch {}
+
   const req_id = ++buyInSeq;
   const request = {
     id: req_id,
     userId: req.user.id,
     username: req.user.username,
+    nickname,
+    phone,
     amount: parseInt(amount),
     paymentMethod: String(paymentMethod || 'Cash').slice(0, 50),
     notes: String(notes || '').slice(0, 200),
@@ -887,34 +898,35 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
         io.to(sid).emit('admin:buyin_request', request);
       }
     }
-    // Also push as admin notification
     io.emit('admin:notification_buyin', request);
   }
 
   // Send email + SMS to admin
   try {
     const { sendAdminEmail } = require('../mail');
-    const subject = `💰 Buy-In Request — ${req.user.username} ($${amount})`;
+    const displayName = nickname ? `${req.user.username} (${nickname})` : req.user.username;
+    const subject = `💰 Buy-In Request — ${displayName} $${amount} chips`;
     const html = `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2 style="color:#1a7a3f">💰 Buy-In Request — RabbsRoom</h2>
         <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
-          <tr><td style="padding:8px 14px;color:#555;width:140px">Player</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
+          <tr><td style="padding:8px 14px;color:#555;width:140px">Username</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
+          ${nickname ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Nickname</td><td style="padding:8px 14px">${nickname}</td></tr>` : ''}
+          ${phone ? `<tr><td style="padding:8px 14px;color:#555">Phone</td><td style="padding:8px 14px">${phone}</td></tr>` : ''}
           <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem">$${amount} chips</td></tr>
           <tr><td style="padding:8px 14px;color:#555">Payment</td><td style="padding:8px 14px">${request.paymentMethod}</td></tr>
           ${notes ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Notes</td><td style="padding:8px 14px">${notes}</td></tr>` : ''}
         </table>
         <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>
       </div>`;
-    const text = `Buy-In Request: ${req.user.username} wants $${amount} chips via ${request.paymentMethod}${notes ? '. Notes: ' + notes : ''}. Approve at rabbsroom.com/admin.html`;
+    const text = `Buy-In: ${displayName}${phone ? ' ' + phone : ''} wants $${amount} chips via ${request.paymentMethod}${notes ? '. ' + notes : ''}. Approve: rabbsroom.com/admin.html`;
     await sendAdminEmail({ subject, text, html });
-    // SMS via Verizon email gateway (SendGrid)
     if (process.env.SENDGRID_API_KEY) {
       const sgMail = require('@sendgrid/mail');
       sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: `Buy-In: ${req.user.username} $${amount}`, text }).catch(() => {});
+      await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: `Buy-In: ${displayName} $${amount}`, text }).catch(() => {});
     }
-    console.log(`[buyin] Notification sent for ${req.user.username} $${amount}`);
+    console.log(`[buyin] Notification sent for ${displayName} $${amount}`);
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);
   }
