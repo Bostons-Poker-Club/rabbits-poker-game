@@ -90,4 +90,29 @@ async function sendAdminEmail({ subject, text, html }) {
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail };
+async function sendPlayerEmail({ to, subject, text, html }) {
+  if (!isConfigured() || !to) return;
+  try {
+    await sgMail.send({ from: FROM, to, subject, text, html });
+    console.log(`[mail] Player email sent to ${to}: ${subject}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send player email:', e.message);
+  }
+}
+
+// Send SMS via carrier email gateway. phone is a 10-digit string.
+// Supports Verizon — uses the vtext.com gateway as default.
+async function sendPlayerSMS({ phone, text }) {
+  if (!isConfigured() || !phone) return;
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length !== 10) return;
+  const smsTo = `${digits}@vtext.com`;
+  try {
+    await sgMail.send({ from: FROM, to: smsTo, subject: 'RabbsRoom', text });
+    console.log(`[mail] SMS sent to ${digits}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send SMS:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS };

@@ -61,7 +61,13 @@ let lobbySocket = null;
 if (typeof io !== 'undefined') {
   lobbySocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
   window.lobbySocket = lobbySocket; // expose globally for inline scripts
-  lobbySocket.on('connect', () => lobbySocket.emit('lobby:join'));
+  lobbySocket.on('connect', () => {
+    document.getElementById('reconnecting-banner').style.display = 'none';
+    lobbySocket.emit('lobby:join');
+  });
+  lobbySocket.on('disconnect', () => {
+    document.getElementById('reconnecting-banner').style.display = 'block';
+  });
 
   // Admin-only events
   if (user.isAdmin) {

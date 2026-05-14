@@ -35,25 +35,31 @@
 
     <!-- Register Form -->
     <div id="form-register" style="display:none">
-      <div class="form-group">
-        <label>Full Name <span style="color:var(--text-dim)">(real name)</span></label>
-        <input type="text" id="reg-fullname" placeholder="John Smith" maxlength="80" autocomplete="name">
+      <div style="display:flex;gap:10px">
+        <div class="form-group" style="flex:1">
+          <label>First Name <span style="color:var(--gold)">*</span><br><span style="color:var(--text-dim);font-size:.7rem;font-weight:400">as on government ID</span></label>
+          <input type="text" id="reg-firstname" placeholder="John" maxlength="40" autocomplete="given-name">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>Last Name <span style="color:var(--gold)">*</span><br><span style="color:var(--text-dim);font-size:.7rem;font-weight:400">as on government ID</span></label>
+          <input type="text" id="reg-lastname" placeholder="Smith" maxlength="40" autocomplete="family-name">
+        </div>
       </div>
       <div class="form-group">
-        <label>Nickname <span style="color:var(--gold)">*</span></label>
-        <input type="text" id="reg-nickname" placeholder="Table nickname (e.g. Maverick)" maxlength="40">
+        <label>Nickname <span style="color:var(--gold)">*</span> <span style="color:var(--text-dim);font-size:.75rem;font-weight:400">— shown at the table</span></label>
+        <input type="text" id="reg-nickname" placeholder="Maverick" maxlength="40">
       </div>
       <div class="form-group">
         <label>Username <span style="color:var(--gold)">*</span></label>
         <input type="text" id="reg-username" placeholder="Login username" maxlength="30" autocomplete="username">
       </div>
       <div class="form-group">
-        <label>Email <span style="color:var(--gold)">*</span></label>
+        <label>Email <span style="color:var(--gold)">*</span> <span style="color:var(--text-dim);font-size:.75rem;font-weight:400">— for alerts</span></label>
         <input type="email" id="reg-email" placeholder="your@email.com" autocomplete="email">
       </div>
       <div class="form-group">
-        <label>Phone Number</label>
-        <input type="tel" id="reg-phone" placeholder="(617) 555-0100" maxlength="20" autocomplete="tel">
+        <label>Phone <span style="color:var(--gold)">*</span> <span style="color:var(--text-dim);font-size:.75rem;font-weight:400">— 10-digit US number for SMS</span></label>
+        <input type="tel" id="reg-phone" placeholder="6175550100" maxlength="20" autocomplete="tel">
       </div>
       <div class="form-group">
         <label>Password <span style="color:var(--gold)">*</span></label>
@@ -61,7 +67,7 @@
       </div>
       <button class="btn btn-gold btn-full" onclick="doRegister()">Create Account</button>
       <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:12px">
-        You start with 0 chips — contact admin to receive chips before playing.
+        You start with 0 chips — admin will add chips after verifying your identity.
       </p>
       <div id="reg-error" class="error-msg"></div>
       <div id="reg-success" class="success-msg"></div>
@@ -95,18 +101,28 @@
   }
 
   async function doRegister() {
-    const username = document.getElementById('reg-username').value.trim();
-    const email    = document.getElementById('reg-email').value.trim();
-    const password = document.getElementById('reg-password').value;
-    const nickname = document.getElementById('reg-nickname').value.trim();
-    const phone    = document.getElementById('reg-phone').value.trim();
+    const firstName = document.getElementById('reg-firstname').value.trim();
+    const lastName  = document.getElementById('reg-lastname').value.trim();
+    const nickname  = document.getElementById('reg-nickname').value.trim();
+    const username  = document.getElementById('reg-username').value.trim();
+    const email     = document.getElementById('reg-email').value.trim();
+    const phone     = document.getElementById('reg-phone').value.trim();
+    const password  = document.getElementById('reg-password').value;
     const errEl = document.getElementById('reg-error');
     const okEl  = document.getElementById('reg-success');
     errEl.textContent = '';
     okEl.textContent  = '';
-    if (!nickname) { errEl.textContent = 'Nickname is required'; return; }
+    if (!firstName) { errEl.textContent = 'Legal First Name is required'; return; }
+    if (!lastName)  { errEl.textContent = 'Legal Last Name is required'; return; }
+    if (!nickname)  { errEl.textContent = 'Nickname is required'; return; }
+    if (!username)  { errEl.textContent = 'Username is required'; return; }
+    if (!email)     { errEl.textContent = 'Email is required'; return; }
+    if (!phone)     { errEl.textContent = 'Phone number is required for SMS alerts'; return; }
+    if (!password)  { errEl.textContent = 'Password is required'; return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address'; return; }
+    if (phone.replace(/\D/g, '').length !== 10) { errEl.textContent = 'Please enter a valid 10-digit US phone number'; return; }
+    const full_name = `${firstName} ${lastName}`;
     try {
-      const full_name = document.getElementById('reg-fullname').value.trim();
       await register(username, email, password, nickname, phone, full_name);
       window.location.href = '/lobby.html';
     } catch (e) {

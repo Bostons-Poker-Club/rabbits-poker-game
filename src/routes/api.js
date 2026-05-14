@@ -935,7 +935,7 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
   if (request.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
 
   // Add chips to player
-  const { data: user, error: fetchErr } = await supabaseAdmin.from('users').select('chips').eq('id', request.userId).single();
+  const { data: user, error: fetchErr } = await supabaseAdmin.from('users').select('chips, email, phone').eq('id', request.userId).single();
   if (fetchErr || !user) return res.status(404).json({ error: 'Player not found' });
   const newChips = (user.chips || 0) + request.amount;
   const { error: updateErr } = await supabaseAdmin.from('users').update({ chips: newChips }).eq('id', request.userId);
@@ -953,6 +953,18 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
         s.emit('chips_received', { amount: request.amount, from: 'Admin', newTotal: newChips });
       }
     }
+  }
+
+  // Notify player via email + SMS
+  try {
+    const { sendPlayerEmail, sendPlayerSMS } = require('../mail');
+    const subject = `✅ Buy-In Approved — $${request.amount.toLocaleString()} chips added`;
+    const text = `Hi ${request.username},\n\nYour buy-in of $${request.amount.toLocaleString()} chips has been approved and added to your account.\n\nNew balance: $${newChips.toLocaleString()} chips.\n\nGood luck at the tables!\n— RabbsRoom`;
+    const html = `<p>Hi <strong>${request.username}</strong>,</p><p>Your buy-in of <strong>$${request.amount.toLocaleString()}</strong> chips has been approved and added to your account.</p><p>New balance: <strong>$${newChips.toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— RabbsRoom</p>`;
+    if (user.email) await sendPlayerEmail({ to: user.email, subject, text, html });
+    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `RabbsRoom: Buy-in approved! $${request.amount.toLocaleString()} chips added. New balance: $${newChips.toLocaleString()} chips.` });
+  } catch (e) {
+    console.warn('[buyin] Player notification error:', e.message);
   }
 
   console.log(`[buyin] Approved: ${request.username} +$${request.amount} chips (now ${newChips})`);

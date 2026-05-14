@@ -807,12 +807,16 @@ input, select, textarea { font-family: inherit; }
   to   { box-shadow: 0 0 18px rgba(230,57,70,1); }
 }
 
-/* Speaking indicator shown inside seat box */
-.ptt-speaking {
-  display: inline-block;
-  font-size: 0.7em;
-  margin-left: 4px;
-  animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+/* Green ring on seat box when player is speaking */
+.seat-box.ptt-speaking {
+  outline: 3px solid #00e676;
+  outline-offset: 2px;
+  box-shadow: 0 0 10px rgba(0, 230, 118, 0.7), 0 0 20px rgba(0, 230, 118, 0.3);
+  animation: ptt-ring-pulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes ptt-ring-pulse {
+  from { box-shadow: 0 0 6px rgba(0,230,118,0.5); outline-color: #00e676; }
+  to   { box-shadow: 0 0 18px rgba(0,230,118,0.9), 0 0 30px rgba(0,230,118,0.4); outline-color: #69f0ae; }
 }
 
 /* ─── Custom Card Back (RabbsRoom themed) ────────────────────────────────── */
@@ -986,12 +990,8 @@ input, select, textarea { font-family: inherit; }
   from { box-shadow: 0 0 0 0 rgba(230,57,70,.7); }
   to   { box-shadow: 0 0 0 10px rgba(230,57,70,0); }
 }
-.ptt-speaking {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  background: var(--red);
-  border-radius: 50%;
-  margin-left: 3px;
-  animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+.seat-box.ptt-speaking {
+  outline: 3px solid #00e676 !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 14px rgba(0,230,118,0.8) !important;
 }

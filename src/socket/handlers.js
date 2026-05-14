@@ -243,6 +243,7 @@ function setupSocketHandlers(io) {
             socket.currentTableId = tableId;
             socket.emit('joined_table', {
               tableId,
+              tableName: existingGame.tableName || tableId,
               seatNumber: existingPlayer.seatNumber,
               chips: existingPlayer.chips
             });
@@ -386,7 +387,7 @@ function setupSocketHandlers(io) {
         socket.join(tableId);
         socket.currentTableId = tableId;
 
-        socket.emit('joined_table', { tableId, seatNumber: finalSeat, chips });
+        socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips });
         broadcastGameState(io, tableId, game);
         // Send current puck state to joining player
         broadcastPuckState(io, tableId);
@@ -458,10 +459,11 @@ function setupSocketHandlers(io) {
 
     // ─── WebRTC PTT ───────────────────────────────────────────────────────
 
-    socket.on('ptt:join', () => {
+    // Player joins the PTT mesh: send them the peer list, tell others about them
+    socket.on('ptt:mesh_join', () => {
       const tId = socket.currentTableId;
       if (!tId) {
-        console.log(`[PTT] ${username} sent ptt:join but has no currentTableId — ignoring`);
+        console.log(`[PTT] ${username} ptt:mesh_join but no currentTableId — ignoring`);
         return;
       }
       const sids = io.sockets.adapter.rooms.get(tId) || new Set();
@@ -472,24 +474,32 @@ function setupSocketHandlers(io) {
           peers.push({ userId: peer.userId, username: peer.username });
         }
       }
-      console.log(`[PTT] ${username} joined as speaker on table ${tId} — ${peers.length} peer(s) in room:`, peers.map(p => p.username));
-      socket.emit('ptt:peers', { peers });
-      socket.to(tId).emit('ptt:speaker_active', { userId, username });
+      // Joiner creates offers to all existing peers
+      socket.emit('ptt:mesh_peers', { peers });
+      // Tell existing peers about the new joiner (they wait for offers from them)
+      socket.to(tId).emit('ptt:new_peer', { userId, username });
+      console.log(`[PTT] ${username} joined mesh on ${tId} — ${peers.length} existing peer(s)`);
     });
 
+    // Relay WebRTC signaling (offer / answer / ICE)
     socket.on('ptt:signal', ({ targetUserId, signal }) => {
       const targetSid = userSockets.get(targetUserId);
       if (targetSid) {
-        console.log(`[PTT] signal relay: ${username} → ${targetUserId} (type=${signal.type}) via socket ${targetSid}`);
         io.to(targetSid).emit('ptt:signal', { fromUserId: userId, signal });
       } else {
-        console.warn(`[PTT] signal relay FAILED: no socket found for targetUserId=${targetUserId} (type=${signal.type})`);
+        console.warn(`[PTT] signal relay failed: no socket for targetUserId=${targetUserId} type=${signal.type}`);
       }
     });
 
-    socket.on('ptt:stop', () => {
+    // Player unmuted (actively talking)
+    socket.on('ptt:talking', () => {
       const tId = socket.currentTableId;
-      console.log(`[PTT] ${username} stopped talking on table ${tId}`);
+      if (tId) socket.to(tId).emit('ptt:speaker_active', { userId, username });
+    });
+
+    // Player muted (released PTT)
+    socket.on('ptt:silent', () => {
+      const tId = socket.currentTableId;
       if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
     });
 

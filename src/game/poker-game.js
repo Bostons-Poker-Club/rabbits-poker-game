@@ -769,6 +769,7 @@ class PokerGame {
 
     return {
       tableId: this.tableId,
+      tableName: this.tableName || this.tableId,
       gameType: this.gameType,
       smallBlind: this.smallBlind,
       bigBlind: this.bigBlind,
