@@ -294,6 +294,8 @@ function handleJackpotState(state) {
     const sec = Math.floor((min30 % 60000) / 1000);
     document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
   }
+  // Re-render table cards so per-table jackpot lines stay current
+  if (allTables && allTables.length) renderTables(allTables);
 }
 
 // ─── Buy-In Rules ──────────────────────────────────────────────────────────

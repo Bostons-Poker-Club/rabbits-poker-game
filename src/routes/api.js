@@ -436,40 +436,28 @@ router.post('/jackpot/high-hand', authMiddleware, adminMiddleware, async (req, r
 // Admin: award jackpot for a specific table
 router.post('/jackpot/award', authMiddleware, adminMiddleware, async (req, res) => {
   const { tableId } = req.body || {};
+  if (!tableId) return res.status(400).json({ error: 'tableId required' });
   try {
-    const { tableJackpots } = require('../socket/handlers');
+    const { tableJackpots, pendingJackpotPayouts, awardTableJackpot } = require('../socket/handlers');
     const io = req.app.get('io');
+    if (!io) return res.status(500).json({ error: 'io not available' });
 
-    if (tableId) {
-      const jp = tableJackpots.get(tableId);
-      if (!jp || jp.amount === 0) return res.status(400).json({ error: 'No jackpot to award for this table' });
-      const awarded = jp.amount;
-      const awardedTo = jp.highHandUserId;
-      // Credit chips
-      if (awardedTo) {
-        try {
-          const { data } = await supabaseAdmin.from('users').select('chips').eq('id', awardedTo).single();
-          if (data) await supabaseAdmin.from('users').update({ chips: data.chips + awarded }).eq('id', awardedTo);
-        } catch {}
-        if (io) {
-          for (const [, s] of io.sockets.sockets) {
-            if (s.user && s.user.id === awardedTo) {
-              s.emit('jackpot_won', { amount: awarded, message: `🏆 You won the High Hand Jackpot: $${awarded}!` });
-            }
-          }
-          io.emit('jackpot_awarded', { amount: awarded, winnerId: awardedTo, tableId });
-        }
-      }
-      jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
-      jp.highHandUsername = null; jp.highHandDescription = null; jp.timerStart = Date.now();
-      if (io) {
-        const INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
-        const tables = Array.from(tableJackpots.entries()).map(([tid, j]) => ({ tableId: tid, tableName: j.tableName, amount: j.amount, highHandRank: j.highHandRank, highHandUsername: j.highHandUsername, highHandDescription: j.highHandDescription, timerRemainingMs: Math.max(0, INTERVAL_MS - (Date.now() - j.timerStart)) }));
-        io.emit('jackpot_state', { tables, total: tables.reduce((s, t) => s + t.amount, 0), amount: tables.reduce((s, t) => s + t.amount, 0) });
-      }
-      return res.json({ success: true, awarded, awardedTo });
+    // Check pending payout (from expired timer) first
+    const pending = pendingJackpotPayouts.get(tableId);
+    if (pending) {
+      const { amount, userId, username, hand, tableName } = pending;
+      await awardTableJackpot(io, tableId, amount, userId, username, hand, tableName);
+      return res.json({ success: true, awarded: amount, awardedTo: userId });
     }
-    res.status(400).json({ error: 'tableId required' });
+
+    // Check live jackpot
+    const jp = tableJackpots.get(tableId);
+    if (!jp || jp.amount === 0) return res.status(400).json({ error: 'No jackpot to award for this table' });
+    const { amount: awarded, highHandUserId: awardedTo, highHandUsername: wName, highHandDescription: wHand, tableName: tName } = jp;
+    jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
+    jp.highHandUsername = null; jp.highHandDescription = null; jp.timerStart = Date.now();
+    await awardTableJackpot(io, tableId, awarded, awardedTo, wName, wHand, tName);
+    return res.json({ success: true, awarded, awardedTo });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

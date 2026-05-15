@@ -71,6 +71,9 @@ let tableRequestSeq = 0;
 // Ban enforcement — populated from DB on startup, updated on ban/unban
 const bannedUsers = new Set();
 
+// Jackpot payouts pending admin confirmation after timer expiry
+const pendingJackpotPayouts = new Map(); // tableId -> { amount, userId, username, hand, expiredAt }
+
 // Broadcast messages history + offline queue
 const broadcastMessages = [];
 let broadcastMsgSeq = 0;
@@ -446,7 +449,7 @@ function setupSocketHandlers(io) {
             maxPlayers: table.max_players,
             rakePercent,
             rakeCap,
-            jackpotContributionPercent: JACKPOT_CONTRIB,
+            jackpotFlatContrib: JACKPOT_CONTRIB,
             shotClockSeconds: SHOT_CLOCK
           });
           game.tableName = table.name || tableId;
@@ -1180,17 +1183,17 @@ function setupSocketHandlers(io) {
       socket.emit('player:reply_ack', { ok: true });
     });
 
-    // Admin: manually set high hand for a specific table
+    // Admin or host: manually set high hand for a table
     socket.on('jackpot:set_high_hand', ({ tableId: tId, description, holderName, handRank }) => {
-      if (!isAdmin) return;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Admin or host required' });
       const jp = tId ? getOrCreateTableJackpot(tId, activeGames.get(tId)?.tableName) : null;
       if (!jp) return socket.emit('error', { message: 'Table not found' });
       jp.highHandDescription = description || jp.highHandDescription;
       jp.highHandUsername = holderName || jp.highHandUsername;
-      if (handRank !== undefined && handRank > jp.highHandRank) jp.highHandRank = handRank;
-      jp.timerStart = Date.now(); // reset timer on new high hand
+      if (handRank !== undefined && Number(handRank) > jp.highHandRank) jp.highHandRank = Number(handRank);
+      jp.timerStart = Date.now();
       broadcastJackpotState(io);
-      console.log(`[jackpot] Admin set high hand at ${jp.tableName}: ${description} by ${holderName}`);
+      console.log(`[jackpot] ${username} set high hand at ${jp.tableName}: ${description} by ${holderName}`);
     });
 
     // Admin: get full jackpot state for all tables
@@ -1267,17 +1270,21 @@ function setupSocketHandlers(io) {
           break;
         }
         case 'award_jackpot': {
-          // payload: { tableId, amount, userId }
           const awardTableId = tableId || data.tableId;
+          // Check pending payout first (set by expiry), then live jackpot
+          const pending = pendingJackpotPayouts.get(awardTableId);
           const jp = awardTableId ? tableJackpots.get(awardTableId) : null;
-          if (jp) {
-            const awardAmt = jp.amount;
-            const awardUid = jp.highHandUserId;
+          if (pending) {
+            const { amount: pAmt, userId: pUid, username: pName, hand: pHand, tableName: pTable } = pending;
+            jp && (jp.amount = 0, jp.highHandRank = -1, jp.highHandUserId = null, jp.highHandUsername = null, jp.highHandDescription = null);
+            await awardTableJackpot(io, awardTableId, pAmt, pUid, pName, pHand, pTable);
+          } else if (jp && jp.amount > 0) {
+            const awardAmt = jp.amount; const awardUid = jp.highHandUserId;
+            const awardName = jp.highHandUsername; const awardHand = jp.highHandDescription;
+            const awardTable = jp.tableName;
             jp.amount = 0; jp.highHandRank = -1; jp.highHandUserId = null;
-            jp.highHandUsername = null; jp.highHandDescription = null;
-            jp.timerStart = Date.now();
-            if (awardUid) await awardTableJackpot(io, awardTableId, awardAmt, awardUid);
-            broadcastJackpotState(io);
+            jp.highHandUsername = null; jp.highHandDescription = null; jp.timerStart = Date.now();
+            await awardTableJackpot(io, awardTableId, awardAmt, awardUid, awardName, awardHand, awardTable);
           }
           break;
         }
@@ -1681,22 +1688,36 @@ function startJackpotTimer(io) {
 async function expireTableJackpot(io, tableId, jp) {
   const tableName = jp.tableName;
   const awarded = jp.amount;
-  const winner = jp.highHandUserId;
+  const winnerUserId = jp.highHandUserId;
   const winnerName = jp.highHandUsername || 'Unknown';
-  const winnerHand = jp.highHandDescription || `Rank ${jp.highHandRank}`;
+  const winnerHand = jp.highHandDescription || (jp.highHandRank >= 0 ? `Rank ${jp.highHandRank}` : 'No high hand');
 
-  console.log(`[jackpot] Timer expired for table ${tableName} — $${awarded} to ${winnerName} (${winnerHand})`);
+  console.log(`[jackpot] Timer expired for table ${tableName} — $${awarded} pending, winner: ${winnerName} (${winnerHand})`);
 
-  // Notify admin via socket
+  // Store pending payout BEFORE resetting so admin can confirm
+  if (awarded > 0) {
+    pendingJackpotPayouts.set(tableId, {
+      amount: awarded, userId: winnerUserId, username: winnerName, hand: winnerHand,
+      tableName, expiredAt: Date.now()
+    });
+  }
+
+  // Reset timer and jackpot immediately — new 30-min window starts now
+  jp.amount = 0;
+  jp.highHandRank = -1;
+  jp.highHandUserId = null;
+  jp.highHandUsername = null;
+  jp.highHandDescription = null;
+  jp.timerStart = Date.now();
+
   const summary = {
-    tableId, tableName, awarded, winner, winnerName, winnerHand,
-    pendingConfirm: true
+    tableId, tableName, awarded, winnerUserId, winnerName, winnerHand, pendingConfirm: true
   };
+
+  // Notify admins via socket
   for (const sid of getAdminSockets(io)) {
     io.to(sid).emit('jackpot:expired', summary);
   }
-
-  // Push admin notification
   pushAdminNotif(io, {
     type: 'jackpot_expired',
     title: `🏆 Jackpot Expired — ${tableName}`,
@@ -1704,55 +1725,53 @@ async function expireTableJackpot(io, tableId, jp) {
     data: summary
   });
 
-  // Send email to admin
+  // SMS alert to admin phone
   try {
-    const { sendAdminEmail } = require('../mail');
-    await sendAdminEmail({
-      subject: `🏆 High Hand Jackpot Expired — ${tableName}`,
-      text: `High Hand Jackpot expired at ${tableName}. Winner: ${winnerName} (${winnerHand}) — $${awarded} to award. Log in to admin panel to confirm payout.`,
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-          <h2 style="color:#c8a800">🏆 High Hand Jackpot — ${tableName}</h2>
-          <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
-            <tr><td style="padding:8px 14px;color:#555;width:140px">Table</td><td style="padding:8px 14px;font-weight:700">${tableName}</td></tr>
-            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${winnerName}</td></tr>
-            <tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${winnerHand}</td></tr>
-            <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;font-size:1.2rem;color:#c8a800">$${awarded}</td></tr>
-          </table>
-          <p style="margin-top:20px;color:#666">Log in to the <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> to confirm payout.</p>
-        </div>`
-    });
+    const { sendPlayerSMS } = require('../mail');
+    const smsText = `Boston Poker Club: High Hand expired at ${tableName}. Winner: ${winnerName} — ${winnerHand}. Payout: $${awarded}. Log in to confirm.`;
+    await sendPlayerSMS({ phone: '5085219176', text: smsText });
   } catch (e) {
-    console.warn('[jackpot] Failed to send expiry email:', e.message);
+    console.warn('[jackpot] Failed to send expiry SMS:', e.message);
   }
-
-  // Reset this table's jackpot (admin still confirms payout manually)
-  jp.amount = 0;
-  jp.highHandRank = -1;
-  jp.highHandUserId = null;
-  jp.highHandUsername = null;
-  jp.highHandDescription = null;
-  jp.timerStart = Date.now();
 }
 
-async function awardTableJackpot(io, tableId, amount, awardedTo) {
-  if (!awardedTo || !amount) return;
-  try {
-    await supabaseAdmin.rpc('increment_chips', { user_id: awardedTo, amount });
-  } catch (_) {
+async function awardTableJackpot(io, tableId, amount, awardedTo, winnerName, winnerHand, tableName) {
+  if (!amount) return;
+
+  if (awardedTo) {
     try {
-      const { data } = await supabaseAdmin.from('users').select('chips').eq('id', awardedTo).single();
-      if (data) await supabaseAdmin.from('users').update({ chips: data.chips + amount }).eq('id', awardedTo);
-    } catch (_) {}
-  }
-  // Notify winner
-  for (const [, s] of io.sockets.sockets) {
-    if (s.user && s.user.id === awardedTo) {
-      s.emit('jackpot_won', { amount, message: `🏆 You won the High Hand Jackpot: $${amount}!` });
+      await supabaseAdmin.rpc('increment_chips', { user_id: awardedTo, amount });
+    } catch (_) {
+      try {
+        const { data } = await supabaseAdmin.from('users').select('chips').eq('id', awardedTo).single();
+        if (data) await supabaseAdmin.from('users').update({ chips: data.chips + amount }).eq('id', awardedTo);
+      } catch (_) {}
+    }
+    for (const [, s] of io.sockets.sockets) {
+      if (s.user && s.user.id === awardedTo) {
+        s.emit('jackpot_won', { amount, message: `You won the High Hand Jackpot: $${amount}!` });
+      }
     }
   }
+
   io.emit('jackpot_awarded', { amount, winnerId: awardedTo, tableId });
   broadcastJackpotState(io);
+  pendingJackpotPayouts.delete(tableId);
+
+  const tName = tableName || tableJackpots.get(tableId)?.tableName || 'Table';
+  const wName = winnerName || 'Unknown';
+  const wHand = winnerHand || 'High Hand';
+  try {
+    const { sendAdminEmail, sendPlayerSMS } = require('../mail');
+    await sendAdminEmail({
+      subject: `Jackpot Paid — ${tName}: $${amount} to ${wName}`,
+      text: `High Hand Jackpot paid at ${tName}.\nWinner: ${wName} — ${wHand}\nAmount: $${amount}`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto"><h2 style="color:#1a7a3f">Jackpot Paid — ${tName}</h2><table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px"><tr><td style="padding:8px 14px;color:#555">Table</td><td style="padding:8px 14px;font-weight:700">${tName}</td></tr><tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${wName}</td></tr><tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${wHand}</td></tr><tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;color:#c8a800">$${amount}</td></tr></table></div>`
+    });
+    await sendPlayerSMS({ phone: '5085219176', text: `Boston Poker Club: Jackpot paid $${amount} to ${wName} (${wHand}) at ${tName}.` });
+  } catch (e) {
+    console.warn('[jackpot] Award notification error:', e.message);
+  }
 }
 
 // Legacy DB helpers (kept for backward compat on server restart load)
@@ -1910,4 +1929,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };

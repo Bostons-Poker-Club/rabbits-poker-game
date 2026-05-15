@@ -47,7 +47,7 @@ class PokerGame {
     this.onJackpotCheck = null;   // fn(handRank, userId)
 
     // Jackpot
-    this.jackpotContributionPercent = tableConfig.jackpotContributionPercent || 1;
+    this.jackpotFlatContrib = tableConfig.jackpotFlatContrib || 1; // flat $1 per hand
 
     // Hand tracking
     this.currentHandId = null;
@@ -556,7 +556,8 @@ class PokerGame {
       Math.floor(totalPot * (this.rakePercent / 100)),
       this.rakeCap
     );
-    const jackpotContrib = Math.floor(totalPot * (this.jackpotContributionPercent / 100));
+    // Flat $1 contribution per hand (only when pot covers it)
+    const jackpotContrib = totalPot > rakeAmount ? this.jackpotFlatContrib : 0;
     this.rakeCollected = rakeAmount;
     this.jackpotContribution = jackpotContrib;
 
@@ -663,16 +664,18 @@ class PokerGame {
       Math.floor(this.pot * (this.rakePercent / 100)),
       this.rakeCap
     );
+    const jackpotContrib = this.pot > rakeAmount ? this.jackpotFlatContrib : 0;
 
-    winner.chips += this.pot - rakeAmount;
+    winner.chips += this.pot - rakeAmount - jackpotContrib;
     this.rakeCollected = rakeAmount;
+    this.jackpotContribution = jackpotContrib;
     this.handActive = false;
 
     const handResult = {
-      winners: [{ winner, amount: this.pot - rakeAmount }],
+      winners: [{ winner, amount: this.pot - rakeAmount - jackpotContrib }],
       communityCards: this.communityCards,
       rakeCollected: rakeAmount,
-      jackpotContribution: 0,
+      jackpotContribution: jackpotContrib,
       handNumber: this.handNumber,
       pot: this.pot,
       folded: true

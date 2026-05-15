@@ -80,7 +80,11 @@ function connect() {
     toast(`Joined seat ${seatNumber} with ${fmt(chips)} chips`);
     document.getElementById('hdr-chips').textContent = fmt(chips);
     if (tableName) document.getElementById('hdr-table-name').textContent = tableName;
-    // Acquire mic, then join PTT mesh so offers always include an audio track
+    // Show High Hand submit button for hosts and admins
+    if (user?.isHost || user?.isAdmin) {
+      const hhBtn = document.getElementById('host-hh-btn');
+      if (hhBtn) hhBtn.style.display = '';
+    }
     _pttInit();
   });
 
@@ -765,10 +769,93 @@ function hideHandResult() {
 
 // ─── Jackpot ──────────────────────────────────────────────────────────────
 
+let jackpotTimerInterval = null;
+let tableJackpotTimerStart = 0;
+const JACKPOT_INTERVAL_MS_TABLE = 30 * 60 * 1000;
+
 function updateJackpotDisplay(data) {
-  document.getElementById('hdr-jackpot').textContent = `🏆 $${fmt(data.amount)}`;
-  const min = data.timerRemainingMin || 0;
-  document.getElementById('hdr-jackpot-timer').textContent = `${min}m left`;
+  // Find THIS table's specific jackpot entry
+  const tables = data.tables || [];
+  const myJp = tables.find(t => t.tableId === tableId) || tables[0];
+  const amount = myJp ? myJp.amount : (data.amount || 0);
+
+  document.getElementById('hdr-jackpot').textContent = `🏆 $${fmt(amount)}`;
+
+  // Start or update the live countdown for this table
+  if (myJp && myJp.timerStart) {
+    tableJackpotTimerStart = myJp.timerStart;
+    if (!jackpotTimerInterval) {
+      jackpotTimerInterval = setInterval(() => {
+        const remaining = Math.max(0, JACKPOT_INTERVAL_MS_TABLE - (Date.now() - tableJackpotTimerStart));
+        const min = Math.floor(remaining / 60000);
+        const sec = Math.floor((remaining % 60000) / 1000);
+        const timerEl = document.getElementById('hdr-jackpot-timer');
+        if (timerEl) {
+          timerEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')} left`;
+          timerEl.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : '';
+        }
+      }, 1000);
+    }
+  } else {
+    const timerEl = document.getElementById('hdr-jackpot-timer');
+    if (timerEl) timerEl.textContent = `${myJp?.timerRemainingMin || 0}m left`;
+  }
+}
+
+function openHostHighHandModal() {
+  const existing = document.getElementById('host-hh-modal');
+  if (existing) { existing.remove(); return; }
+  const div = document.createElement('div');
+  div.id = 'host-hh-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
+  div.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:24px 28px;max-width:400px;width:100%">
+      <h3 style="color:var(--gold);margin:0 0 16px">🏆 Submit High Hand</h3>
+      <div class="form-group" style="margin-bottom:12px">
+        <label style="color:var(--text-dim);font-size:.82rem">Player Name</label>
+        <input id="hh-player-name" type="text" maxlength="60" placeholder="e.g. Maverick"
+          style="width:100%;padding:9px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label style="color:var(--text-dim);font-size:.82rem">Hand Description</label>
+        <input id="hh-hand-desc" type="text" maxlength="120" placeholder="e.g. Aces Full of Kings"
+          style="width:100%;padding:9px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
+      </div>
+      <div class="form-group" style="margin-bottom:16px">
+        <label style="color:var(--text-dim);font-size:.82rem">Hand Rank</label>
+        <select id="hh-hand-rank" style="width:100%;padding:9px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+          <option value="9">9 — Royal Flush</option>
+          <option value="8">8 — Straight Flush</option>
+          <option value="7">7 — Four of a Kind</option>
+          <option value="6" selected>6 — Full House</option>
+          <option value="5">5 — Flush</option>
+          <option value="4">4 — Straight</option>
+          <option value="3">3 — Three of a Kind</option>
+          <option value="2">2 — Two Pair</option>
+          <option value="1">1 — One Pair</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-gold" style="flex:1" onclick="submitHostHighHand()">Submit High Hand</button>
+        <button class="btn btn-outline" onclick="document.getElementById('host-hh-modal').remove()">Cancel</button>
+      </div>
+      <div id="hh-submit-status" style="margin-top:8px;font-size:.82rem;color:var(--chip-green)"></div>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
+}
+
+function submitHostHighHand() {
+  const playerName = document.getElementById('hh-player-name')?.value.trim();
+  const handDesc = document.getElementById('hh-hand-desc')?.value.trim();
+  const handRank = parseInt(document.getElementById('hh-hand-rank')?.value || '6');
+  const status = document.getElementById('hh-submit-status');
+  if (!playerName) { if (status) status.textContent = 'Player name is required.'; return; }
+  if (!handDesc) { if (status) status.textContent = 'Hand description is required.'; return; }
+  if (!socket) return;
+  socket.emit('jackpot:set_high_hand', { tableId, holderName: playerName, description: handDesc, handRank });
+  if (status) status.textContent = 'High hand submitted!';
+  setTimeout(() => { document.getElementById('host-hh-modal')?.remove(); }, 1200);
 }
 
 // ─── Chat ─────────────────────────────────────────────────────────────────
