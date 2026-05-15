@@ -3,7 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
-const { sendTableRequestEmail, sendBroadcastEmail, sendPlayerSMS } = require('../mail');
+const { sendTableRequestEmail, sendBroadcastEmail, sendPlayerSMS, sendPlayerEmail } = require('../mail');
 const { supabaseAdmin } = require('../db/supabase');
 const { logTransaction } = require('../transactions');
 
@@ -386,7 +386,7 @@ function setupSocketHandlers(io) {
 
         const { data: dbUser } = await supabaseAdmin
           .from('users')
-          .select('chips, is_banned, phone')
+          .select('chips, is_banned, phone, email')
           .eq('id', userId)
           .single();
 
@@ -494,9 +494,16 @@ function setupSocketHandlers(io) {
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips });
         broadcastGameState(io, tableId, game);
 
-        // SMS: notify player they are seated
-        if (dbUser?.phone) {
-          sendPlayerSMS({ phone: dbUser.phone, text: `Boston Poker Club: You have been seated at ${game.tableName || tableId}. Good luck!` }).catch(() => {});
+        // SMS + email: notify player they are seated
+        if (dbUser?.phone || dbUser?.email) {
+          const seatedText = `Boston Poker Club: You have been seated at ${game.tableName || tableId}. Good luck!`;
+          if (dbUser.phone) sendPlayerSMS({ phone: dbUser.phone, text: seatedText }).catch(() => {});
+          if (dbUser.email) sendPlayerEmail({
+            to: dbUser.email,
+            subject: `You're seated at ${game.tableName || tableId} — Boston Poker Club`,
+            text: seatedText,
+            html: `<p>Hi <strong>${username}</strong>,</p><p>You have been seated at <strong>${game.tableName || tableId}</strong>.</p><p>Good luck at the tables!<br>— Boston Poker Club</p>`
+          }).catch(() => {});
         }
         // Send current puck state to joining player
         broadcastPuckState(io, tableId);
@@ -1341,7 +1348,8 @@ async function startNewHand(io, tableId, game) {
   } catch (err) {
     return;
   }
-  game._allInNotified = new Set(); // reset per-hand all-in notifications
+  game._allInNotified    = new Set(); // reset per-hand all-in notifications
+  game._lowChipsNotified = new Set(); // reset so each hand re-checks stack size
 
   game.lastActionAt = Date.now();
   broadcastGameState(io, tableId, game);
@@ -1395,8 +1403,15 @@ async function startNewHand(io, tableId, game) {
       try {
         const currP = game.getPlayerBySeat(game.currentPlayerSeat);
         if (!game.handActive || !currP || currP.userId !== _smsUid0) return;
-        const { data: pu } = await supabaseAdmin.from('users').select('phone').eq('id', _smsUid0).single();
-        if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: 'Your turn at Boston Poker Club! You have 10 seconds to act.' }).catch(() => {});
+        const { data: pu } = await supabaseAdmin.from('users').select('phone, email, username').eq('id', _smsUid0).single();
+        const turnText = 'Your turn at Boston Poker Club! You have 10 seconds to act.';
+        if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: turnText }).catch(() => {});
+        if (pu?.email) sendPlayerEmail({
+          to: pu.email,
+          subject: 'Your turn — Boston Poker Club',
+          text: turnText,
+          html: `<p>Hi <strong>${pu.username || 'there'}</strong>,</p><p>It's your turn at <strong>${game.tableName || 'the table'}</strong>. You have 10 seconds to act!</p><p>— Boston Poker Club</p>`
+        }).catch(() => {});
       } catch {}
     }, 10000);
   }
@@ -1450,11 +1465,41 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
           tableName: tblName,
           notes: w.handResult?.name || (handResult.folded ? 'uncontested' : null)
         });
-        // SMS: winner notification (fire-and-forget)
+        // SMS + email: winner notification (fire-and-forget)
         (async () => {
           try {
-            const { data: wu } = await supabaseAdmin.from('users').select('phone').eq('id', w.winner.userId).single();
-            if (wu?.phone) sendPlayerSMS({ phone: wu.phone, text: `Boston Poker Club: You won $${w.amount.toLocaleString()} at ${tblName}! Great hand!` }).catch(() => {});
+            const { data: wu } = await supabaseAdmin.from('users').select('phone, email, username').eq('id', w.winner.userId).single();
+            const winText = `Boston Poker Club: You won $${w.amount.toLocaleString()} at ${tblName}! Great hand!`;
+            if (wu?.phone) sendPlayerSMS({ phone: wu.phone, text: winText }).catch(() => {});
+            if (wu?.email) sendPlayerEmail({
+              to: wu.email,
+              subject: `You won $${w.amount.toLocaleString()} at ${tblName}! — Boston Poker Club`,
+              text: winText,
+              html: `<p>Hi <strong>${wu.username || 'there'}</strong>,</p><p>You won <strong>$${w.amount.toLocaleString()}</strong> at <strong>${tblName}</strong>!</p><p>Great hand! Keep it up.<br>— Boston Poker Club</p>`
+            }).catch(() => {});
+          } catch {}
+        })();
+      }
+    }
+
+    // SMS + email: low chips alert — once per session per player when stack < 10x big blind
+    if (!game._lowChipsNotified) game._lowChipsNotified = new Set();
+    const lowThreshold = game.bigBlind * 10;
+    for (const player of game.players.values()) {
+      if (!player.isActive || game._lowChipsNotified.has(player.userId)) continue;
+      if (player.chips > 0 && player.chips < lowThreshold) {
+        game._lowChipsNotified.add(player.userId);
+        (async () => {
+          try {
+            const { data: lpu } = await supabaseAdmin.from('users').select('phone, email, username').eq('id', player.userId).single();
+            const lowText = 'You are running low on chips at Boston Poker Club. Contact admin to rebuy.';
+            if (lpu?.phone) sendPlayerSMS({ phone: lpu.phone, text: lowText }).catch(() => {});
+            if (lpu?.email) sendPlayerEmail({
+              to: lpu.email,
+              subject: 'Running low on chips — Boston Poker Club',
+              text: lowText,
+              html: `<p>Hi <strong>${lpu.username || 'there'}</strong>,</p><p>Your chip stack at <strong>${tblName}</strong> is running low ($${player.chips.toLocaleString()} remaining).</p><p>Contact admin to add chips and keep playing!<br>— Boston Poker Club</p>`
+            }).catch(() => {});
           } catch {}
         })();
       }
@@ -1484,14 +1529,21 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
       });
       game.startShotClock(nextPlayer.userId);
       game.lastActionAt = Date.now();
-      // SMS after 10s of inactivity on their turn
+      // SMS + email after 10s of inactivity on their turn
       const _smsUid = nextPlayer.userId;
       setTimeout(async () => {
         try {
           const currP = game.getPlayerBySeat(game.currentPlayerSeat);
           if (!game.handActive || !currP || currP.userId !== _smsUid) return;
-          const { data: pu } = await supabaseAdmin.from('users').select('phone').eq('id', _smsUid).single();
-          if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: 'Your turn at Boston Poker Club! You have 10 seconds to act.' }).catch(() => {});
+          const { data: pu } = await supabaseAdmin.from('users').select('phone, email, username').eq('id', _smsUid).single();
+          const turnText = 'Your turn at Boston Poker Club! You have 10 seconds to act.';
+          if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: turnText }).catch(() => {});
+          if (pu?.email) sendPlayerEmail({
+            to: pu.email,
+            subject: 'Your turn — Boston Poker Club',
+            text: turnText,
+            html: `<p>Hi <strong>${pu.username || 'there'}</strong>,</p><p>It's your turn at <strong>${game.tableName || 'the table'}</strong>. You have 10 seconds to act!</p><p>— Boston Poker Club</p>`
+          }).catch(() => {});
         } catch {}
       }, 10000);
     } else if (game.handActive) {
