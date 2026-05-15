@@ -122,19 +122,18 @@ if (typeof io !== 'undefined') {
   // Admin broadcast messages
   lobbySocket.on('broadcast_message', (msg) => {
     console.log('[lobby] broadcast_message received:', msg);
-    alert('Message from ' + (msg.from || 'Admin') + ': ' + msg.message);
     if (!inboxMessages.find(m => m.id === msg.id)) {
       inboxMessages.unshift(msg);
     }
     updateInboxBadge();
-    showAdminMessage(msg.from, msg.message, msg.pending);
+    showAdminMessage(msg.from, msg.message, msg.pending, msg.id);
   });
   // Legacy event name fallback
   lobbySocket.on('broadcast:message', (msg) => {
     console.log('[lobby] broadcast:message (legacy) received:', msg);
     if (!inboxMessages.find(m => m.id === msg.id)) inboxMessages.unshift(msg);
     updateInboxBadge();
-    showAdminMessage(msg.from, msg.message, msg.pending);
+    showAdminMessage(msg.from, msg.message, msg.pending, msg.id);
   });
 
   // Ban enforcement
@@ -604,7 +603,7 @@ function openInbox() {
   document.body.appendChild(div);
 }
 
-function showAdminMessage(from, message, pending) {
+function showAdminMessage(from, message, pending, msgId) {
   const existing = document.getElementById('admin-msg-modal');
   if (existing) existing.remove();
   const div = document.createElement('div');
@@ -615,14 +614,35 @@ function showAdminMessage(from, message, pending) {
       <div style="font-size:2.2rem;margin-bottom:10px">📨</div>
       <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.08em">${pending ? 'Missed message' : 'Message from Admin'}</div>
       <div style="font-size:.9rem;color:var(--gold);font-weight:700;margin-bottom:14px">From: ${esc(from)}</div>
-      <p style="color:var(--text);line-height:1.7;font-size:.95rem;margin-bottom:22px;white-space:pre-wrap">${esc(message)}</p>
+      <p style="color:var(--text);line-height:1.7;font-size:.95rem;margin-bottom:16px;white-space:pre-wrap">${esc(message)}</p>
+      <div style="margin-bottom:16px;text-align:left" id="admin-msg-reply-area">
+        <textarea id="admin-msg-reply-input" placeholder="Reply to admin…" maxlength="500" rows="2"
+          style="width:100%;padding:8px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:none;font-family:inherit;font-size:.88rem;box-sizing:border-box"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+          <button class="btn btn-sm btn-gold" onclick="sendLobbyReply(${msgId || 'null'})">Send Reply</button>
+          <span id="admin-msg-reply-status" style="color:var(--chip-green);font-size:.78rem;align-self:center"></span>
+        </div>
+      </div>
       <div style="display:flex;gap:10px;justify-content:center">
-        <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Got it</button>
+        <button class="btn btn-gold" onclick="document.getElementById('admin-msg-modal').remove()">Dismiss</button>
         <button class="btn btn-outline" onclick="document.getElementById('admin-msg-modal').remove();openInbox()">View Inbox</button>
       </div>
     </div>`;
   div.addEventListener('click', e => { if (e.target === div) div.remove(); });
   document.body.appendChild(div);
+}
+
+function sendLobbyReply(replyToId) {
+  const input = document.getElementById('admin-msg-reply-input');
+  const status = document.getElementById('admin-msg-reply-status');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  if (!lobbySocket) return;
+  lobbySocket.emit('player:reply', { replyToId, message: text });
+  input.value = '';
+  input.disabled = true;
+  if (status) { status.textContent = 'Sent!'; setTimeout(() => { status.textContent = ''; if (input) input.disabled = false; }, 3000); }
 }
 
 function showTableApprovedModal(tableName, message, tableId) {

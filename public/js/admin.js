@@ -71,6 +71,13 @@ if (typeof io !== 'undefined') {
     renderMessages(messages);
   });
 
+  adminSocket.on('admin:player_reply', (reply) => {
+    allPlayerReplies.unshift(reply);
+    renderPlayerReplies(allPlayerReplies);
+    const badge = document.getElementById('replies-badge');
+    if (badge) { badge.textContent = allPlayerReplies.length > 99 ? '99+' : String(allPlayerReplies.length); badge.style.display = ''; }
+  });
+
   // Per-table jackpot events
   adminSocket.on('jackpot_state', (state) => {
     if (state.tables) renderJackpotTables(state.tables);
@@ -100,7 +107,7 @@ if (typeof io !== 'undefined') {
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies()]);
 }
 
 async function loadPendingPlayers() {
@@ -534,6 +541,8 @@ async function revokeHostById(id, username) {
 
 // ─── Broadcast Messages ───────────────────────────────────────────────────
 
+let allPlayerReplies = [];
+
 async function loadMessages() {
   try {
     const list = await apiFetch('/api/admin/messages');
@@ -599,16 +608,52 @@ async function sendAdminMessage() {
     console.log('[admin] send-message result:', result);
     document.getElementById('msg-text').value = '';
     if (status) {
-      status.textContent = `Sent! ${result.delivered} sockets reached`;
+      const q = result.queued || 0;
+      const d = result.delivered || 0;
+      status.textContent = `Sent! ${d} online${q > 0 ? ` + ${q} queued for offline` : ''}`;
       setTimeout(() => { status.textContent = ''; }, 5000);
     }
-    // Refresh history
+    loadMessages();
     if (adminSocket) adminSocket.emit('admin:get_messages');
   } catch (e) {
     console.error('[admin] send-message error:', e);
     if (status) status.textContent = 'Error: ' + e.message;
     toast('Failed to send: ' + e.message, 'error');
   }
+}
+
+async function loadPlayerReplies() {
+  try {
+    allPlayerReplies = await apiFetch('/api/admin/player-replies');
+    renderPlayerReplies(allPlayerReplies);
+  } catch {}
+}
+
+function renderPlayerReplies(list) {
+  const el = document.getElementById('player-replies-list');
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim)">No player replies yet</div>';
+    return;
+  }
+  // Group by player
+  const grouped = {};
+  for (const r of list) {
+    const key = r.fromUsername || r.fromUserId || 'Unknown';
+    if (!grouped[key]) grouped[key] = { username: key, replies: [] };
+    grouped[key].replies.push(r);
+  }
+  el.innerHTML = Object.values(grouped).map(g => `
+    <div style="margin-bottom:14px;padding:14px;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius)">
+      <div style="color:var(--chip-green);font-weight:700;margin-bottom:8px;font-size:.88rem">👤 ${esc(g.username)}</div>
+      ${g.replies.map(r => `
+        <div style="padding:7px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+          <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:3px">${new Date(r.sentAt).toLocaleString()}${r.replyToId ? ` · re: msg#${r.replyToId}` : ''}</div>
+          <div style="color:var(--text);font-size:.88rem">${esc(r.message)}</div>
+        </div>`).join('')}
+    </div>`).join('');
+  const badge = document.getElementById('replies-badge');
+  if (badge) { badge.textContent = list.length > 99 ? '99+' : String(list.length); badge.style.display = list.length ? '' : 'none'; }
 }
 
 // ─── Panel Navigation ─────────────────────────────────────────────────────

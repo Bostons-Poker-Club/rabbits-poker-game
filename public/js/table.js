@@ -20,6 +20,10 @@ let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
 let straddleCountdown = null;
 
+// ─── Inbox state ────────────────────────────────────────────────────────────
+const TABLE_INBOX_READ_KEY = 'rp_inbox_read_table';
+let tableInboxMessages = [];
+
 // Raise limits — updated each time it becomes the player's turn
 let currentMaxRaise = 0;
 let currentMinRaise = 0;
@@ -252,13 +256,15 @@ function connect() {
 
   socket.on('broadcast_message', (data) => {
     console.log('[table] broadcast_message received:', data);
-    alert('Message from ' + (data.from || 'Admin') + ': ' + data.message);
-    showAdminMessageToast(data.from, data.message, data.pending);
+    if (!tableInboxMessages.find(m => m.id === data.id)) tableInboxMessages.unshift(data);
+    updateTableInboxBadge();
+    showAdminMessageToast(data.from, data.message, data.pending, data.id);
   });
   socket.on('broadcast:message', (data) => {
     console.log('[table] broadcast:message (legacy) received:', data);
-    alert('Message from ' + (data.from || 'Admin') + ': ' + data.message);
-    showAdminMessageToast(data.from, data.message, data.pending);
+    if (!tableInboxMessages.find(m => m.id === data.id)) tableInboxMessages.unshift(data);
+    updateTableInboxBadge();
+    showAdminMessageToast(data.from, data.message, data.pending, data.id);
   });
 
   socket.on('banned', ({ message }) => {
@@ -819,18 +825,82 @@ function toast(msg, type = '') {
   setTimeout(() => t.remove(), 3500);
 }
 
-function showAdminMessageToast(from, message, pending) {
+function showAdminMessageToast(from, message, pending, msgId) {
   const existing = document.getElementById('admin-msg-overlay');
   if (existing) existing.remove();
   const div = document.createElement('div');
   div.id = 'admin-msg-overlay';
-  div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9500;max-width:360px;width:90%;background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+  div.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);z-index:9500;max-width:380px;width:92%;background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:16px 20px;box-shadow:0 8px 32px rgba(0,0,0,.6)';
+  const esc2 = s => String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   div.innerHTML = `
-    <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">📨 ${pending ? 'Missed message' : 'Message from Admin'} — ${from}</div>
-    <div style="color:var(--text);font-size:.9rem;line-height:1.5">${String(message).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))}</div>
-    <button onclick="document.getElementById('admin-msg-overlay').remove()" style="margin-top:10px;background:none;border:1px solid var(--gold);color:var(--gold);padding:3px 12px;border-radius:6px;cursor:pointer;font-size:.78rem">Dismiss</button>`;
+    <div style="font-size:.72rem;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em">📨 ${pending ? 'Missed message' : 'Message from Admin'} — ${esc2(from)}</div>
+    <div style="color:var(--text);font-size:.9rem;line-height:1.5;margin-bottom:10px">${esc2(message)}</div>
+    <textarea id="table-reply-input" placeholder="Reply to admin…" maxlength="500" rows="2"
+      style="width:100%;padding:7px 9px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:none;font-family:inherit;font-size:.83rem;box-sizing:border-box;margin-bottom:8px"></textarea>
+    <div style="display:flex;gap:8px;align-items:center">
+      <button onclick="sendTableReply(${msgId || 'null'})" style="background:none;border:1px solid var(--gold);color:var(--gold);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.78rem">Send Reply</button>
+      <button onclick="document.getElementById('admin-msg-overlay').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text-dim);padding:4px 12px;border-radius:6px;cursor:pointer;font-size:.78rem">Dismiss</button>
+      <button onclick="document.getElementById('admin-msg-overlay').remove();openTableInbox()" style="background:none;border:none;color:var(--text-dim);padding:4px 8px;cursor:pointer;font-size:.78rem">Inbox</button>
+      <span id="table-reply-status" style="color:var(--chip-green);font-size:.75rem"></span>
+    </div>`;
   document.body.appendChild(div);
-  setTimeout(() => div.remove(), 15000);
+  setTimeout(() => { const el = document.getElementById('admin-msg-overlay'); if (el) el.remove(); }, 20000);
+}
+
+function sendTableReply(replyToId) {
+  const input = document.getElementById('table-reply-input');
+  const status = document.getElementById('table-reply-status');
+  if (!input || !socket) return;
+  const text = input.value.trim();
+  if (!text) return;
+  socket.emit('player:reply', { replyToId, message: text });
+  input.value = '';
+  input.disabled = true;
+  if (status) { status.textContent = 'Sent!'; setTimeout(() => { status.textContent = ''; if (input) input.disabled = false; }, 3000); }
+}
+
+function updateTableInboxBadge() {
+  const badge = document.getElementById('table-inbox-badge');
+  if (!badge) return;
+  const lastRead = parseInt(localStorage.getItem(TABLE_INBOX_READ_KEY) || '0');
+  const unread = tableInboxMessages.filter(m => m.sentAt > lastRead).length;
+  if (unread > 0) {
+    badge.textContent = unread > 9 ? '9+' : String(unread);
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function openTableInbox() {
+  const existing = document.getElementById('table-inbox-modal');
+  if (existing) { existing.remove(); return; }
+  localStorage.setItem(TABLE_INBOX_READ_KEY, Date.now().toString());
+  updateTableInboxBadge();
+  const esc2 = s => String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const msgs = tableInboxMessages.length
+    ? tableInboxMessages.map(m => `
+        <div style="border-bottom:1px solid rgba(255,255,255,.08);padding:12px 0">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+            <span style="color:var(--gold);font-weight:700;font-size:.85rem">📨 ${esc2(m.from)}</span>
+            <span style="color:var(--text-dim);font-size:.72rem">${new Date(m.sentAt).toLocaleString()}</span>
+          </div>
+          <div style="color:var(--text);font-size:.9rem;line-height:1.5">${esc2(m.message)}</div>
+        </div>`).join('')
+    : '<div style="color:var(--text-dim);text-align:center;padding:30px">No messages yet</div>';
+  const div = document.createElement('div');
+  div.id = 'table-inbox-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
+  div.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:24px;max-width:500px;width:100%;max-height:80vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <h2 style="color:var(--gold);margin:0">📬 Message Inbox</h2>
+        <button onclick="document.getElementById('table-inbox-modal').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1">${msgs}</div>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
 }
 
 // ─── PTT Core Helpers ─────────────────────────────────────────────────────────

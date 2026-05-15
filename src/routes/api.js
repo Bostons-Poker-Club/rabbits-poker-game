@@ -832,15 +832,23 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
 
   console.log(`[broadcast/api] "${req.user.username}" → ${targetUserId ? 'uid=' + targetUserId : 'ALL'} | "${msg.message}"`);
 
+  const { pendingMessages } = require('../socket/handlers');
   let delivered = 0;
+  let queued = 0;
   if (io) {
     if (targetUserId) {
-      // Send to every socket belonging to this user
+      let sent = false;
       for (const [, s] of io.sockets.sockets) {
         if (s.user && s.user.id === targetUserId) {
           s.emit('broadcast_message', msg);
           delivered++;
+          sent = true;
         }
+      }
+      if (!sent) {
+        if (!pendingMessages.has(targetUserId)) pendingMessages.set(targetUserId, []);
+        pendingMessages.get(targetUserId).push(msg);
+        queued++;
       }
     } else {
       // Send to every connected socket — no exceptions, no filtering
@@ -852,24 +860,34 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
     console.warn('[broadcast/api] io not available on app');
   }
 
-  // Email offline players
+  // Email all players and queue offline ones for banner on next login
   try {
     const { sendBroadcastEmail } = require('../mail');
     const { data: allUsers } = await supabaseAdmin
       .from('users')
       .select('id, email, username')
-      .eq('is_banned', false)
-      .not('email', 'is', null);
-    const recipients = (allUsers || []).filter(u => u.id !== req.user.id && u.email);
-    if (recipients.length > 0) {
-      sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients }).catch(() => {});
-      console.log(`[broadcast/api] email queued for ${recipients.length} players`);
+      .eq('is_banned', false);
+    const onlineIds = new Set();
+    if (io) { for (const [, s] of io.sockets.sockets) { if (s.user) onlineIds.add(s.user.id); } }
+    const others = (allUsers || []).filter(u => u.id !== req.user.id);
+    if (!targetUserId) {
+      // Queue offline players for banner on next login
+      for (const u of others.filter(u => !onlineIds.has(u.id))) {
+        if (!pendingMessages.has(u.id)) pendingMessages.set(u.id, []);
+        pendingMessages.get(u.id).push(msg);
+        queued++;
+      }
+    }
+    const emailRecipients = others.filter(u => u.email);
+    if (emailRecipients.length > 0) {
+      sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients: emailRecipients }).catch(() => {});
+      console.log(`[broadcast/api] email queued for ${emailRecipients.length} players`);
     }
   } catch (e) {
     console.warn('[broadcast/api] email error:', e.message);
   }
 
-  res.json({ ok: true, delivered, message: msg });
+  res.json({ ok: true, delivered, queued, message: msg });
 });
 
 // Test endpoint — sends a test broadcast to all connected sockets
@@ -925,6 +943,12 @@ router.get('/admin/rake-report', authMiddleware, adminMiddleware, async (req, re
   const totalRake = data.reduce((s, h) => s + (h.rake_collected || 0), 0);
   const totalJackpot = data.reduce((s, h) => s + (h.jackpot_contribution || 0), 0);
   res.json({ hands: data, totalRake, totalJackpot });
+});
+
+// Admin: fetch all player replies to admin messages
+router.get('/admin/player-replies', authMiddleware, adminMiddleware, (req, res) => {
+  const { playerReplies } = require('../socket/handlers');
+  res.json(playerReplies.slice(0, 200));
 });
 
 // Any authenticated player can fetch their message inbox

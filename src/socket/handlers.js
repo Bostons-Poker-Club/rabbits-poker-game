@@ -76,6 +76,9 @@ const broadcastMessages = [];
 let broadcastMsgSeq = 0;
 const pendingMessages = new Map(); // userId -> msg[]
 
+// Player replies to admin messages
+const playerReplies = [];
+
 // PTT admin controls per table
 const tableMicMuted  = new Map();  // tableId -> Set<userId>
 const tablePttMode   = new Map();  // tableId -> 'ptt' | 'openmic'
@@ -1144,6 +1147,26 @@ function setupSocketHandlers(io) {
       socket.emit('messages:list', { messages: broadcastMessages.slice(0, 100) });
     });
 
+    // Player replies to admin messages
+    socket.on('player:reply', ({ replyToId, message }) => {
+      if (!message || !message.trim()) return;
+      const reply = {
+        id: Date.now(),
+        fromUserId: userId,
+        fromUsername: username,
+        replyToId: replyToId || null,
+        message: message.trim().slice(0, 500),
+        sentAt: Date.now()
+      };
+      playerReplies.unshift(reply);
+      if (playerReplies.length > 500) playerReplies.pop();
+      console.log(`[reply] ${username} replied to msg#${replyToId}: "${reply.message}"`);
+      for (const sid of getAdminSockets(io)) {
+        io.to(sid).emit('admin:player_reply', reply);
+      }
+      socket.emit('player:reply_ack', { ok: true });
+    });
+
     // Admin: manually set high hand for a specific table
     socket.on('jackpot:set_high_hand', ({ tableId: tId, description, holderName, handRank }) => {
       if (!isAdmin) return;
@@ -1856,4 +1879,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };
