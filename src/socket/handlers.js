@@ -451,6 +451,19 @@ function setupSocketHandlers(io) {
           });
           game.tableName = table.name || tableId;
 
+          // Store host info on game for rake split attribution
+          if (table.host_id) {
+            try {
+              const { data: hostUser } = await supabaseAdmin.from('users').select('username, is_admin, host_type').eq('id', table.host_id).single();
+              if (hostUser) {
+                game.hostId       = table.host_id;
+                game.hostUsername = hostUser.username;
+                game.hostType     = hostUser.is_admin ? 'admin' : (hostUser.host_type || 'host');
+                game.hostPercent  = game.hostType === 'admin' ? 20 : 40;
+              }
+            } catch {}
+          }
+
           game.onBroadcast = (event, data) => io.to(tableId).emit(event, data);
           game.onPrivate = (uid, event, data) => {
             const sid = userSockets.get(uid);
@@ -1782,18 +1795,36 @@ async function persistHandResult(tableId, result) {
 
       sessionRake.total += rakeAmount;
       if (!sessionRake.byTable.has(tableId)) {
-        sessionRake.byTable.set(tableId, { tableName, total: 0, hands: [] });
+        sessionRake.byTable.set(tableId, {
+          tableName, total: 0, potVolume: 0, hands: [],
+          hostId: game?.hostId, hostUsername: game?.hostUsername,
+          hostType: game?.hostType, hostPercent: game?.hostPercent || 0
+        });
       }
       const tableEntry = sessionRake.byTable.get(tableId);
-      tableEntry.tableName = tableName;
-      tableEntry.total += rakeAmount;
-      tableEntry.hands.push({ rake: rakeAmount, pot: result.pot, ts: Date.now() });
-      if (tableEntry.hands.length > 100) tableEntry.hands.shift();
+      tableEntry.tableName  = tableName;
+      tableEntry.total     += rakeAmount;
+      tableEntry.potVolume  = (tableEntry.potVolume || 0) + (result.pot || 0);
+      // Inherit host info from game if not yet set
+      if (!tableEntry.hostId && game?.hostId) {
+        tableEntry.hostId = game.hostId; tableEntry.hostUsername = game.hostUsername;
+        tableEntry.hostType = game.hostType; tableEntry.hostPercent = game.hostPercent || 0;
+      }
+      const handNum = tableEntry.hands.length + 1;
+      tableEntry.hands.push({ handNum, rake: rakeAmount, pot: result.pot, ts: Date.now() });
+      if (tableEntry.hands.length > 200) tableEntry.hands.shift();
 
       if (jackpotIo) {
-        const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => ({
-          tableId: id, tableName: t.tableName, total: t.total, handCount: t.hands.length
-        }));
+        const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => {
+          const hPct = t.hostPercent || 0;
+          const hAmt = Math.floor(t.total * hPct / 100);
+          return {
+            tableId: id, tableName: t.tableName, total: t.total, handCount: t.hands.length,
+            potVolume: t.potVolume || 0,
+            hostId: t.hostId, hostUsername: t.hostUsername, hostType: t.hostType, hostPercent: hPct,
+            hostAmount: hAmt, houseAmount: t.total - hAmt
+          };
+        });
         for (const sid of getAdminSockets(jackpotIo)) {
           jackpotIo.to(sid).emit('admin:rake_update', {
             sessionTotal: sessionRake.total,

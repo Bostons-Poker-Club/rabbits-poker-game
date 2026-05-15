@@ -181,20 +181,21 @@ function connect() {
     clearSeatTimer();
     prevBets = {};
 
-    // Flash rake in pot display before showing winner overlay
+    // Flash rake deduction in pot display before showing winner overlay
     if (result.rakeCollected > 0) {
       const potEl = document.getElementById('pot-amount');
       const potLabel = potEl?.nextElementSibling; // .pot-label
-      const origPot = potEl?.textContent;
       if (potEl) {
-        potEl.textContent = `🏦 -$${fmt(result.rakeCollected)}`;
+        potEl.textContent = `Rake: $${fmt(result.rakeCollected)}`;
         potEl.style.color = 'var(--red)';
-        if (potLabel) potLabel.textContent = 'RAKE';
+        potEl.style.fontSize = '1rem';
+        if (potLabel) potLabel.textContent = '🏦 DEDUCTED';
         setTimeout(() => {
           potEl.style.color = '';
+          potEl.style.fontSize = '';
           if (potLabel) potLabel.textContent = 'POT';
           showHandResult(result);
-        }, 1200);
+        }, 1500);
       } else {
         showHandResult(result);
       }

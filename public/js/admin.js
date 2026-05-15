@@ -107,7 +107,7 @@ if (typeof io !== 'undefined') {
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies(), loadSessionReports()]);
 }
 
 async function loadPendingPlayers() {
@@ -175,7 +175,7 @@ function updateSessionRakeUI(total, byTable, hands) {
   const grandEl = document.getElementById('rake-grand-total');
   if (grandEl) grandEl.textContent = `$${fmt(total)}`;
 
-  // Per-table breakdown (overview panel)
+  // Per-table breakdown (overview panel — compact)
   const byTableBody = document.getElementById('rake-by-table-body');
   if (byTableBody) {
     if (!byTable.length) {
@@ -190,22 +190,42 @@ function updateSessionRakeUI(total, byTable, hands) {
     }
   }
 
-  // Per-table table in Rake panel
+  // Per-table table in Rake panel — expanded with host/house cuts
   const panelBody = document.getElementById('rake-by-table-panel-body');
   if (panelBody) {
     if (!byTable.length) {
-      panelBody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>';
+      panelBody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>';
     } else {
-      panelBody.innerHTML = byTable.map(t => `
-        <tr>
-          <td style="color:var(--text)">${esc(t.tableName)}</td>
-          <td style="color:var(--text-dim)">${t.handCount}</td>
+      panelBody.innerHTML = byTable.map(t => {
+        const hostLabel = t.hostUsername
+          ? `${esc(t.hostUsername)} <span style="color:var(--text-dim);font-size:.75rem">(${t.hostType === 'admin' ? 'admin' : 'host'})</span>`
+          : '<span style="color:var(--text-dim)">—</span>';
+        return `<tr>
+          <td style="color:var(--text);font-weight:600">${esc(t.tableName)}</td>
+          <td style="color:var(--text-dim);text-align:center">${t.handCount}</td>
+          <td style="color:var(--text-dim)">$${fmt(t.potVolume || 0)}</td>
           <td style="color:var(--chip-green);font-weight:700">$${fmt(t.total)}</td>
-        </tr>`).join('') +
-        `<tr style="border-top:2px solid rgba(255,255,255,.15)">
-          <td colspan="2" style="color:var(--gold);font-weight:700">Grand Total</td>
-          <td style="color:var(--gold);font-weight:700">$${fmt(total)}</td>
+          <td>${hostLabel}</td>
+          <td style="color:var(--text-dim);text-align:center">${t.hostPercent || 0}%</td>
+          <td style="color:var(--gold);font-weight:600">$${fmt(t.hostAmount || 0)}</td>
+          <td style="color:var(--chip-green);font-weight:600">$${fmt(t.houseAmount || 0)}</td>
         </tr>`;
+      }).join('');
+    }
+  }
+
+  // Grand total box
+  const gtBox = document.getElementById('rake-grand-total-box');
+  if (gtBox) {
+    if (byTable.length) {
+      gtBox.style.display = '';
+      const totalHostCuts  = byTable.reduce((s, t) => s + (t.hostAmount  || 0), 0);
+      const totalHouse     = byTable.reduce((s, t) => s + (t.houseAmount || 0), 0);
+      document.getElementById('gt-total-rake').textContent    = `$${fmt(total)}`;
+      document.getElementById('gt-host-cuts').textContent     = `$${fmt(totalHostCuts)}`;
+      document.getElementById('gt-house-earnings').textContent = `$${fmt(totalHouse)}`;
+    } else {
+      gtBox.style.display = 'none';
     }
   }
 
@@ -620,6 +640,126 @@ async function sendAdminMessage() {
     if (status) status.textContent = 'Error: ' + e.message;
     toast('Failed to send: ' + e.message, 'error');
   }
+}
+
+async function loadSessionReports() {
+  try {
+    const list = await apiFetch('/api/admin/session-reports');
+    renderSessionReports(list || []);
+  } catch {}
+}
+
+function renderSessionReports(list) {
+  const el = document.getElementById('session-reports-list');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-dim)">No session reports yet. Reports are generated automatically when a table is closed.</div>';
+    return;
+  }
+  el.innerHTML = list.map(r => {
+    const date = new Date(r.created_at).toLocaleString();
+    const hostLabel = r.host_username
+      ? `${esc(r.host_username)} <span style="color:var(--text-dim);font-size:.75rem">(${r.host_type === 'admin' ? 'admin' : 'host'})</span>`
+      : '<span style="color:var(--text-dim)">No host</span>';
+    return `
+      <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div>
+            <div style="color:var(--gold);font-weight:700;font-size:1rem">🃏 ${esc(r.table_name)}</div>
+            <div style="color:var(--text-dim);font-size:.78rem;margin-top:3px">${date}</div>
+          </div>
+          <button class="btn btn-sm btn-outline" onclick="viewReportDetail('${r.id}')">View Details</button>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px">
+          <div style="text-align:center;background:rgba(0,0,0,.3);border-radius:8px;padding:10px">
+            <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:4px">Hands</div>
+            <div style="color:var(--text);font-weight:700">${r.hands_played}</div>
+          </div>
+          <div style="text-align:center;background:rgba(0,0,0,.3);border-radius:8px;padding:10px">
+            <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:4px">Pot Volume</div>
+            <div style="color:var(--text);font-weight:700">$${fmt(r.pot_volume)}</div>
+          </div>
+          <div style="text-align:center;background:rgba(0,0,0,.3);border-radius:8px;padding:10px">
+            <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:4px">Total Rake</div>
+            <div style="color:var(--chip-green);font-weight:700">$${fmt(r.total_rake)}</div>
+          </div>
+          <div style="text-align:center;background:rgba(0,0,0,.3);border-radius:8px;padding:10px">
+            <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:4px">Host (${r.host_percent || 0}%)</div>
+            <div style="color:var(--gold);font-weight:700">$${fmt(r.host_amount)}</div>
+          </div>
+          <div style="text-align:center;background:rgba(0,0,0,.3);border-radius:8px;padding:10px">
+            <div style="color:var(--text-dim);font-size:.72rem;margin-bottom:4px">House</div>
+            <div style="color:var(--chip-green);font-weight:700">$${fmt(r.house_amount)}</div>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:.82rem;color:var(--text-dim)">Host: ${hostLabel}</div>
+      </div>`;
+  }).join('');
+}
+
+async function viewReportDetail(reportId) {
+  let report;
+  try {
+    report = await apiFetch(`/api/admin/session-reports/${reportId}`);
+  } catch (e) { toast('Failed to load report', 'error'); return; }
+
+  const existing = document.getElementById('report-detail-modal');
+  if (existing) existing.remove();
+
+  const hands = report.hands_detail || [];
+  const handsHtml = hands.length
+    ? `<table style="width:100%;border-collapse:collapse;font-size:.82rem">
+        <thead><tr style="background:rgba(255,255,255,.08)">
+          <th style="padding:6px 10px;text-align:left">Hand #</th>
+          <th style="padding:6px 10px;text-align:right">Pot</th>
+          <th style="padding:6px 10px;text-align:right;color:var(--chip-green)">Rake</th>
+          <th style="padding:6px 10px;text-align:right;color:var(--text-dim)">Time</th>
+        </tr></thead>
+        <tbody>${hands.map(h => `
+          <tr style="border-bottom:1px solid rgba(255,255,255,.05)">
+            <td style="padding:5px 10px;color:var(--text-dim)">#${h.handNum || '–'}</td>
+            <td style="padding:5px 10px;text-align:right">$${fmt(h.pot)}</td>
+            <td style="padding:5px 10px;text-align:right;color:var(--chip-green);font-weight:600">$${fmt(h.rake)}</td>
+            <td style="padding:5px 10px;text-align:right;color:var(--text-dim);font-size:.75rem">${h.ts ? new Date(h.ts).toLocaleTimeString() : ''}</td>
+          </tr>`).join('')}</tbody>
+      </table>`
+    : '<div style="color:var(--text-dim);text-align:center;padding:20px">No hand data available</div>';
+
+  const div = document.createElement('div');
+  div.id = 'report-detail-modal';
+  div.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9500;display:flex;align-items:center;justify-content:center;padding:16px';
+  div.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:24px;max-width:640px;width:100%;max-height:88vh;display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <h2 style="color:var(--gold);margin:0;font-size:1.1rem">📊 ${esc(report.table_name)}</h2>
+          <div style="color:var(--text-dim);font-size:.78rem;margin-top:3px">${new Date(report.created_at).toLocaleString()}</div>
+        </div>
+        <button onclick="document.getElementById('report-detail-modal').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="text-align:center;background:rgba(0,0,0,.4);border-radius:8px;padding:10px">
+          <div style="color:var(--text-dim);font-size:.7rem">Hands</div>
+          <div style="color:var(--text);font-weight:700;font-size:1.1rem">${report.hands_played}</div>
+        </div>
+        <div style="text-align:center;background:rgba(0,0,0,.4);border-radius:8px;padding:10px">
+          <div style="color:var(--text-dim);font-size:.7rem">Pot Volume</div>
+          <div style="color:var(--text);font-weight:700;font-size:1.1rem">$${fmt(report.pot_volume)}</div>
+        </div>
+        <div style="text-align:center;background:rgba(0,0,0,.4);border-radius:8px;padding:10px">
+          <div style="color:var(--text-dim);font-size:.7rem">Total Rake</div>
+          <div style="color:var(--chip-green);font-weight:700;font-size:1.1rem">$${fmt(report.total_rake)}</div>
+        </div>
+      </div>
+      <div style="background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.3);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.88rem">
+        <div style="display:flex;justify-content:space-between"><span style="color:var(--text-dim)">Host</span><span style="color:var(--text)">${esc(report.host_username || 'None')} ${report.host_type ? `(${report.host_type})` : ''}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px"><span style="color:var(--text-dim)">Host Cut (${report.host_percent || 0}%)</span><span style="color:var(--gold);font-weight:700">$${fmt(report.host_amount)}</span></div>
+        <div style="display:flex;justify-content:space-between;margin-top:6px"><span style="color:var(--text-dim)">House Earnings</span><span style="color:var(--chip-green);font-weight:700">$${fmt(report.house_amount)}</span></div>
+      </div>
+      <div style="overflow-y:auto;flex:1">${handsHtml}</div>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
 }
 
 async function loadPlayerReplies() {
@@ -1072,11 +1212,14 @@ async function createTable() {
 }
 
 async function closeTable(id) {
-  if (!confirm('Close this table?')) return;
+  if (!confirm('End this table session? A rake report will be generated and emailed automatically.')) return;
   try {
     await apiFetch(`/api/tables/${id}`, { method: 'DELETE' });
-    toast('Table closed');
+    toast('Table closed — session report generated');
     loadTables();
+    loadSessionReports();
+    loadRakeSplits();
+    loadSessionRake();
   } catch (e) { toast(e.message, 'error'); }
 }
 

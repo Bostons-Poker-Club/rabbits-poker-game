@@ -21,6 +21,7 @@
   <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
+  <button class="admin-tab-btn" onclick="showPanel('reports')">📊 Reports</button>
   <button class="admin-tab-btn" onclick="showPanel('messages')">📨 Messages</button>
   <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
   <button id="mute-btn" class="admin-tab-btn" onclick="toggleMute()" title="Toggle notification sounds" style="font-size:1.1rem;position:relative">
@@ -359,15 +360,25 @@
       <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="rake-session-total-panel">$0</div><div class="stat-label">Session Rake</div></div>
     </div>
 
-    <!-- Per-table session rake -->
-    <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.9rem">🎰 Session Rake by Table</h3>
-    <div class="table-wrap" style="margin-bottom:24px">
+    <!-- Per-table session rake with full breakdown -->
+    <h3 style="color:var(--chip-green);margin-bottom:10px;font-size:.9rem">🎰 Active Tables — Session Rake Tracker</h3>
+    <div class="table-wrap" style="margin-bottom:16px">
       <table class="data-table" id="rake-by-table-panel-table">
-        <thead><tr><th>Table</th><th>Hands</th><th>Session Rake</th></tr></thead>
+        <thead><tr><th>Table</th><th>Hands</th><th>Pot Volume</th><th>Rake Collected</th><th>Host</th><th>Host%</th><th>Host Gets</th><th>House Gets</th></tr></thead>
         <tbody id="rake-by-table-panel-body">
-          <tr><td colspan="3" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>
+          <tr><td colspan="8" style="text-align:center;color:var(--text-dim)">No hands this session</td></tr>
         </tbody>
       </table>
+    </div>
+
+    <!-- Grand total box -->
+    <div id="rake-grand-total-box" style="display:none;background:rgba(212,175,55,.1);border:2px solid var(--gold);border-radius:var(--radius);padding:16px 20px;margin-bottom:24px">
+      <h4 style="color:var(--gold);margin:0 0 12px;font-size:.9rem">📊 Grand Totals — All Tables This Session</h4>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
+        <div style="text-align:center"><div style="color:var(--chip-green);font-size:1.3rem;font-weight:700" id="gt-total-rake">$0</div><div style="color:var(--text-dim);font-size:.75rem">Combined Rake</div></div>
+        <div style="text-align:center"><div style="color:var(--gold);font-size:1.3rem;font-weight:700" id="gt-host-cuts">$0</div><div style="color:var(--text-dim);font-size:.75rem">Total Host/Admin Cuts</div></div>
+        <div style="text-align:center"><div style="color:var(--chip-green);font-size:1.3rem;font-weight:700" id="gt-house-earnings">$0</div><div style="color:var(--text-dim);font-size:.75rem">House Earnings</div></div>
+      </div>
     </div>
 
     <!-- Rake splits by host -->
@@ -394,6 +405,15 @@
         <thead><tr><th>Table</th><th>Rake</th><th>Jackpot</th><th>Date</th></tr></thead>
         <tbody id="rake-body"></tbody>
       </table>
+    </div>
+  </div>
+
+  <!-- Session Reports -->
+  <div class="admin-panel" id="panel-reports">
+    <h2 style="color:var(--gold);margin-bottom:16px">📊 Session Reports</h2>
+    <p style="color:var(--text-dim);font-size:.88rem;margin-bottom:20px">Automatically generated when a table session is ended. Full per-hand rake breakdown. Reports are also emailed to the club admin.</p>
+    <div id="session-reports-list">
+      <div style="text-align:center;padding:32px;color:var(--text-dim)">No session reports yet</div>
     </div>
   </div>
 </div>

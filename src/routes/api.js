@@ -242,45 +242,65 @@ router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
 router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) => {
   const tableId = req.params.id;
 
-  // Record rake split before closing
+  // Record rake split + session report before closing
   try {
     const { data: tbl } = await supabaseAdmin.from('tables').select('name, host_id').eq('id', tableId).single();
     const { sessionRake } = require('../socket/handlers');
     const entry = sessionRake.byTable.get(tableId);
-    const totalRake = entry?.total || 0;
+    const totalRake    = entry?.total      || 0;
+    const potVolume    = entry?.potVolume  || 0;
+    const handsPlayed  = entry?.hands?.length || 0;
+    const handsDetail  = entry?.hands || [];
 
-    if (totalRake > 0) {
-      let hostId = tbl?.host_id || null;
-      let hostUsername = null;
-      let hostType = null;
-      let hostPercent = 0;
+    // Resolve host info (prefer in-memory game data, fall back to DB)
+    let hostId       = entry?.hostId       || tbl?.host_id || null;
+    let hostUsername = entry?.hostUsername || null;
+    let hostType     = entry?.hostType     || null;
+    let hostPercent  = entry?.hostPercent  || 0;
 
-      if (hostId) {
+    if (hostId && !hostUsername) {
+      try {
         const { data: hostUser } = await supabaseAdmin.from('users').select('username, is_admin, host_type').eq('id', hostId).single();
         if (hostUser) {
           hostUsername = hostUser.username;
-          hostType = hostUser.is_admin ? 'admin' : 'host';
-          hostPercent = hostType === 'admin' ? 20 : 40;
+          hostType     = hostUser.is_admin ? 'admin' : (hostUser.host_type || 'host');
+          hostPercent  = hostType === 'admin' ? 20 : 40;
         }
-      }
+      } catch {}
+    }
 
-      const hostAmount  = Math.floor(totalRake * hostPercent / 100);
-      const houseAmount = totalRake - hostAmount;
+    const hostAmount  = Math.floor(totalRake * hostPercent / 100);
+    const houseAmount = totalRake - hostAmount;
+    const tableName   = tbl?.name || tableId.slice(0, 8);
 
+    if (totalRake > 0) {
       await supabaseAdmin.from('table_rake_splits').insert({
-        table_id: tableId,
-        table_name: tbl?.name || tableId.slice(0, 8),
-        total_rake: totalRake,
-        host_id: hostId,
-        host_username: hostUsername,
-        host_type: hostType,
-        host_percent: hostPercent,
-        host_amount: hostAmount,
-        house_amount: houseAmount
+        table_id: tableId, table_name: tableName, total_rake: totalRake,
+        host_id: hostId, host_username: hostUsername, host_type: hostType,
+        host_percent: hostPercent, host_amount: hostAmount, house_amount: houseAmount
       });
     }
+
+    // Save detailed session report
+    const { data: reportRow } = await supabaseAdmin.from('session_reports').insert({
+      table_id: tableId, table_name: tableName,
+      total_rake: totalRake, pot_volume: potVolume, hands_played: handsPlayed,
+      host_id: hostId, host_username: hostUsername, host_type: hostType,
+      host_percent: hostPercent, host_amount: hostAmount, house_amount: houseAmount,
+      hands_detail: handsDetail
+    }).select('id').single();
+
+    // Email session report to admin
+    const { sendSessionReportEmail } = require('../mail');
+    sendSessionReportEmail({
+      reportId: reportRow?.id,
+      tableName, totalRake, potVolume, handsPlayed,
+      hostUsername, hostType, hostPercent, hostAmount, houseAmount,
+      hands: handsDetail
+    }).catch(() => {});
+
   } catch (e) {
-    console.warn('[close-table] Rake split error:', e.message);
+    console.warn('[close-table] Session report error:', e.message);
   }
 
   const { error } = await supabaseAdmin.from('tables').update({ status: 'closed' }).eq('id', tableId);
@@ -696,21 +716,46 @@ router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (re
 router.get('/admin/session-rake', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { sessionRake } = require('../socket/handlers');
-    const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => ({
-      tableId: id, tableName: t.tableName, total: t.total,
-      handCount: t.hands.length,
-      hands: t.hands
-    }));
+    const byTable = Array.from(sessionRake.byTable.entries()).map(([id, t]) => {
+      const hPct = t.hostPercent || 0;
+      const hAmt = Math.floor(t.total * hPct / 100);
+      return {
+        tableId: id, tableName: t.tableName, total: t.total,
+        handCount: t.hands.length, potVolume: t.potVolume || 0,
+        hostId: t.hostId, hostUsername: t.hostUsername, hostType: t.hostType,
+        hostPercent: hPct, hostAmount: hAmt, houseAmount: t.total - hAmt,
+        hands: t.hands
+      };
+    });
     res.json({
       total: sessionRake.total,
       byTable,
-      // flat list of all hands newest-first for the live feed
       hands: byTable.flatMap(t => t.hands.map(h => ({ ...h, tableId: t.tableId, tableName: t.tableName })))
               .sort((a, b) => b.ts - a.ts).slice(0, 100)
     });
   } catch {
     res.json({ total: 0, byTable: [], hands: [] });
   }
+});
+
+router.get('/admin/session-reports', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('session_reports')
+      .select('id, table_name, session_date, total_rake, pot_volume, hands_played, host_username, host_type, host_percent, host_amount, house_amount, created_at')
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/admin/session-reports/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin.from('session_reports').select('*').eq('id', req.params.id).single();
+  if (error) return res.status(404).json({ error: 'Report not found' });
+  res.json(data);
 });
 
 router.get('/admin/notifications', authMiddleware, adminMiddleware, (req, res) => {

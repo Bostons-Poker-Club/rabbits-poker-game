@@ -183,4 +183,82 @@ async function sendHostApprovalEmail({ to, hostName, username, password, hostTyp
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail };
+async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolume, handsPlayed, hostUsername, hostType, hostPercent, hostAmount, houseAmount, hands }) {
+  if (!isConfigured()) return;
+  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const fmt = n => (n || 0).toLocaleString();
+  const hostLabel = hostUsername ? `${hostUsername} (${hostType === 'admin' ? 'Admin' : 'Host'})` : 'No host';
+
+  const handsRows = (hands || []).map(h =>
+    `<tr style="border-bottom:1px solid #eee">
+      <td style="padding:5px 10px;text-align:center">#${h.handNum || '–'}</td>
+      <td style="padding:5px 10px;text-align:right">$${fmt(h.pot)}</td>
+      <td style="padding:5px 10px;text-align:right;color:#1a7a3f;font-weight:600">$${fmt(h.rake)}</td>
+    </tr>`
+  ).join('');
+
+  const textLines = [
+    `SESSION REPORT — ${tableName}`,
+    `Date: ${date}`,
+    '',
+    `Hands Played: ${handsPlayed}`,
+    `Total Pot Volume: $${fmt(potVolume)}`,
+    `Total Rake Collected: $${fmt(totalRake)}`,
+    '',
+    `Host: ${hostLabel}`,
+    `Host Cut (${hostPercent}%): $${fmt(hostAmount)}`,
+    `House Earnings: $${fmt(houseAmount)}`,
+    '',
+    'Per-Hand Breakdown:',
+    ...(hands || []).map(h => `  Hand #${h.handNum || '–'}  Pot $${fmt(h.pot)}  Rake $${fmt(h.rake)}`),
+    '',
+    `Report ID: ${reportId || 'N/A'}`
+  ].join('\n');
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:620px;margin:0 auto">
+      <h2 style="color:#1a7a3f">🃏 Session Report — ${tableName}</h2>
+      <p style="color:#666;margin-bottom:20px">${date}</p>
+
+      <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px;overflow:hidden;margin-bottom:20px">
+        <tr><td style="padding:9px 14px;color:#555;width:200px">Hands Played</td><td style="padding:9px 14px;font-weight:700">${handsPlayed}</td></tr>
+        <tr style="background:#fff"><td style="padding:9px 14px;color:#555">Total Pot Volume</td><td style="padding:9px 14px;font-weight:700">$${fmt(potVolume)}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555">Total Rake Collected</td><td style="padding:9px 14px;font-weight:700;color:#1a7a3f">$${fmt(totalRake)}</td></tr>
+      </table>
+
+      <h3 style="color:#333;margin-bottom:10px">Rake Split</h3>
+      <table style="border-collapse:collapse;width:100%;background:#f0faf5;border:1px solid #b2dfcc;border-radius:8px;overflow:hidden;margin-bottom:20px">
+        <tr><td style="padding:9px 14px;color:#555;width:200px">Host</td><td style="padding:9px 14px;font-weight:700">${hostLabel}</td></tr>
+        <tr style="background:#e8f5ee"><td style="padding:9px 14px;color:#555">Host Cut (${hostPercent}%)</td><td style="padding:9px 14px;font-weight:700;color:#1a7a3f">$${fmt(hostAmount)}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555">House Earnings</td><td style="padding:9px 14px;font-weight:700;color:#1a7a3f">$${fmt(houseAmount)}</td></tr>
+      </table>
+
+      ${handsRows ? `
+      <h3 style="color:#333;margin-bottom:10px">Per-Hand Breakdown (${handsPlayed} hands)</h3>
+      <div style="max-height:400px;overflow-y:auto">
+        <table style="border-collapse:collapse;width:100%;font-size:.88rem">
+          <thead><tr style="background:#1a7a3f;color:#fff">
+            <th style="padding:7px 10px">Hand #</th>
+            <th style="padding:7px 10px;text-align:right">Pot</th>
+            <th style="padding:7px 10px;text-align:right">Rake</th>
+          </tr></thead>
+          <tbody>${handsRows}</tbody>
+        </table>
+      </div>` : ''}
+
+      <p style="color:#999;font-size:.8rem;margin-top:20px">Report ID: ${reportId || 'N/A'} — Boston Poker Club</p>
+    </div>`;
+
+  try {
+    await sgMail.send({
+      from: FROM, to: ADMIN_EMAIL,
+      subject: `📊 Session Report — ${tableName} (${handsPlayed} hands, $${fmt(totalRake)} rake)`,
+      text: textLines, html
+    });
+    console.log(`[mail] Session report emailed for ${tableName}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send session report email:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail };
