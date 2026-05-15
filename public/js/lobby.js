@@ -176,9 +176,9 @@ function renderTables(tables) {
     const dots = Array.from({ length: t.max_players }, (_, i) =>
       `<span class="player-dot ${i < seated ? '' : 'empty'}"></span>`
     ).join('');
-    // Find this table's jackpot data
+    // Find this table's jackpot data (only show if active)
     const jp = (jackpotData?.tables || []).find(j => j.tableId === t.id);
-    const jpLine = jp
+    const jpLine = (jp && jp.isActive)
       ? `<div style="font-size:.78rem;color:var(--gold);margin-top:4px">🏆 Jackpot: $${fmtChips(jp.amount)}${jp.highHandUsername ? ` — ${esc(jp.highHandUsername)}` : ''}</div>`
       : '';
 
@@ -257,42 +257,56 @@ async function loadJackpot() {
 }
 
 function updateJackpotDisplay(tables) {
-  // Total across all tables in banner
-  const total = (tables || []).reduce((s, t) => s + (t.amount || 0), 0);
-  document.getElementById('jackpot-amount').textContent = `$${fmtChips(total)}`;
+  const activeTables = (tables || []).filter(t => t.isActive);
+  const total = activeTables.reduce((s, t) => s + (t.amount || 0), 0);
+  document.getElementById('jackpot-amount').textContent = total > 0 ? `$${fmtChips(total)}` : '–';
 
-  // Timer: use the earliest-expiring table, or show — if none
-  if (tables && tables.length > 0) {
-    const earliest = tables.reduce((min, t) => t.timerRemainingMs < min.timerRemainingMs ? t : min, tables[0]);
+  const running = activeTables.filter(t => !t.awaitingPayout && !t.isOnHold);
+  if (running.length > 0) {
     if (jackpotTimerTick) clearInterval(jackpotTimerTick);
     jackpotTimerTick = setInterval(() => {
       const now = Date.now();
       let minRemaining = Infinity;
-      (jackpotData?.tables || []).forEach(t => {
-        const remaining = Math.max(0, JACKPOT_INTERVAL_MS - (now - t.timerStart));
-        if (remaining < minRemaining) minRemaining = remaining;
+      (jackpotData?.tables || []).filter(t => t.isActive && !t.awaitingPayout && !t.isOnHold).forEach(t => {
+        const rem = Math.max(0, (t.timerStart + JACKPOT_INTERVAL_MS) - now);
+        if (rem < minRemaining) minRemaining = rem;
       });
-      if (minRemaining === Infinity) { document.getElementById('jackpot-timer').textContent = '–'; return; }
+      const timerEl = document.getElementById('jackpot-timer');
+      if (!timerEl) return;
+      if (minRemaining === Infinity || minRemaining === 0) { timerEl.textContent = '–'; return; }
       const min = Math.floor(minRemaining / 60000);
       const sec = Math.floor((minRemaining % 60000) / 1000);
-      document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+      timerEl.textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
     }, 1000);
   } else {
-    document.getElementById('jackpot-timer').textContent = '–';
+    if (jackpotTimerTick) { clearInterval(jackpotTimerTick); jackpotTimerTick = null; }
+    const timerEl = document.getElementById('jackpot-timer');
+    if (timerEl) timerEl.textContent = '–';
   }
 }
 
 // Called when socket pushes jackpot_state
 function handleJackpotState(state) {
   jackpotData = state;
-  const tables = state.tables || [];
-  const total = state.total || state.amount || 0;
-  document.getElementById('jackpot-amount').textContent = `$${fmtChips(total)}`;
-  if (tables.length > 0) {
-    const min30 = tables.reduce((a, t) => t.timerRemainingMs < a ? t.timerRemainingMs : a, Infinity);
-    const min = Math.floor(min30 / 60000);
-    const sec = Math.floor((min30 % 60000) / 1000);
-    document.getElementById('jackpot-timer').textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+  const activeTables = (state.tables || []).filter(t => t.isActive);
+  const total = activeTables.reduce((s, t) => s + (t.amount || 0), 0);
+  document.getElementById('jackpot-amount').textContent = total > 0 ? `$${fmtChips(total)}` : '–';
+
+  const running = activeTables.filter(t => !t.awaitingPayout && !t.isOnHold);
+  const timerEl = document.getElementById('jackpot-timer');
+  if (timerEl) {
+    if (running.length > 0) {
+      const minRemaining = Math.min(...running.map(t => t.timerRemainingMs || 0));
+      if (minRemaining > 0) {
+        const min = Math.floor(minRemaining / 60000);
+        const sec = Math.floor((minRemaining % 60000) / 1000);
+        timerEl.textContent = `Resets in ${min}:${sec.toString().padStart(2, '0')}`;
+      } else {
+        timerEl.textContent = '–';
+      }
+    } else {
+      timerEl.textContent = '–';
+    }
   }
   // Re-render table cards so per-table jackpot lines stay current
   if (allTables && allTables.length) renderTables(allTables);

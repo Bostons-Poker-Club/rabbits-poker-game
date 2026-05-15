@@ -378,23 +378,9 @@ router.post('/tournaments/:id/register', authMiddleware, async (req, res) => {
 
 router.get('/jackpot', authMiddleware, (req, res) => {
   try {
-    const { tableJackpots } = require('../socket/handlers');
-    const now = Date.now();
-    const INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
-    const tables = Array.from(tableJackpots.entries()).map(([tableId, jp]) => {
-      const remaining = Math.max(0, INTERVAL_MS - (now - jp.timerStart));
-      return {
-        tableId, tableName: jp.tableName,
-        amount: jp.amount,
-        highHandRank: jp.highHandRank,
-        highHandUsername: jp.highHandUsername,
-        highHandDescription: jp.highHandDescription,
-        timerStart: jp.timerStart,
-        timerRemainingMs: remaining
-      };
-    });
-    const total = tables.reduce((s, t) => s + t.amount, 0);
-    res.json({ tables, total, current_amount: total, timer_started_at: tables[0]?.timerStart ? new Date(tables[0].timerStart).toISOString() : null });
+    const { getAllJackpotState } = require('../socket/handlers');
+    const state = getAllJackpotState();
+    res.json({ ...state, current_amount: state.total, timer_started_at: state.tables[0]?.timerStart ? new Date(state.tables[0].timerStart).toISOString() : null });
   } catch (e) {
     res.json({ tables: [], total: 0, current_amount: 0 });
   }
@@ -428,6 +414,56 @@ router.post('/jackpot/high-hand', authMiddleware, adminMiddleware, async (req, r
     // Keep legacy state for backward compat
     highHandState = { description: String(description).slice(0, 120), holder: holder ? String(holder).slice(0, 60) : '', setAt: new Date().toISOString() };
     res.json({ success: true, tableId, description, holder });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Admin: activate / deactivate / hold / resume jackpot for a specific table
+router.post('/jackpot/control', authMiddleware, adminMiddleware, async (req, res) => {
+  const { tableId, action } = req.body;
+  if (!tableId) return res.status(400).json({ error: 'tableId required' });
+  if (!['activate', 'deactivate', 'hold', 'resume'].includes(action)) {
+    return res.status(400).json({ error: 'action must be activate, deactivate, hold, or resume' });
+  }
+  try {
+    const { tableJackpots, pendingJackpotPayouts, getAllJackpotState } = require('../socket/handlers');
+    const io = req.app.get('io');
+    const jp = tableJackpots.get(tableId);
+    if (!jp) return res.status(404).json({ error: 'No jackpot found for this table' });
+
+    switch (action) {
+      case 'activate':
+        jp.isActive = true;
+        jp.isOnHold = false;
+        jp.awaitingPayout = false;
+        jp.timerStart = Date.now();
+        jp.pausedAt = null;
+        pendingJackpotPayouts.delete(tableId);
+        break;
+      case 'deactivate':
+        jp.isActive = false;
+        jp.isOnHold = false;
+        jp.awaitingPayout = false;
+        jp.pausedAt = null;
+        pendingJackpotPayouts.delete(tableId);
+        break;
+      case 'hold':
+        if (!jp.isActive || jp.awaitingPayout) return res.status(400).json({ error: 'Cannot hold: jackpot not active or awaiting payout' });
+        jp.isOnHold = true;
+        jp.pausedAt = Date.now();
+        break;
+      case 'resume':
+        if (jp.pausedAt) {
+          jp.timerStart += (Date.now() - jp.pausedAt);
+          jp.pausedAt = null;
+        }
+        jp.isOnHold = false;
+        break;
+    }
+
+    if (io) io.emit('jackpot_state', getAllJackpotState());
+    res.json({ success: true, action, tableId });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

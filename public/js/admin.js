@@ -1313,47 +1313,96 @@ function renderJackpotTables(tables) {
   const container = document.getElementById('jp-tables-list');
   if (!container) return;
 
-  // Clear per-table countdown intervals
   Object.values(tableCountdownIntervals).forEach(clearInterval);
   tableCountdownIntervals = {};
 
   if (!tables.length) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No active tables yet.</div>';
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No active tables yet. Tables appear here when players sit down.</div>';
     return;
   }
 
   container.innerHTML = tables.map(t => {
     const hasWinner = t.highHandUsername || t.highHandDescription;
-    const rankLabel = ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'][t.highHandRank] || `Rank ${t.highHandRank}`;
+    const rankLabel = ['High Card','One Pair','Two Pair','Three of a Kind','Straight','Flush','Full House','Four of a Kind','Straight Flush','Royal Flush'][t.highHandRank] || '';
+
+    let statusBadge, statusColor, borderColor;
+    if (t.awaitingPayout) {
+      statusBadge = '⏰ PAYOUT DUE'; statusColor = 'var(--red)'; borderColor = 'var(--red)';
+    } else if (t.isOnHold) {
+      statusBadge = '⏸ ON HOLD'; statusColor = 'var(--gold)'; borderColor = 'var(--gold)';
+    } else if (t.isActive) {
+      statusBadge = '✅ ACTIVE'; statusColor = 'var(--chip-green)'; borderColor = 'var(--chip-green)';
+    } else {
+      statusBadge = '⬛ INACTIVE'; statusColor = 'var(--text-dim)'; borderColor = 'var(--border)';
+    }
+
+    let controlButtons = '';
+    if (t.awaitingPayout) {
+      controlButtons = `
+        <button class="btn btn-gold btn-sm" onclick="confirmJackpotPayout('${t.tableId}')">Confirm Payout $${fmt(t.amount)}</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deactivateJackpot('${t.tableId}')">Deactivate (No Pay)</button>`;
+    } else if (t.isOnHold) {
+      controlButtons = `
+        <button class="btn btn-green btn-sm" onclick="controlJackpot('${t.tableId}','resume')">▶ Resume</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deactivateJackpot('${t.tableId}')">Deactivate</button>
+        ${t.amount > 0 && hasWinner ? `<button class="btn btn-gold btn-sm" onclick="awardJackpot('${t.tableId}')">Award Manually</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="resetJackpot('${t.tableId}')">Reset $0</button>`;
+    } else if (t.isActive) {
+      controlButtons = `
+        <button class="btn btn-outline btn-sm" style="color:var(--gold);border-color:var(--gold)" onclick="controlJackpot('${t.tableId}','hold')">⏸ Hold</button>
+        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="deactivateJackpot('${t.tableId}')">Deactivate</button>
+        ${t.amount > 0 && hasWinner ? `<button class="btn btn-gold btn-sm" onclick="awardJackpot('${t.tableId}')">Award Manually</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="resetJackpot('${t.tableId}')">Reset $0</button>`;
+    } else {
+      controlButtons = `
+        <button class="btn btn-green btn-sm" onclick="controlJackpot('${t.tableId}','activate')">▶ Activate</button>
+        ${t.amount > 0 && hasWinner ? `<button class="btn btn-gold btn-sm" onclick="awardJackpot('${t.tableId}')">Award Manually</button>` : ''}
+        <button class="btn btn-outline btn-sm" onclick="resetJackpot('${t.tableId}')">Reset $0</button>`;
+    }
+
+    let timerHtml = '';
+    if (t.awaitingPayout) {
+      timerHtml = `<div style="color:var(--red);font-weight:700;font-size:1.1rem">PAYOUT DUE</div>`;
+    } else if (!t.isActive) {
+      timerHtml = `<div style="color:var(--text-dim);font-size:.88rem">Not activated</div>`;
+    } else {
+      timerHtml = `
+        <div style="font-size:.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">${t.isOnHold ? 'Paused at' : 'Resets in'}</div>
+        <div id="jp-cd-${t.tableId}" style="font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--gold)">–:––</div>`;
+    }
+
     return `
-    <div id="jp-table-${t.tableId}" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+    <div id="jp-table-${t.tableId}" style="background:rgba(255,255,255,.04);border:1px solid ${borderColor};border-radius:var(--radius);padding:18px 20px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px">
-        <div>
-          <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px">🃏 ${esc(t.tableName)}</div>
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap">
+            <div style="font-size:1rem;font-weight:700;color:var(--gold)">🃏 ${esc(t.tableName)}</div>
+            <span style="font-size:.7rem;font-weight:700;color:${statusColor};background:rgba(0,0,0,.3);padding:2px 8px;border-radius:10px;border:1px solid ${statusColor};flex-shrink:0">${statusBadge}</span>
+          </div>
           <div style="font-size:1.6rem;font-weight:700;color:var(--chip-green)">$${fmt(t.amount)}</div>
           ${hasWinner
-            ? `<div style="color:var(--text);margin-top:6px">🏆 <strong>${esc(t.highHandUsername || '—')}</strong> — ${esc(t.highHandDescription || rankLabel)}</div>`
-            : `<div style="color:var(--text-dim);margin-top:6px;font-size:.85rem">No high hand recorded yet</div>`}
+            ? `<div style="color:var(--text);margin-top:6px;font-size:.9rem">🏆 <strong>${esc(t.highHandUsername || '—')}</strong> — ${esc(t.highHandDescription || rankLabel)}</div>`
+            : `<div style="color:var(--text-dim);margin-top:6px;font-size:.85rem">No high hand recorded</div>`}
         </div>
-        <div style="text-align:right">
-          <div style="font-size:.7rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Resets in</div>
-          <div id="jp-cd-${t.tableId}" style="font-size:1.8rem;font-weight:700;font-variant-numeric:tabular-nums;color:var(--gold)">–:––</div>
-          <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end">
-            ${t.amount > 0 && hasWinner ? `<button class="btn btn-gold btn-sm" onclick="awardJackpot('${t.tableId}')">Award $${fmt(t.amount)}</button>` : ''}
-            <button class="btn btn-outline btn-sm" onclick="resetJackpot('${t.tableId}')">Reset</button>
+        <div style="text-align:right;flex-shrink:0">
+          ${timerHtml}
+          <div style="display:flex;gap:6px;margin-top:10px;justify-content:flex-end;flex-wrap:wrap">
+            ${controlButtons}
           </div>
         </div>
       </div>
     </div>`;
   }).join('');
 
-  // Start per-table countdowns
+  // Start live countdowns for active, non-awaiting tables
   tables.forEach(t => {
+    if (!t.isActive || t.awaitingPayout) return;
+    const frozenMs = t.isOnHold ? (t.timerRemainingMs || 0) : null;
     const deadline = t.timerStart + JACKPOT_INTERVAL_MS;
     const tick = () => {
       const el = document.getElementById(`jp-cd-${t.tableId}`);
       if (!el) { clearInterval(tableCountdownIntervals[t.tableId]); return; }
-      const remaining = Math.max(0, deadline - Date.now());
+      const remaining = frozenMs !== null ? frozenMs : Math.max(0, deadline - Date.now());
       const min = Math.floor(remaining / 60000);
       const sec = Math.floor((remaining % 60000) / 1000);
       el.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
@@ -1383,8 +1432,8 @@ async function setHighHand() {
 
 async function awardJackpot(tableId) {
   const table = currentJackpotTables.find(t => t.tableId === tableId);
-  const label = table ? `${table.tableName} — ${table.highHandUsername} ($${fmt(table.amount)})` : tableId;
-  if (!confirm(`Award jackpot for:\n${label}?`)) return;
+  const label = table ? `${table.tableName} — ${table.highHandUsername || '?'} ($${fmt(table.amount)})` : tableId;
+  if (!confirm(`Award jackpot manually for:\n${label}?`)) return;
   try {
     const r = await apiFetch('/api/jackpot/award', { method: 'POST', body: { tableId } });
     toast(`🏆 Jackpot of $${fmt(r.awarded)} awarded to ${table?.highHandUsername || 'winner'}!`);
@@ -1393,26 +1442,61 @@ async function awardJackpot(tableId) {
 }
 
 async function resetJackpot(tableId) {
-  if (!confirm('Reset this table\'s jackpot timer and high hand?')) return;
+  if (!confirm('Reset this table\'s jackpot to $0 and clear the high hand?')) return;
   if (adminSocket) adminSocket.emit('admin:action', { action: 'reset_jackpot', tableId });
-  toast('Jackpot reset');
+  toast('Jackpot reset to $0');
   setTimeout(loadJackpot, 500);
+}
+
+async function controlJackpot(tableId, action) {
+  try {
+    await apiFetch('/api/jackpot/control', { method: 'POST', body: { tableId, action } });
+    const labels = { activate: '✅ Jackpot activated — 30-min clock started', hold: '⏸ Jackpot paused', resume: '▶ Jackpot resumed' };
+    toast(labels[action] || 'Done');
+    loadJackpot();
+  } catch (e) { toast(e.message || 'Error', 'error'); }
+}
+
+async function deactivateJackpot(tableId) {
+  const table = currentJackpotTables.find(t => t.tableId === tableId);
+  const msg = table?.awaitingPayout
+    ? `Deactivate "${table?.tableName}" WITHOUT paying out $${fmt(table?.amount || 0)}?\nThe payout will be lost.`
+    : `Deactivate jackpot for "${table?.tableName || tableId}"?\nThe clock stops and no more contributions accumulate.`;
+  if (!confirm(msg)) return;
+  try {
+    await apiFetch('/api/jackpot/control', { method: 'POST', body: { tableId, action: 'deactivate' } });
+    toast('Jackpot deactivated');
+    loadJackpot();
+  } catch (e) { toast(e.message || 'Error', 'error'); }
+}
+
+async function confirmJackpotPayout(tableId) {
+  const table = currentJackpotTables.find(t => t.tableId === tableId);
+  const label = table
+    ? `${table.tableName} — ${table.highHandUsername || '?'} ($${fmt(table.amount)})`
+    : tableId;
+  if (!confirm(`Confirm payout:\n${label}\n\nThis pays the winner and starts a new 30-minute round automatically.`)) return;
+  try {
+    const r = await apiFetch('/api/jackpot/award', { method: 'POST', body: { tableId } });
+    toast(`🏆 $${fmt(r.awarded)} awarded! New 30-min round started.`, 'success');
+    loadJackpot();
+  } catch (e) { toast(e.message || 'Error', 'error'); }
 }
 
 // Handle jackpot expiry notification from server
 function handleJackpotExpired(data) {
-  const { tableName, awarded, winnerName, winnerHand } = data;
-  // Show banner notification
+  const { tableName, awarded, winnerName, winnerHand, tableId } = data;
   const banner = document.createElement('div');
-  banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:20px 28px;z-index:9999;text-align:center;min-width:320px;box-shadow:0 0 40px rgba(212,175,55,.3)';
+  banner.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:20px 28px;z-index:9999;text-align:center;min-width:340px;max-width:90vw;box-shadow:0 0 40px rgba(212,175,55,.3)';
   banner.innerHTML = `
     <div style="font-size:1.8rem;margin-bottom:8px">🏆</div>
     <div style="font-weight:700;color:var(--gold);font-size:1.1rem;margin-bottom:4px">Jackpot Expired — ${esc(tableName)}</div>
-    <div style="color:var(--text);margin-bottom:4px">${esc(winnerHand)} by <strong>${esc(winnerName)}</strong></div>
-    <div style="font-size:1.4rem;font-weight:700;color:var(--chip-green);margin-bottom:14px">$${fmt(awarded)} to award</div>
-    <div style="display:flex;gap:8px;justify-content:center">
-      <button class="btn btn-gold" onclick="awardJackpot('${data.tableId}');this.closest('div[style]').remove()">Confirm Payout</button>
-      <button class="btn btn-outline" onclick="this.closest('div[style]').remove()">Dismiss</button>
+    <div style="color:var(--text);margin-bottom:4px">${esc(winnerHand || '—')} by <strong>${esc(winnerName || '?')}</strong></div>
+    <div style="font-size:1.4rem;font-weight:700;color:var(--chip-green);margin-bottom:8px">$${fmt(awarded)} to award</div>
+    <div style="color:var(--text-dim);font-size:.8rem;margin-bottom:14px">After payout, jackpot resets to $0 and a new 30-min round starts automatically.</div>
+    <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-gold" onclick="confirmJackpotPayout('${tableId}');this.closest('[style*=position]').remove()">Confirm Payout $${fmt(awarded)}</button>
+      <button class="btn btn-outline" onclick="this.closest('[style*=position]').remove()">Dismiss (Pay Later)</button>
     </div>`;
   document.body.appendChild(banner);
   loadJackpot();

@@ -483,7 +483,11 @@ function setupSocketHandlers(io) {
               highHandUserId: null,
               highHandUsername: null,
               highHandDescription: null,
-              timerStart: Date.now()
+              timerStart: Date.now(),
+              isActive: false,
+              isOnHold: false,
+              awaitingPayout: false,
+              pausedAt: null
             });
           }
           game.onShotClockExpired = (uid) => {
@@ -1201,6 +1205,51 @@ function setupSocketHandlers(io) {
       socket.emit('jackpot_state', getAllJackpotState());
     });
 
+    // Admin: activate / deactivate / hold / resume jackpot per table
+    socket.on('jackpot:admin_control', ({ tableId, action }) => {
+      if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      if (!tableId) return socket.emit('error', { message: 'tableId required' });
+      const jp = tableJackpots.get(tableId);
+      if (!jp) return socket.emit('error', { message: 'No jackpot for this table' });
+
+      switch (action) {
+        case 'activate':
+          jp.isActive = true;
+          jp.isOnHold = false;
+          jp.awaitingPayout = false;
+          jp.timerStart = Date.now();
+          jp.pausedAt = null;
+          pendingJackpotPayouts.delete(tableId);
+          console.log(`[jackpot] Admin activated jackpot for ${jp.tableName}`);
+          break;
+        case 'deactivate':
+          jp.isActive = false;
+          jp.isOnHold = false;
+          jp.awaitingPayout = false;
+          jp.pausedAt = null;
+          pendingJackpotPayouts.delete(tableId);
+          console.log(`[jackpot] Admin deactivated jackpot for ${jp.tableName}`);
+          break;
+        case 'hold':
+          if (!jp.isActive || jp.awaitingPayout) return;
+          jp.isOnHold = true;
+          jp.pausedAt = Date.now();
+          console.log(`[jackpot] Admin put jackpot on hold for ${jp.tableName}`);
+          break;
+        case 'resume':
+          if (jp.pausedAt) {
+            jp.timerStart += (Date.now() - jp.pausedAt);
+            jp.pausedAt = null;
+          }
+          jp.isOnHold = false;
+          console.log(`[jackpot] Admin resumed jackpot for ${jp.tableName}`);
+          break;
+        default:
+          return socket.emit('error', { message: 'Unknown jackpot action' });
+      }
+      broadcastJackpotState(io);
+    });
+
     socket.on('get_table_state', ({ tableId }) => {
       const game = activeGames.get(tableId || socket.currentTableId);
       if (!game) return;
@@ -1615,7 +1664,11 @@ function getOrCreateTableJackpot(tableId, tableName) {
       highHandUserId: null,
       highHandUsername: null,
       highHandDescription: null,
-      timerStart: Date.now()
+      timerStart: Date.now(),
+      isActive: false,
+      isOnHold: false,
+      awaitingPayout: false,
+      pausedAt: null
     });
   }
   return tableJackpots.get(tableId);
@@ -1623,6 +1676,7 @@ function getOrCreateTableJackpot(tableId, tableName) {
 
 function checkTableJackpot(io, tableId, handRank, userId, username, description) {
   const jp = getOrCreateTableJackpot(tableId);
+  if (!jp.isActive) return;
   if (handRank > jp.highHandRank) {
     jp.highHandRank = handRank;
     jp.highHandUserId = userId;
@@ -1635,6 +1689,7 @@ function checkTableJackpot(io, tableId, handRank, userId, username, description)
 
 function addToTableJackpot(io, tableId, amount) {
   const jp = getOrCreateTableJackpot(tableId);
+  if (!jp.isActive || jp.isOnHold || jp.awaitingPayout) return;
   jp.amount += amount;
   broadcastJackpotState(io);
 }
@@ -1642,7 +1697,16 @@ function addToTableJackpot(io, tableId, amount) {
 function getAllJackpotState() {
   const now = Date.now();
   const tables = Array.from(tableJackpots.entries()).map(([tableId, jp]) => {
-    const remaining = Math.max(0, JACKPOT_INTERVAL_MS - (now - jp.timerStart));
+    let remaining;
+    if (jp.awaitingPayout) {
+      remaining = 0;
+    } else if (jp.isOnHold && jp.pausedAt) {
+      remaining = Math.max(0, JACKPOT_INTERVAL_MS - (jp.pausedAt - jp.timerStart));
+    } else if (jp.isActive) {
+      remaining = Math.max(0, JACKPOT_INTERVAL_MS - (now - jp.timerStart));
+    } else {
+      remaining = JACKPOT_INTERVAL_MS;
+    }
     return {
       tableId,
       tableName: jp.tableName,
@@ -1653,12 +1717,14 @@ function getAllJackpotState() {
       highHandDescription: jp.highHandDescription,
       timerStart: jp.timerStart,
       timerRemainingMs: remaining,
-      timerRemainingMin: Math.ceil(remaining / 60000)
+      timerRemainingMin: Math.ceil(remaining / 60000),
+      isActive: jp.isActive || false,
+      isOnHold: jp.isOnHold || false,
+      awaitingPayout: jp.awaitingPayout || false
     };
   });
-  const total = tables.reduce((s, t) => s + t.amount, 0);
-  // Backward-compat fields (use total / first table for old clients)
-  const first = tables[0] || {};
+  const total = tables.filter(t => t.isActive).reduce((s, t) => s + t.amount, 0);
+  const first = tables.find(t => t.isActive) || tables[0] || {};
   return {
     tables,
     total,
@@ -1676,13 +1742,14 @@ function startJackpotTimer(io) {
   setInterval(async () => {
     const now = Date.now();
     for (const [tableId, jp] of tableJackpots) {
+      if (!jp.isActive || jp.isOnHold || jp.awaitingPayout) continue;
       const elapsed = now - jp.timerStart;
       if (elapsed >= JACKPOT_INTERVAL_MS) {
         await expireTableJackpot(io, tableId, jp);
       }
     }
     broadcastJackpotState(io);
-  }, 30000); // check every 30s
+  }, 30000);
 }
 
 async function expireTableJackpot(io, tableId, jp) {
@@ -1694,7 +1761,7 @@ async function expireTableJackpot(io, tableId, jp) {
 
   console.log(`[jackpot] Timer expired for table ${tableName} — $${awarded} pending, winner: ${winnerName} (${winnerHand})`);
 
-  // Store pending payout BEFORE resetting so admin can confirm
+  // Store pending payout info so admin can confirm
   if (awarded > 0) {
     pendingJackpotPayouts.set(tableId, {
       amount: awarded, userId: winnerUserId, username: winnerName, hand: winnerHand,
@@ -1702,13 +1769,8 @@ async function expireTableJackpot(io, tableId, jp) {
     });
   }
 
-  // Reset timer and jackpot immediately — new 30-min window starts now
-  jp.amount = 0;
-  jp.highHandRank = -1;
-  jp.highHandUserId = null;
-  jp.highHandUsername = null;
-  jp.highHandDescription = null;
-  jp.timerStart = Date.now();
+  // Pause jackpot — DO NOT reset; awaiting admin confirmation before resetting
+  jp.awaitingPayout = true;
 
   const summary = {
     tableId, tableName, awarded, winnerUserId, winnerName, winnerHand, pendingConfirm: true
@@ -1727,7 +1789,6 @@ async function expireTableJackpot(io, tableId, jp) {
 
   // SMS alert to admin phone
   try {
-    const { sendPlayerSMS } = require('../mail');
     const smsText = `Boston Poker Club: High Hand expired at ${tableName}. Winner: ${winnerName} — ${winnerHand}. Payout: $${awarded}. Log in to confirm.`;
     await sendPlayerSMS({ phone: '5085219176', text: smsText });
   } catch (e) {
@@ -1751,6 +1812,20 @@ async function awardTableJackpot(io, tableId, amount, awardedTo, winnerName, win
       if (s.user && s.user.id === awardedTo) {
         s.emit('jackpot_won', { amount, message: `You won the High Hand Jackpot: $${amount}!` });
       }
+    }
+  }
+
+  // Reset jackpot and auto-start new round if still active
+  const jp = tableJackpots.get(tableId);
+  if (jp) {
+    jp.amount = 0;
+    jp.highHandRank = -1;
+    jp.highHandUserId = null;
+    jp.highHandUsername = null;
+    jp.highHandDescription = null;
+    jp.awaitingPayout = false;
+    if (jp.isActive && !jp.isOnHold) {
+      jp.timerStart = Date.now(); // Auto-start new 30-min round
     }
   }
 
@@ -1929,4 +2004,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };

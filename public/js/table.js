@@ -774,31 +774,52 @@ let tableJackpotTimerStart = 0;
 const JACKPOT_INTERVAL_MS_TABLE = 30 * 60 * 1000;
 
 function updateJackpotDisplay(data) {
-  // Find THIS table's specific jackpot entry
   const tables = data.tables || [];
   const myJp = tables.find(t => t.tableId === tableId) || tables[0];
-  const amount = myJp ? myJp.amount : (data.amount || 0);
 
-  document.getElementById('hdr-jackpot').textContent = `🏆 $${fmt(amount)}`;
+  // Only show amount if jackpot is active for this table
+  const amount = (myJp && myJp.isActive) ? myJp.amount : 0;
+  document.getElementById('hdr-jackpot').textContent = amount > 0 ? `🏆 $${fmt(amount)}` : '🏆 –';
 
-  // Start or update the live countdown for this table
-  if (myJp && myJp.timerStart) {
-    tableJackpotTimerStart = myJp.timerStart;
-    if (!jackpotTimerInterval) {
-      jackpotTimerInterval = setInterval(() => {
-        const remaining = Math.max(0, JACKPOT_INTERVAL_MS_TABLE - (Date.now() - tableJackpotTimerStart));
-        const min = Math.floor(remaining / 60000);
-        const sec = Math.floor((remaining % 60000) / 1000);
-        const timerEl = document.getElementById('hdr-jackpot-timer');
-        if (timerEl) {
-          timerEl.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')} left`;
-          timerEl.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : '';
-        }
-      }, 1000);
-    }
-  } else {
-    const timerEl = document.getElementById('hdr-jackpot-timer');
-    if (timerEl) timerEl.textContent = `${myJp?.timerRemainingMin || 0}m left`;
+  const timerEl = document.getElementById('hdr-jackpot-timer');
+  if (!timerEl) return;
+
+  if (!myJp || !myJp.isActive) {
+    timerEl.textContent = '';
+    if (jackpotTimerInterval) { clearInterval(jackpotTimerInterval); jackpotTimerInterval = null; }
+    return;
+  }
+
+  if (myJp.awaitingPayout) {
+    timerEl.textContent = 'Payout Due';
+    timerEl.style.color = 'var(--red)';
+    if (jackpotTimerInterval) { clearInterval(jackpotTimerInterval); jackpotTimerInterval = null; }
+    return;
+  }
+
+  if (myJp.isOnHold) {
+    const remaining = myJp.timerRemainingMs || 0;
+    const min = Math.floor(remaining / 60000);
+    const sec = Math.floor((remaining % 60000) / 1000);
+    timerEl.textContent = `⏸ ${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    timerEl.style.color = 'var(--gold)';
+    if (jackpotTimerInterval) { clearInterval(jackpotTimerInterval); jackpotTimerInterval = null; }
+    return;
+  }
+
+  // Active and running — start/update live countdown
+  tableJackpotTimerStart = myJp.timerStart;
+  if (!jackpotTimerInterval) {
+    jackpotTimerInterval = setInterval(() => {
+      const remaining = Math.max(0, JACKPOT_INTERVAL_MS_TABLE - (Date.now() - tableJackpotTimerStart));
+      const min = Math.floor(remaining / 60000);
+      const sec = Math.floor((remaining % 60000) / 1000);
+      const el = document.getElementById('hdr-jackpot-timer');
+      if (el) {
+        el.textContent = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')} left`;
+        el.style.color = remaining < 5 * 60 * 1000 ? 'var(--red)' : '';
+      }
+    }, 1000);
   }
 }
 
