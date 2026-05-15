@@ -984,7 +984,7 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
     const text = `Hi ${request.username},\n\nYour buy-in of $${request.amount.toLocaleString()} chips has been approved and added to your account.\n\nNew balance: $${newChips.toLocaleString()} chips.\n\nGood luck at the tables!\n— RabbsRoom`;
     const html = `<p>Hi <strong>${request.username}</strong>,</p><p>Your buy-in of <strong>$${request.amount.toLocaleString()}</strong> chips has been approved and added to your account.</p><p>New balance: <strong>$${newChips.toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— RabbsRoom</p>`;
     if (user.email) await sendPlayerEmail({ to: user.email, subject, text, html });
-    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips added to your account. You can now join a table.` });
+    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips added. You can now join a table!` });
   } catch (e) {
     console.warn('[buyin] Player notification error:', e.message);
   }

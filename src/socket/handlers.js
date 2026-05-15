@@ -1454,7 +1454,7 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
         (async () => {
           try {
             const { data: wu } = await supabaseAdmin.from('users').select('phone').eq('id', w.winner.userId).single();
-            if (wu?.phone) sendPlayerSMS({ phone: wu.phone, text: `Boston Poker Club: You won $${w.amount.toLocaleString()} at ${tblName}!` }).catch(() => {});
+            if (wu?.phone) sendPlayerSMS({ phone: wu.phone, text: `Boston Poker Club: You won $${w.amount.toLocaleString()} at ${tblName}! Great hand!` }).catch(() => {});
           } catch {}
         })();
       }
