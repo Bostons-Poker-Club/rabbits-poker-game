@@ -78,7 +78,7 @@ function connect() {
   });
 
   socket.on('game_state', (state) => {
-    console.log('[game_state] hand:', state.handActive, 'street:', state.currentStreet, 'players:', state.players?.length, 'currentSeat:', state.currentPlayerSeat);
+    console.log('[game_state] hand:', state.handActive, 'street:', state.currentStreet, 'players:', state.players?.length, 'seat:', state.currentPlayerSeat, 'pot:', state.pot);
     // Detect new bets for chip animation before re-render
     if (state.players) {
       for (const p of state.players) {
@@ -109,9 +109,12 @@ function connect() {
     console.log('[hand_started] hand:', handNumber, 'dealer seat:', dealerSeat);
     chatMsg('system', `Hand #${handNumber} started`);
     hideHandResult();
+    const myCards = document.getElementById('my-hole-cards');
+    if (myCards) myCards.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;align-self:center">Dealing…</div>';
   });
 
   socket.on('cards_dealt', ({ holeCards }) => {
+    console.log('[cards_dealt]', holeCards?.map(c => c.rank + c.suit).join(' ') || 'none');
     renderMyHoleCards(holeCards);
   });
 
@@ -132,6 +135,7 @@ function connect() {
   });
 
   socket.on('street_changed', ({ street, communityCards }) => {
+    console.log('[street_changed]', street, '|', communityCards?.map(c => c.rank + c.suit).join(' '));
     if (gameState) {
       gameState.currentStreet = street;
       gameState.communityCards = communityCards;
@@ -513,7 +517,7 @@ function renderMyCards(state) {
 
 function renderMyHoleCards(cards) {
   const el = document.getElementById('my-hole-cards');
-  if (!cards?.length) return;
+  if (!cards?.length || cards[0]?.rank === '?') return;
   el.innerHTML = cards.map(c => cardHtml(c, true, true)).join('');
 }
 

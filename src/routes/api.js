@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { supabaseAdmin } = require('../db/supabase');
 const appEvents = require('../events');
+const { logTransaction } = require('../transactions');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -957,6 +958,15 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
   request.approvedAt = Date.now();
   request.approvedBy = req.user.username;
 
+  logTransaction({
+    userId: request.userId,
+    username: request.username,
+    type: 'buyin',
+    amount: request.amount,
+    paymentMethod: request.paymentMethod,
+    notes: request.notes || null
+  });
+
   // Notify player via socket
   const io = req.app.get('io');
   if (io) {
@@ -991,6 +1001,24 @@ router.post('/admin/buyin-requests/:id/deny', authMiddleware, adminMiddleware, a
   request.status = 'denied';
   request.deniedAt = Date.now();
   res.json({ ok: true });
+});
+
+// Admin: get transaction history for a player
+router.get('/admin/players/:id/transactions', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('transactions')
+    .select('*')
+    .eq('user_id', req.params.id)
+    .order('created_at', { ascending: false })
+    .limit(200);
+
+  if (error) {
+    if (error.message?.includes('does not exist') || error.message?.includes('relation')) {
+      return res.json([]);
+    }
+    return res.status(500).json({ error: error.message });
+  }
+  res.json(data || []);
 });
 
 module.exports = router;

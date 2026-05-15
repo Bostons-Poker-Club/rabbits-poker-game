@@ -780,8 +780,83 @@ async function viewPlayer(id) {
       pdAdminBtn.style.display = 'none';
     }
 
+    // Always start on Profile tab and pre-load logs in background
+    pdSwitchTab('profile');
     openModal('player-detail-modal');
+    _loadPlayerLogs(id);
   } catch (e) { toast(e.message, 'error'); }
+}
+
+function pdSwitchTab(tab) {
+  const isProfile = tab === 'profile';
+  document.getElementById('pd-panel-profile').style.display = isProfile ? '' : 'none';
+  document.getElementById('pd-panel-logs').style.display    = isProfile ? 'none' : '';
+  document.getElementById('pd-tab-profile').style.borderBottomColor = isProfile ? 'var(--gold)' : 'transparent';
+  document.getElementById('pd-tab-profile').style.color = isProfile ? 'var(--gold)' : 'var(--text-dim)';
+  document.getElementById('pd-tab-logs').style.borderBottomColor = isProfile ? 'transparent' : 'var(--gold)';
+  document.getElementById('pd-tab-logs').style.color = isProfile ? 'var(--text-dim)' : 'var(--gold)';
+}
+
+async function _loadPlayerLogs(playerId) {
+  const listEl  = document.getElementById('pd-logs-list');
+  const statsEl = document.getElementById('pd-logs-stats');
+  try {
+    const txs = await apiFetch(`/api/admin/players/${playerId}/transactions`);
+    if (!txs.length) {
+      listEl.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">No transactions yet.</div>';
+      statsEl.innerHTML = '';
+      return;
+    }
+
+    // Compute stats
+    let totalBuyin = 0, totalCashout = 0, totalWin = 0, sessions = 0;
+    const sessionSet = new Set();
+    for (const t of txs) {
+      if (t.type === 'buyin' || t.type === 'table_buyin') { totalBuyin += t.amount; sessionSet.add(t.table_name + t.created_at?.slice(0,10)); }
+      if (t.type === 'cashout') totalCashout += t.amount;
+      if (t.type === 'win')     totalWin += t.amount;
+    }
+    sessions = sessionSet.size;
+    const netChips = totalCashout - totalBuyin;
+
+    statsEl.innerHTML = `
+      <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center">
+        <div style="font-size:.7rem;color:var(--text-dim);margin-bottom:4px">TOTAL BOUGHT IN</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--gold)">${fmt(totalBuyin)}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center">
+        <div style="font-size:.7rem;color:var(--text-dim);margin-bottom:4px">TOTAL CASHED OUT</div>
+        <div style="font-size:1.1rem;font-weight:700;color:var(--chip-green)">${fmt(totalCashout)}</div>
+      </div>
+      <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:12px;text-align:center">
+        <div style="font-size:.7rem;color:var(--text-dim);margin-bottom:4px">NET P&L</div>
+        <div style="font-size:1.1rem;font-weight:700;color:${netChips>=0?'var(--chip-green)':'var(--red)'}">${netChips>=0?'+':''}${fmt(netChips)}</div>
+      </div>
+    `;
+
+    const typeIcon = { buyin:'💰', table_buyin:'🎰', cashout:'💸', win:'🏆' };
+    const typeLabel = { buyin:'Buy-In (approved)', table_buyin:'Table Buy-In', cashout:'Cash Out', win:'Hand Win' };
+
+    listEl.innerHTML = txs.map(t => {
+      const dt = t.created_at ? new Date(t.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }) : '–';
+      const color = t.type === 'win' ? 'var(--chip-green)' : t.type === 'cashout' ? 'var(--chip-green)' : t.type === 'buyin' ? 'var(--gold)' : 'var(--text-dim)';
+      const sign  = (t.type === 'win' || t.type === 'cashout') ? '+' : '-';
+      const meta  = [t.table_name, t.payment_method, t.notes].filter(Boolean).join(' · ');
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:.82rem">
+        <span style="font-size:1.1rem">${typeIcon[t.type]||'📋'}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--text)">${typeLabel[t.type]||t.type}</div>
+          ${meta ? `<div style="color:var(--text-dim);font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(meta)}</div>` : ''}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-weight:700;color:${color}">${sign}${fmt(t.amount)}</div>
+          <div style="font-size:.72rem;color:var(--text-dim)">${dt}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">${e.message === 'Failed to fetch' ? 'Could not load logs.' : esc(e.message)}</div>`;
+  }
 }
 
 async function openEditModal(id) {

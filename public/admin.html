@@ -423,12 +423,25 @@
 
 <!-- Player Detail Modal -->
 <div class="modal-overlay hidden" id="player-detail-modal">
-  <div class="modal" style="max-width:520px">
+  <div class="modal" style="max-width:560px">
     <h2 style="display:flex;align-items:center;gap:10px">
       <span id="pd-avatar" style="font-size:1.6rem">👤</span>
       <span id="pd-username"></span>
     </h2>
-    <div class="player-detail-grid" id="pd-grid"></div>
+    <!-- Tabs -->
+    <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px">
+      <button id="pd-tab-profile" onclick="pdSwitchTab('profile')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-size:.85rem;font-weight:700;cursor:pointer">Profile</button>
+      <button id="pd-tab-logs" onclick="pdSwitchTab('logs')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">Logs</button>
+    </div>
+    <div id="pd-panel-profile">
+      <div class="player-detail-grid" id="pd-grid"></div>
+    </div>
+    <div id="pd-panel-logs" style="display:none">
+      <div id="pd-logs-stats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px"></div>
+      <div id="pd-logs-list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+        <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Loading…</div>
+      </div>
+    </div>
     <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
       <button class="btn btn-outline" onclick="closeModal('player-detail-modal')">Close</button>
       <button class="btn btn-outline" id="pd-chips-btn">Add Chips</button>

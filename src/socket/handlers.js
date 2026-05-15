@@ -5,6 +5,7 @@ const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
 const { sendTableRequestEmail, sendBroadcastEmail } = require('../mail');
 const { supabaseAdmin } = require('../db/supabase');
+const { logTransaction } = require('../transactions');
 
 const appEvents = require('../events');
 
@@ -138,6 +139,86 @@ function passMoneyPuck(io, tableId, game) {
   if (puck.autoDropMs > 0) {
     puck.autoDropTimer = setInterval(() => passMoneyPuck(io, tableId, game), puck.autoDropMs);
   }
+}
+
+// ─── Game Watchdog ────────────────────────────────────────────────────────────
+// Fires every 15s per game; detects and recovers stuck or idle game states.
+
+function setupGameWatchdog(io, tableId, game) {
+  if (game._watchdog) { clearInterval(game._watchdog); game._watchdog = null; }
+
+  game._watchdog = setInterval(() => {
+    if (!activeGames.has(tableId)) {
+      clearInterval(game._watchdog);
+      game._watchdog = null;
+      return;
+    }
+
+    // No active hand but players are seated — start one
+    if (!game.handActive) {
+      if (game.canStartHand()) {
+        const idleMs = Date.now() - (game.lastActionAt || 0);
+        if (idleMs > 8000) {
+          console.log(`[watchdog] ${tableId}: idle ${Math.round(idleMs/1000)}s, no hand — starting`);
+          startNewHand(io, tableId, game);
+        }
+      }
+      return;
+    }
+
+    // Detect stuck hand: no lastActionAt update for longer than shot-clock + buffer
+    const staleThreshold = ((game.shotClockDuration || 30) + 20) * 1000;
+    const stuckMs = Date.now() - (game.lastActionAt || Date.now());
+    if (stuckMs < staleThreshold) return;
+
+    console.warn(`[watchdog] STUCK ${tableId} ${Math.round(stuckMs/1000)}s | hand#${game.handNumber} street:${game.currentStreet} seat:${game.currentPlayerSeat}`);
+    io.to(tableId).emit('chat', { username: 'system', message: `⚠️ Recovering stuck hand (${Math.round(stuckMs/1000)}s idle)` });
+
+    // Step 1: fold the current player
+    const curr = game.getPlayerBySeat(game.currentPlayerSeat);
+    if (curr && !curr.hasFolded && !curr.isAllIn) {
+      try {
+        console.warn(`[watchdog] auto-folding ${curr.username}`);
+        const result = game.processAction(curr.userId, 'fold');
+        game.lastActionAt = Date.now();
+        broadcastGameState(io, tableId, game);
+        handleActionResult(io, tableId, game, result);
+        return;
+      } catch (e) { console.error('[watchdog] fold failed:', e.message); }
+    }
+
+    // Step 2: mark all players as acted and advance street
+    try {
+      console.warn('[watchdog] forcing street advance');
+      game.playersActedThisStreet = new Set(game.getHandPlayers().map(p => p.userId));
+      for (const p of game.getHandPlayers()) p.currentBet = game.currentBet;
+      const result = game.advanceStreet();
+      game.lastActionAt = Date.now();
+      broadcastGameState(io, tableId, game);
+      handleActionResult(io, tableId, game, result);
+      return;
+    } catch (e) { console.error('[watchdog] advance failed:', e.message); }
+
+    // Step 3: force showdown
+    try {
+      console.warn('[watchdog] forcing showdown');
+      game.handActive = true;
+      const result = game.showdown();
+      game.lastActionAt = Date.now();
+      broadcastGameState(io, tableId, game);
+      handleActionResult(io, tableId, game, result);
+      return;
+    } catch (e) { console.error('[watchdog] showdown failed:', e.message); }
+
+    // Step 4: hard reset
+    console.error(`[watchdog] hard reset at ${tableId}`);
+    game.handActive = false;
+    game.clearShotClock();
+    game.lastActionAt = Date.now();
+    broadcastGameState(io, tableId, game);
+    io.to(tableId).emit('chat', { username: 'system', message: '⚠️ Hand reset due to error. New hand starting…' });
+    setTimeout(() => { if (activeGames.has(tableId) && game.canStartHand()) startNewHand(io, tableId, game); }, 3000);
+  }, 15000);
 }
 
 function setupSocketHandlers(io) {
@@ -316,6 +397,7 @@ function setupSocketHandlers(io) {
         // Deduct chips from bank (only if user exists in DB)
         if (dbUser) {
           await supabaseAdmin.from('users').update({ chips: user.chips - chips }).eq('id', userId);
+          logTransaction({ userId, username, type: 'table_buyin', amount: chips, tableName: table.name || tableId });
         }
 
         // Create or update seat record (best-effort — silently skip if DB unavailable)
@@ -377,6 +459,7 @@ function setupSocketHandlers(io) {
           };
 
           activeGames.set(tableId, game);
+          setupGameWatchdog(io, tableId, game);
         }
 
         const finalSeat = seatNumber || findOpenSeat(game, table.max_players);
@@ -411,10 +494,13 @@ function setupSocketHandlers(io) {
       if (!game) return socket.emit('error', { message: 'Game not found' });
 
       try {
+        console.log(`[action] ${username} → ${action}${amount ? ' $'+amount : ''} | hand#${game.handNumber} street:${game.currentStreet} seat:${game.currentPlayerSeat}`);
         const result = game.processAction(userId, action, amount);
+        game.lastActionAt = Date.now();
         broadcastGameState(io, tId, game);
         handleActionResult(io, tId, game, result);
       } catch (err) {
+        console.warn(`[action] error for ${username}: ${err.message}`);
         socket.emit('error', { message: err.message });
       }
     });
@@ -632,6 +718,7 @@ function setupSocketHandlers(io) {
         try {
           const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', userId).single();
           if (u) await supabaseAdmin.from('users').update({ chips: u.chips + chips }).eq('id', userId);
+          logTransaction({ userId, username, type: 'cashout', amount: chips, tableName });
         } catch {}
       }
 
@@ -1126,6 +1213,8 @@ async function startNewHand(io, tableId, game) {
   game._startingHand = true;
   setTimeout(() => { game._startingHand = false; }, 500);
 
+  console.log(`[hand] startNewHand ${tableId} | seated:${game.players.size} nextHand:${game.handNumber + 1}`);
+
   // Create hand record in DB
   let handId = null;
   try {
@@ -1144,6 +1233,7 @@ async function startNewHand(io, tableId, game) {
   }
   game._allInNotified = new Set(); // reset per-hand all-in notifications
 
+  game.lastActionAt = Date.now();
   broadcastGameState(io, tableId, game);
 
   // Send private hole cards
@@ -1191,8 +1281,10 @@ async function startNewHand(io, tableId, game) {
   if (firstPlayer) game.startShotClock(firstPlayer.userId);
 }
 
-function handleActionResult(io, tableId, game, result) {
-  if (!result) return;
+function handleActionResult(io, tableId, game, result, _depth = 0) {
+  if (!result || _depth > 6) return;
+
+  console.log(`[result] ${tableId} hand#${game.handNumber}: ${result.action} | street:${game.currentStreet} pot:${game.pot} seat:${game.currentPlayerSeat}`);
 
   // All-in detection — notify admin for rebuy opportunity
   if (!game._allInNotified) game._allInNotified = new Set();
@@ -1210,6 +1302,7 @@ function handleActionResult(io, tableId, game, result) {
 
   if (result.action === 'showdown' || result.action === 'hand_ended') {
     const handResult = result.result;
+    const tblName = game.tableName || tableId;
     io.to(tableId).emit('hand_ended', {
       winners: handResult.winners.map(w => ({
         userId: w.winner.userId,
@@ -1224,6 +1317,20 @@ function handleActionResult(io, tableId, game, result) {
       pot: handResult.pot,
       folded: handResult.folded || false
     });
+
+    // Log each winner's profit
+    for (const w of handResult.winners) {
+      if (w.winner && w.amount > 0) {
+        logTransaction({
+          userId: w.winner.userId,
+          username: w.winner.username,
+          type: 'win',
+          amount: w.amount,
+          tableName: tblName,
+          notes: w.handResult?.name || (handResult.folded ? 'uncontested' : null)
+        });
+      }
+    }
 
     // Schedule next hand
     setTimeout(() => startNewHand(io, tableId, game), 4000);
@@ -1248,6 +1355,18 @@ function handleActionResult(io, tableId, game, result) {
         pot: game.pot
       });
       game.startShotClock(nextPlayer.userId);
+      game.lastActionAt = Date.now();
+    } else if (game.handActive) {
+      // No actionable player — all remaining are all-in; run out the board
+      console.warn(`[result] no nextPlayer at seat ${game.currentPlayerSeat}, street ${game.currentStreet} — forcing board runout`);
+      try {
+        const advResult = game.advanceStreet();
+        game.lastActionAt = Date.now();
+        broadcastGameState(io, tableId, game);
+        handleActionResult(io, tableId, game, advResult, _depth + 1);
+      } catch (e) {
+        console.error('[result] force advance failed:', e.message);
+      }
     }
   }
 }

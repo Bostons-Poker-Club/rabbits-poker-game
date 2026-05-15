@@ -59,6 +59,9 @@ class PokerGame {
 
     // All-in tracking
     this.allInPlayers = new Set();
+
+    // Watchdog / stuck-game detection
+    this.lastActionAt = Date.now();
   }
 
   // ─── Player Management ─────────────────────────────────────────────────
@@ -179,6 +182,9 @@ class PokerGame {
     this._postBlinds(active);
 
     this.currentStreet = 'preflop';
+    this.lastActionAt = Date.now();
+
+    console.log(`[poker] hand#${this.handNumber} | type:${this.gameType} blinds:${this.smallBlind}/${this.bigBlind} players:${active.length} dealer:${this.dealerSeat} firstAct:${this.currentPlayerSeat}`);
 
     return {
       handNumber: this.handNumber,
@@ -279,6 +285,7 @@ class PokerGame {
     }
 
     this.clearShotClock();
+    this.lastActionAt = Date.now();
 
     switch (action) {
       case 'fold':
@@ -466,6 +473,8 @@ class PokerGame {
 
     // Set first to act (first active player left of dealer)
     this._setFirstToActPostFlop();
+
+    console.log(`[poker] → ${this.currentStreet} | community:${this.communityCards.length} pot:${this.pot} firstAct:${this.currentPlayerSeat}`);
 
     return {
       action: 'street_changed',
