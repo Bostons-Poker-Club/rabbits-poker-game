@@ -33,6 +33,11 @@
       <div id="login-error" class="error-msg"></div>
     </div>
 
+    <div id="host-apply-link" style="text-align:center;margin-top:10px;font-size:.82rem;color:var(--text-dim)">
+      Interested in hosting tables?
+      <a href="/host-apply.html" style="color:var(--gold);font-weight:600">Apply to be a Host →</a>
+    </div>
+
     <!-- Register Form -->
     <div id="form-register" style="display:none">
       <div class="auth-name-row" style="display:flex;gap:10px">
@@ -129,6 +134,14 @@
       errEl.textContent = e.message;
     }
   }
+
+  // "Apply to Host" link shown below login tab
+  document.getElementById('tab-login').addEventListener('click', () => {
+    document.getElementById('host-apply-link').style.display = '';
+  });
+  document.getElementById('tab-register').addEventListener('click', () => {
+    document.getElementById('host-apply-link').style.display = 'none';
+  });
 
   // Allow Enter key to submit
   document.addEventListener('keydown', e => {

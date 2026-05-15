@@ -17,8 +17,20 @@ let highHandState = { description: '', holder: '', setAt: null };
 const buyInRequests = [];
 let buyInSeq = 0;
 
-// In-memory host set — admin grants host status; resets on server restart
+// In-memory host set — populated from DB at startup; persisted on change
 const hostSet = new Set();
+
+// Load persisted host set from DB
+async function initHostSet() {
+  try {
+    const { data } = await supabaseAdmin.from('users').select('id').eq('is_host', true);
+    if (data) data.forEach(u => hostSet.add(u.id));
+    console.log(`[init] Loaded ${hostSet.size} hosts from DB`);
+  } catch (e) {
+    console.warn('[init] Could not load host set:', e.message);
+  }
+}
+initHostSet();
 
 const LOCAL_ADMIN = {
   id: 'local-admin-000',
@@ -217,7 +229,8 @@ router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
       stakes_small_blind: stakes_small_blind || 5,
       stakes_big_blind: stakes_big_blind || 10,
       max_players: max_players || 9,
-      rake_percent: rake_percent || 5
+      rake_percent: rake_percent || 5,
+      host_id: req.user.id
     })
     .select()
     .single();
@@ -227,10 +240,50 @@ router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
 });
 
 router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) => {
-  const { error } = await supabaseAdmin
-    .from('tables')
-    .update({ status: 'closed' })
-    .eq('id', req.params.id);
+  const tableId = req.params.id;
+
+  // Record rake split before closing
+  try {
+    const { data: tbl } = await supabaseAdmin.from('tables').select('name, host_id').eq('id', tableId).single();
+    const { sessionRake } = require('../socket/handlers');
+    const entry = sessionRake.byTable.get(tableId);
+    const totalRake = entry?.total || 0;
+
+    if (totalRake > 0) {
+      let hostId = tbl?.host_id || null;
+      let hostUsername = null;
+      let hostType = null;
+      let hostPercent = 0;
+
+      if (hostId) {
+        const { data: hostUser } = await supabaseAdmin.from('users').select('username, is_admin, host_type').eq('id', hostId).single();
+        if (hostUser) {
+          hostUsername = hostUser.username;
+          hostType = hostUser.is_admin ? 'admin' : 'host';
+          hostPercent = hostType === 'admin' ? 20 : 40;
+        }
+      }
+
+      const hostAmount  = Math.floor(totalRake * hostPercent / 100);
+      const houseAmount = totalRake - hostAmount;
+
+      await supabaseAdmin.from('table_rake_splits').insert({
+        table_id: tableId,
+        table_name: tbl?.name || tableId.slice(0, 8),
+        total_rake: totalRake,
+        host_id: hostId,
+        host_username: hostUsername,
+        host_type: hostType,
+        host_percent: hostPercent,
+        host_amount: hostAmount,
+        house_amount: houseAmount
+      });
+    }
+  } catch (e) {
+    console.warn('[close-table] Rake split error:', e.message);
+  }
+
+  const { error } = await supabaseAdmin.from('tables').update({ status: 'closed' }).eq('id', tableId);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
 });
@@ -488,17 +541,22 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
   if (role !== undefined) {
     if (role === 'admin') {
       updates.is_admin = true;
+      updates.is_host  = false;
+      updates.host_type = 'admin';
       newIsAdmin = true;
       roleChanged = true;
-      // Remove from hostSet if they become admin
       hostSet.delete(targetId);
     } else if (role === 'host') {
       updates.is_admin = false;
+      updates.is_host  = true;
+      updates.host_type = 'host';
       newIsAdmin = false;
       hostSet.add(targetId);
       roleChanged = true;
     } else {
       updates.is_admin = false;
+      updates.is_host  = false;
+      updates.host_type = null;
       newIsAdmin = false;
       hostSet.delete(targetId);
       roleChanged = true;
@@ -599,7 +657,13 @@ router.post('/admin/players/:id/seat', authMiddleware, adminMiddleware, async (r
 
 router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (req, res) => {
   const { isHost } = req.body;
-  if (isHost) { hostSet.add(req.params.id); } else { hostSet.delete(req.params.id); }
+  if (isHost) {
+    hostSet.add(req.params.id);
+    await supabaseAdmin.from('users').update({ is_host: true, host_type: 'host' }).eq('id', req.params.id).catch(() => {});
+  } else {
+    hostSet.delete(req.params.id);
+    await supabaseAdmin.from('users').update({ is_host: false, host_type: null }).eq('id', req.params.id).catch(() => {});
+  }
   appEvents.emit('host:change', { userId: req.params.id, isHost: !!isHost });
   res.json({ success: true, is_host: !!isHost });
 });
@@ -672,9 +736,14 @@ router.get('/admin/table-requests', authMiddleware, adminMiddleware, (req, res) 
 
 router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (req, res) => {
   const { isAdmin: makeAdmin } = req.body;
-  const { error } = await supabaseAdmin.from('users').update({ is_admin: !!makeAdmin }).eq('id', req.params.id);
+  const updates = { is_admin: !!makeAdmin };
+  if (makeAdmin) {
+    updates.host_type = 'admin';
+    updates.is_host   = false;
+    hostSet.delete(req.params.id);
+  }
+  const { error } = await supabaseAdmin.from('users').update(updates).eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
-  // Update their JWT on next login — for now notify via socket
   const appEvents = require('../events');
   appEvents.emit('admin:change', { userId: req.params.id, isAdmin: !!makeAdmin });
   res.json({ success: true, is_admin: !!makeAdmin });
@@ -694,16 +763,25 @@ router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => 
   try {
     const { sessionRake, tableRequests } = require('../socket/handlers');
 
+    // Historical rake earnings per host
+    const { data: splitData } = await supabaseAdmin
+      .from('table_rake_splits')
+      .select('host_id, host_amount')
+      .in('host_id', hostIds);
+    const historicalByHost = {};
+    for (const s of (splitData || [])) {
+      historicalByHost[s.host_id] = (historicalByHost[s.host_id] || 0) + s.host_amount;
+    }
+
     const hosts = (data || []).map(host => {
       const hostReqs = tableRequests.filter(r => r.hostId === host.id);
       const pendingReqs = hostReqs.filter(r => r.status === 'pending');
       const approvedReqs = hostReqs.filter(r => r.status === 'approved' && r.tableId);
 
-      // Session rake from their approved tables
-      let rakeContrib = 0;
+      let sessionRakeContrib = 0;
       for (const r of approvedReqs) {
         const entry = sessionRake.byTable.get(r.tableId);
-        if (entry) rakeContrib += entry.total;
+        if (entry) sessionRakeContrib += entry.total;
       }
 
       return {
@@ -711,13 +789,14 @@ router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => 
         is_host: true,
         tableRequests: hostReqs.slice(0, 20),
         pendingCount: pendingReqs.length,
-        sessionRakeContrib: rakeContrib
+        sessionRakeContrib,
+        totalRakeEarned: historicalByHost[host.id] || 0
       };
     });
 
     res.json(hosts);
   } catch {
-    res.json((data || []).map(h => ({ ...h, is_host: true, tableRequests: [], pendingCount: 0, sessionRakeContrib: 0 })));
+    res.json((data || []).map(h => ({ ...h, is_host: true, tableRequests: [], pendingCount: 0, sessionRakeContrib: 0, totalRakeEarned: 0 })));
   }
 });
 
@@ -1019,6 +1098,265 @@ router.get('/admin/players/:id/transactions', authMiddleware, adminMiddleware, a
     return res.status(500).json({ error: error.message });
   }
   res.json(data || []);
+});
+
+// ─── Host Applications ────────────────────────────────────────────────────────
+
+// Public: anyone can submit a host application (no account needed yet)
+router.post('/auth/apply-host', async (req, res) => {
+  const { full_name, phone, email, address, government_id_data, government_id_filename, monthly_fee_agreed, rake_agreed } = req.body;
+  if (!full_name)          return res.status(400).json({ error: 'Full legal name is required' });
+  if (!phone)              return res.status(400).json({ error: 'Phone number is required' });
+  if (!email)              return res.status(400).json({ error: 'Email is required' });
+  if (!address)            return res.status(400).json({ error: 'Address is required' });
+  if (!government_id_data) return res.status(400).json({ error: 'Government ID photo is required' });
+  if (!monthly_fee_agreed) return res.status(400).json({ error: 'Must agree to the $20/month hosting fee' });
+  if (!rake_agreed)        return res.status(400).json({ error: 'Must agree to 40% rake contribution' });
+
+  const { data, error } = await supabaseAdmin.from('host_applications').insert({
+    full_name: String(full_name).slice(0, 120),
+    phone: String(phone).slice(0, 20),
+    email: String(email).slice(0, 255),
+    address: String(address).slice(0, 500),
+    government_id_data: String(government_id_data),
+    government_id_filename: government_id_filename ? String(government_id_filename).slice(0, 255) : null,
+    monthly_fee_agreed: !!monthly_fee_agreed,
+    rake_agreed: !!rake_agreed,
+    status: 'pending'
+  }).select('id').single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  try {
+    const { sendAdminEmail } = require('../mail');
+    await sendAdminEmail({
+      subject: `🎰 Host Application — ${full_name}`,
+      text: `New host application from ${full_name} (${email}, ${phone}). Review at admin panel → Applications tab.`,
+      html: `<div style="font-family:sans-serif;max-width:480px"><h2 style="color:#1a7a3f">🎰 New Host Application</h2><p><strong>${full_name}</strong><br>Email: ${email}<br>Phone: ${phone}<br>Address: ${address}</p><p>Review at the <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Applications tab.</p></div>`
+    });
+  } catch {}
+
+  res.json({ ok: true, id: data.id });
+});
+
+// Admin: list host applications
+router.get('/admin/host-applications', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('host_applications')
+    .select('id, full_name, phone, email, address, government_id_filename, monthly_fee_agreed, rake_agreed, status, notes, user_id, created_at, reviewed_at')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+// Admin: view government ID for an application (data URL only, not stored in list endpoint)
+router.get('/admin/host-applications/:id/government-id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('host_applications')
+    .select('government_id_data, government_id_filename')
+    .eq('id', req.params.id)
+    .single();
+  if (error) return res.status(404).json({ error: 'Application not found' });
+  res.json({ data: data.government_id_data, filename: data.government_id_filename });
+});
+
+// Admin: approve host application — creates user account and sends welcome email
+router.post('/admin/host-applications/:id/approve', authMiddleware, adminMiddleware, async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Initial password required (min 6 characters)' });
+
+  const { data: app, error: appErr } = await supabaseAdmin
+    .from('host_applications').select('*').eq('id', req.params.id).single();
+  if (appErr || !app) return res.status(404).json({ error: 'Application not found' });
+  if (app.status !== 'pending') return res.status(400).json({ error: 'Application already processed' });
+
+  // Derive username from email, ensure uniqueness
+  let baseUsername = app.email.split('@')[0].replace(/[^a-zA-Z0-9_]/g, '').toLowerCase().slice(0, 20) || 'host';
+  let username = baseUsername;
+  for (let i = 1; i < 100; i++) {
+    const { data: existing } = await supabaseAdmin.from('users').select('id').eq('username', username).maybeSingle();
+    if (!existing) break;
+    username = baseUsername + i;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const { data: newUser, error: createErr } = await supabaseAdmin.from('users').insert({
+    username,
+    email: app.email,
+    password_hash: passwordHash,
+    chips: 0,
+    full_name: app.full_name,
+    phone: app.phone,
+    address: app.address,
+    is_host: true,
+    host_type: 'host'
+  }).select('id, username, email').single();
+
+  if (createErr) {
+    if (createErr.code === '23505') return res.status(400).json({ error: 'Email already registered — update the existing account instead' });
+    return res.status(500).json({ error: createErr.message });
+  }
+
+  hostSet.add(newUser.id);
+
+  await supabaseAdmin.from('host_applications').update({
+    status: 'approved',
+    user_id: newUser.id,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by: req.user.id
+  }).eq('id', req.params.id);
+
+  // Create monthly fee record due next 1st
+  const nextDue = new Date();
+  nextDue.setDate(1);
+  nextDue.setMonth(nextDue.getMonth() + 1);
+  await supabaseAdmin.from('monthly_fees').insert({
+    user_id: newUser.id,
+    username: newUser.username,
+    role_type: 'host',
+    fee_amount: 20,
+    next_due_date: nextDue.toISOString().slice(0, 10),
+    is_overdue: false
+  }).catch(() => {});
+
+  try {
+    const { sendHostApprovalEmail } = require('../mail');
+    await sendHostApprovalEmail({ to: app.email, hostName: app.full_name, username, password, hostType: 'host' });
+  } catch {}
+
+  res.json({ ok: true, userId: newUser.id, username });
+});
+
+// Admin: reject host application
+router.post('/admin/host-applications/:id/reject', authMiddleware, adminMiddleware, async (req, res) => {
+  const { notes } = req.body;
+  const { error } = await supabaseAdmin.from('host_applications').update({
+    status: 'rejected',
+    notes: notes ? String(notes).slice(0, 500) : null,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by: req.user.id
+  }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ─── Admin Account Creation ───────────────────────────────────────────────────
+
+// Admin creates another admin account with full requirements
+router.post('/admin/create-admin', authMiddleware, adminMiddleware, async (req, res) => {
+  const { full_name, phone, email, address, username, password, government_id_data, government_id_filename, monthly_fee_agreed, rake_agreed } = req.body;
+  if (!full_name)          return res.status(400).json({ error: 'Full legal name is required' });
+  if (!phone)              return res.status(400).json({ error: 'Phone is required' });
+  if (!email)              return res.status(400).json({ error: 'Email is required' });
+  if (!address)            return res.status(400).json({ error: 'Address is required' });
+  if (!username)           return res.status(400).json({ error: 'Username is required' });
+  if (!password || password.length < 6) return res.status(400).json({ error: 'Password required (min 6 characters)' });
+  if (!government_id_data) return res.status(400).json({ error: 'Government ID photo is required' });
+  if (!monthly_fee_agreed) return res.status(400).json({ error: 'Must agree to the $40/month fee' });
+  if (!rake_agreed)        return res.status(400).json({ error: 'Must agree to 20% rake contribution' });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const { data: newUser, error } = await supabaseAdmin.from('users').insert({
+    username: String(username).slice(0, 30),
+    email: String(email).slice(0, 255),
+    password_hash: passwordHash,
+    chips: 100000,
+    full_name: String(full_name).slice(0, 120),
+    phone: String(phone).slice(0, 20),
+    address: String(address).slice(0, 500),
+    is_admin: true,
+    host_type: 'admin'
+  }).select('id, username, email').single();
+
+  if (error) {
+    if (error.code === '23505') return res.status(400).json({ error: 'Username or email already taken' });
+    return res.status(500).json({ error: error.message });
+  }
+
+  // Store application record for audit trail
+  await supabaseAdmin.from('host_applications').insert({
+    full_name: String(full_name).slice(0, 120),
+    phone: String(phone).slice(0, 20),
+    email: String(email).slice(0, 255),
+    address: String(address).slice(0, 500),
+    government_id_data: String(government_id_data),
+    government_id_filename: government_id_filename ? String(government_id_filename).slice(0, 255) : null,
+    monthly_fee_agreed: !!monthly_fee_agreed,
+    rake_agreed: !!rake_agreed,
+    status: 'approved',
+    user_id: newUser.id,
+    reviewed_at: new Date().toISOString(),
+    reviewed_by: req.user.id
+  }).catch(() => {});
+
+  const nextDue = new Date();
+  nextDue.setDate(1);
+  nextDue.setMonth(nextDue.getMonth() + 1);
+  await supabaseAdmin.from('monthly_fees').insert({
+    user_id: newUser.id,
+    username: newUser.username,
+    role_type: 'admin',
+    fee_amount: 40,
+    next_due_date: nextDue.toISOString().slice(0, 10),
+    is_overdue: false
+  }).catch(() => {});
+
+  res.json({ ok: true, userId: newUser.id, username: newUser.username });
+});
+
+// ─── Monthly Fees ─────────────────────────────────────────────────────────────
+
+router.get('/admin/monthly-fees', authMiddleware, adminMiddleware, async (req, res) => {
+  // Mark overdue records where next_due_date has passed and never paid
+  const today = new Date().toISOString().slice(0, 10);
+  await supabaseAdmin.from('monthly_fees')
+    .update({ is_overdue: true })
+    .lt('next_due_date', today)
+    .catch(() => {});
+
+  const { data, error } = await supabaseAdmin.from('monthly_fees')
+    .select('*')
+    .order('role_type', { ascending: false })
+    .order('username');
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+router.post('/admin/monthly-fees/:userId/mark-paid', authMiddleware, adminMiddleware, async (req, res) => {
+  const nextDue = new Date();
+  nextDue.setDate(1);
+  nextDue.setMonth(nextDue.getMonth() + 1);
+  const { error } = await supabaseAdmin.from('monthly_fees').update({
+    last_paid_at: new Date().toISOString(),
+    next_due_date: nextDue.toISOString().slice(0, 10),
+    is_overdue: false,
+    updated_at: new Date().toISOString()
+  }).eq('user_id', req.params.userId);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// ─── Rake Splits ──────────────────────────────────────────────────────────────
+
+router.get('/admin/rake-splits', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin.from('table_rake_splits')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Summarize total earnings per host
+  const byHost = {};
+  for (const r of (data || [])) {
+    if (!r.host_id) continue;
+    if (!byHost[r.host_id]) {
+      byHost[r.host_id] = { host_id: r.host_id, host_username: r.host_username, host_type: r.host_type, total_earned: 0, sessions: 0 };
+    }
+    byHost[r.host_id].total_earned += r.host_amount;
+    byHost[r.host_id].sessions++;
+  }
+
+  res.json({ splits: data || [], byHost: Object.values(byHost).sort((a, b) => b.total_earned - a.total_earned) });
 });
 
 module.exports = router;

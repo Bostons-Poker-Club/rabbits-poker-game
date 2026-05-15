@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apply to Host — Boston Poker Club</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .apply-page { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px 16px; }
+    .apply-card { width:100%; max-width:560px; background:var(--card); border:1px solid var(--border); border-radius:12px; padding:32px; }
+    .apply-logo { text-align:center; margin-bottom:28px; }
+    .apply-logo h1 { font-size:1.6rem; color:var(--gold); margin:0 0 4px; }
+    .apply-logo p  { color:var(--text-dim); margin:0; font-size:.9rem; }
+    .section-title { color:var(--chip-green); font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.08em; margin:24px 0 10px; border-top:1px solid var(--border); padding-top:16px; }
+    .upload-zone { border:2px dashed var(--border); border-radius:var(--radius); padding:20px; text-align:center; cursor:pointer; transition:border-color .2s; }
+    .upload-zone:hover, .upload-zone.has-file { border-color:var(--chip-green); }
+    .upload-zone input { display:none; }
+    .upload-preview { margin-top:10px; max-width:100%; max-height:200px; border-radius:var(--radius); display:none; }
+    .agreement-box { background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; display:flex; align-items:flex-start; gap:12px; }
+    .agreement-box input[type=checkbox] { margin-top:3px; width:18px; height:18px; flex-shrink:0; cursor:pointer; }
+    .agreement-box label { color:var(--text); font-size:.88rem; line-height:1.5; cursor:pointer; }
+    .agreement-box .fee-amount { color:var(--gold); font-weight:700; }
+  </style>
+</head>
+<body>
+<div class="apply-page">
+  <div class="apply-card">
+    <div class="apply-logo">
+      <h1>🐇 Boston Poker Club</h1>
+      <p>Host Application</p>
+    </div>
+
+    <p style="color:var(--text-dim);font-size:.88rem;margin:0 0 20px;line-height:1.6">
+      Apply to become a table host. All applications are reviewed by admin before approval.
+      Once approved, you'll receive login credentials and can start hosting tables.
+    </p>
+
+    <div id="form-area">
+
+      <div class="section-title">Personal Information</div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Full Legal Name <span style="color:var(--gold)">*</span> <span style="color:var(--text-dim);font-size:.72rem;font-weight:400">as on government ID</span></label>
+          <input type="text" id="ha-fullname" placeholder="John Smith" maxlength="120" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label>Phone <span style="color:var(--gold)">*</span></label>
+          <input type="tel" id="ha-phone" placeholder="6175550100" maxlength="20" autocomplete="tel">
+        </div>
+        <div class="form-group">
+          <label>Email <span style="color:var(--gold)">*</span></label>
+          <input type="email" id="ha-email" placeholder="you@email.com" autocomplete="email">
+        </div>
+        <div class="form-group" style="grid-column:1/-1">
+          <label>Home Address <span style="color:var(--gold)">*</span></label>
+          <input type="text" id="ha-address" placeholder="123 Main St, Boston, MA 02101" maxlength="500" autocomplete="street-address">
+        </div>
+      </div>
+
+      <div class="section-title">Government ID / License</div>
+
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('ha-govid').click()">
+        <input type="file" id="ha-govid" accept="image/*,.pdf" onchange="handleFileSelect(event)">
+        <div id="upload-placeholder">
+          <div style="font-size:2rem;margin-bottom:8px">📄</div>
+          <div style="color:var(--text);font-weight:600;margin-bottom:4px">Click to upload Government ID</div>
+          <div style="color:var(--text-dim);font-size:.8rem">Driver's license, passport, or state ID — JPG, PNG, or PDF, max 8MB</div>
+        </div>
+        <div id="upload-filename" style="display:none;color:var(--chip-green);font-weight:600;font-size:.88rem"></div>
+        <img id="upload-preview" class="upload-preview" alt="ID Preview">
+      </div>
+      <div id="govid-error" style="color:var(--red);font-size:.8rem;margin-top:6px;display:none">Government ID photo is required.</div>
+
+      <div class="section-title">Agreements</div>
+
+      <div class="agreement-box">
+        <input type="checkbox" id="ha-fee-agree" onchange="clearError()">
+        <label for="ha-fee-agree">
+          I agree to the <span class="fee-amount">$20/month hosting fee</span>, due by the 1st of each month.
+          Non-payment may result in suspension of hosting privileges.
+        </label>
+      </div>
+
+      <div class="agreement-box">
+        <input type="checkbox" id="ha-rake-agree" onchange="clearError()">
+        <label for="ha-rake-agree">
+          I agree to contribute <span class="fee-amount">40% of table rake</span> to the house from all tables I host.
+          I receive the remaining 60% of rake collected at my tables.
+        </label>
+      </div>
+
+      <div id="apply-error" class="error-msg" style="margin-top:12px"></div>
+
+      <button class="btn btn-gold btn-full" style="margin-top:20px" onclick="submitApplication()">
+        Submit Host Application
+      </button>
+
+      <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:14px">
+        Already have an account? <a href="/lobby.html" style="color:var(--gold)">Go to Lobby</a>
+        &nbsp;·&nbsp;
+        <a href="/index.html" style="color:var(--gold)">Login / Register</a>
+      </p>
+    </div>
+
+    <!-- Success state -->
+    <div id="success-area" style="display:none;text-align:center;padding:20px 0">
+      <div style="font-size:3rem;margin-bottom:16px">✅</div>
+      <h2 style="color:var(--chip-green);margin-bottom:8px">Application Submitted!</h2>
+      <p style="color:var(--text);margin-bottom:6px">Your host application has been sent to admin for review.</p>
+      <p style="color:var(--text-dim);font-size:.88rem">You will receive an email at <strong id="confirm-email"></strong> once your application is approved with your login credentials.</p>
+      <a href="/index.html"><button class="btn btn-outline" style="margin-top:24px">Back to Login</button></a>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toast-container"></div>
+
+<script>
+let govIdData     = null;
+let govIdFilename = null;
+
+function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) {
+    showError('File is too large. Maximum size is 8MB.');
+    return;
+  }
+
+  govIdFilename = file.name;
+  const zone = document.getElementById('upload-zone');
+  const ph   = document.getElementById('upload-placeholder');
+  const fn   = document.getElementById('upload-filename');
+  const prev = document.getElementById('upload-preview');
+
+  zone.classList.add('has-file');
+  document.getElementById('govid-error').style.display = 'none';
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    govIdData = e.target.result;
+    ph.style.display  = 'none';
+    fn.style.display  = '';
+    fn.textContent    = '✓ ' + file.name;
+
+    if (file.type.startsWith('image/')) {
+      prev.src          = govIdData;
+      prev.style.display = '';
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearError() {
+  document.getElementById('apply-error').textContent = '';
+}
+
+function showError(msg) {
+  document.getElementById('apply-error').textContent = msg;
+}
+
+async function submitApplication() {
+  const fullName  = document.getElementById('ha-fullname').value.trim();
+  const phone     = document.getElementById('ha-phone').value.trim();
+  const email     = document.getElementById('ha-email').value.trim();
+  const address   = document.getElementById('ha-address').value.trim();
+  const feeAgree  = document.getElementById('ha-fee-agree').checked;
+  const rakeAgree = document.getElementById('ha-rake-agree').checked;
+
+  clearError();
+
+  if (!fullName)  return showError('Full legal name is required.');
+  if (!phone)     return showError('Phone number is required.');
+  if (phone.replace(/\D/g, '').length !== 10) return showError('Please enter a valid 10-digit US phone number.');
+  if (!email)     return showError('Email is required.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('Please enter a valid email address.');
+  if (!address)   return showError('Home address is required.');
+  if (!govIdData) {
+    document.getElementById('govid-error').style.display = '';
+    return showError('Government ID photo is required.');
+  }
+  if (!feeAgree)  return showError('You must agree to the $20/month hosting fee.');
+  if (!rakeAgree) return showError('You must agree to the 40% rake contribution.');
+
+  const btn = document.querySelector('button[onclick="submitApplication()"]');
+  btn.disabled   = true;
+  btn.textContent = 'Submitting…';
+
+  try {
+    const resp = await fetch('/api/auth/apply-host', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: fullName,
+        phone,
+        email,
+        address,
+        government_id_data: govIdData,
+        government_id_filename: govIdFilename,
+        monthly_fee_agreed: feeAgree,
+        rake_agreed: rakeAgree
+      })
+    });
+    const json = await resp.json();
+    if (!resp.ok) throw new Error(json.error || 'Submission failed');
+
+    document.getElementById('form-area').style.display   = 'none';
+    document.getElementById('success-area').style.display = '';
+    document.getElementById('confirm-email').textContent  = email;
+  } catch (e) {
+    btn.disabled   = false;
+    btn.textContent = 'Submit Host Application';
+    showError(e.message);
+  }
+}
+</script>
+</body>
+</html>

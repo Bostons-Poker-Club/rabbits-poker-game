@@ -100,7 +100,7 @@ if (typeof io !== 'undefined') {
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits()]);
 }
 
 async function loadPendingPlayers() {
@@ -467,6 +467,7 @@ function renderHosts(hosts) {
             ${h.email ? `<div><span style="color:var(--text-dim)">Email:</span> ${esc(h.email)}</div>` : ''}
             <div><span style="color:var(--text-dim)">Chips:</span> <span style="color:var(--gold)">${fmt(h.chips)}</span></div>
             <div><span style="color:var(--text-dim)">Session Rake:</span> <span style="color:${rakeColor}">$${fmt(h.sessionRakeContrib)}</span></div>
+            <div><span style="color:var(--text-dim)">All-Time Earned:</span> <span style="color:var(--gold)">$${fmt(h.totalRakeEarned)}</span></div>
             <div><span style="color:var(--text-dim)">Table Reqs:</span>
               <span style="color:var(--chip-green)">${approved}✓</span>
               ${pending ? `<span style="color:var(--gold);margin-left:4px">${pending} pending</span>` : ''}
@@ -1409,3 +1410,294 @@ function toast(msg, type = '') {
 document.querySelectorAll('.modal-overlay').forEach(o => {
   o.addEventListener('click', e => { if (e.target === o) o.classList.add('hidden'); });
 });
+
+// ─── Host Applications ────────────────────────────────────────────────────
+
+async function loadHostApplications() {
+  try {
+    const list = await apiFetch('/api/admin/host-applications');
+    renderHostApplications(list);
+    const pending = list.filter(a => a.status === 'pending').length;
+    const badge = document.getElementById('app-badge');
+    if (badge) {
+      badge.textContent = pending;
+      badge.style.display = pending ? '' : 'none';
+    }
+  } catch {}
+}
+
+function renderHostApplications(list) {
+  const pendingEl   = document.getElementById('applications-pending');
+  const reviewedEl  = document.getElementById('applications-reviewed');
+  if (!pendingEl) return;
+
+  const pending  = list.filter(a => a.status === 'pending');
+  const reviewed = list.filter(a => a.status !== 'pending');
+
+  if (!pending.length) {
+    pendingEl.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text-dim)">No pending applications</div>';
+  } else {
+    pendingEl.innerHTML = pending.map(a => appCardHtml(a, true)).join('');
+  }
+
+  if (reviewedEl) {
+    reviewedEl.innerHTML = reviewed.length
+      ? reviewed.map(a => appCardHtml(a, false)).join('')
+      : '<div style="color:var(--text-dim);font-size:.85rem;padding:8px">No reviewed applications yet.</div>';
+  }
+}
+
+function appCardHtml(a, isPending) {
+  const statusColor = a.status === 'approved' ? 'var(--chip-green)' : a.status === 'rejected' ? 'var(--red)' : 'var(--gold)';
+  const submitted   = new Date(a.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
+  return `<div style="background:rgba(255,255,255,.04);border:1px solid ${isPending ? 'rgba(255,200,0,.3)' : 'var(--border)'};border-radius:var(--radius);padding:16px 18px;margin-bottom:12px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:200px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <strong style="color:var(--text);font-size:1rem">${esc(a.full_name)}</strong>
+          <span style="font-size:.7rem;font-weight:700;color:${statusColor};text-transform:uppercase">${a.status}</span>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:3px 16px;font-size:.82rem;color:var(--text-dim)">
+          <div>📧 ${esc(a.email)}</div>
+          <div>📞 ${esc(a.phone)}</div>
+          <div>🏠 ${esc(a.address)}</div>
+          <div>📅 Submitted ${submitted}</div>
+          <div style="color:${a.monthly_fee_agreed ? 'var(--chip-green)' : 'var(--red)'}">
+            ${a.monthly_fee_agreed ? '✓' : '✗'} $20/mo fee agreed
+          </div>
+          <div style="color:${a.rake_agreed ? 'var(--chip-green)' : 'var(--red)'}">
+            ${a.rake_agreed ? '✓' : '✗'} 40% rake agreed
+          </div>
+        </div>
+        ${a.government_id_filename ? `<div style="margin-top:6px;font-size:.78rem;color:var(--text-dim)">ID file: ${esc(a.government_id_filename)}</div>` : ''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:130px">
+        <button class="btn btn-sm btn-outline" onclick="viewGovernmentId('${a.id}')">View ID</button>
+        ${isPending ? `
+        <button class="btn btn-sm btn-green" onclick="approveHostApp('${a.id}','${esc(a.full_name)}','${esc(a.email)}')">Approve</button>
+        <button class="btn btn-sm btn-red"   onclick="rejectHostApp('${a.id}')">Reject</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+async function approveHostApp(id, name, email) {
+  const password = prompt(`Set initial password for ${name} (${email}):\n\nMin 6 characters — they can change it after login.`);
+  if (!password) return;
+  if (password.length < 6) return toast('Password must be at least 6 characters', 'error');
+  try {
+    const r = await apiFetch(`/api/admin/host-applications/${id}/approve`, { method: 'POST', body: { password } });
+    toast(`✅ ${name} approved — username: ${r.username}`, 'success');
+    loadHostApplications();
+    loadPlayers();
+    loadHosts();
+    loadMonthlyFees();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function rejectHostApp(id) {
+  const notes = prompt('Reason for rejection (optional):') ?? null;
+  if (notes === null) return; // cancelled
+  try {
+    await apiFetch(`/api/admin/host-applications/${id}/reject`, { method: 'POST', body: { notes } });
+    toast('Application rejected');
+    loadHostApplications();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function viewGovernmentId(appId) {
+  const content = document.getElementById('govid-content');
+  if (content) content.innerHTML = '<span style="color:var(--text-dim)">Loading…</span>';
+  openModal('govid-modal');
+  try {
+    const r = await apiFetch(`/api/admin/host-applications/${appId}/government-id`);
+    if (!r.data) { content.innerHTML = '<span style="color:var(--text-dim)">No ID on file.</span>'; return; }
+    if (r.data.startsWith('data:image')) {
+      content.innerHTML = `<img src="${r.data}" alt="Government ID" style="max-width:100%;max-height:500px;border-radius:8px">`;
+    } else if (r.data.startsWith('data:application/pdf')) {
+      content.innerHTML = `<iframe src="${r.data}" style="width:100%;height:500px;border:none;border-radius:8px"></iframe>`;
+    } else {
+      content.innerHTML = `<a href="${r.data}" download="${esc(r.filename||'government-id')}" class="btn btn-outline">Download ID File</a>`;
+    }
+  } catch (e) { if (content) content.innerHTML = `<span style="color:var(--red)">${esc(e.message)}</span>`; }
+}
+
+// ─── Monthly Fees ─────────────────────────────────────────────────────────
+
+async function loadMonthlyFees() {
+  try {
+    const list = await apiFetch('/api/admin/monthly-fees');
+    renderMonthlyFees(list);
+    const overdue = list.filter(f => f.is_overdue).length;
+    const badge = document.getElementById('fees-badge');
+    if (badge) {
+      badge.textContent = overdue;
+      badge.style.display = overdue ? '' : 'none';
+    }
+  } catch {}
+}
+
+function renderMonthlyFees(list) {
+  const tbody = document.getElementById('fees-body');
+  if (!tbody) return;
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No fee records yet. Records are created automatically when hosts or admins are approved.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(f => {
+    const lastPaid  = f.last_paid_at ? new Date(f.last_paid_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const nextDue   = f.next_due_date ? new Date(f.next_due_date + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
+    const overdue   = f.is_overdue;
+    const statusHtml = overdue
+      ? '<span style="background:var(--red);color:#fff;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:8px">OVERDUE</span>'
+      : '<span style="color:var(--chip-green);font-size:.82rem">Current</span>';
+    const roleLabel = f.role_type === 'admin'
+      ? '<span style="color:var(--gold);font-size:.8rem;font-weight:700">Admin</span>'
+      : '<span style="color:var(--chip-green);font-size:.8rem">Host</span>';
+    return `<tr style="${overdue ? 'background:rgba(255,0,0,.06)' : ''}">
+      <td><strong style="color:${overdue ? 'var(--red)' : 'var(--text)'}">${esc(f.username || '—')}</strong></td>
+      <td>${roleLabel}</td>
+      <td style="color:var(--gold)">$${f.fee_amount}/mo</td>
+      <td style="color:var(--text-dim);font-size:.82rem">${lastPaid}</td>
+      <td style="color:${overdue ? 'var(--red)' : 'var(--text-dim)'};font-size:.82rem">${nextDue}</td>
+      <td>${statusHtml}</td>
+      <td><button class="btn btn-sm btn-green" onclick="markFeePaid('${f.user_id}','${esc(f.username||'')}')">Mark Paid</button></td>
+    </tr>`;
+  }).join('');
+}
+
+async function markFeePaid(userId, username) {
+  if (!confirm(`Mark monthly fee as paid for ${username}?`)) return;
+  try {
+    await apiFetch(`/api/admin/monthly-fees/${userId}/mark-paid`, { method: 'POST' });
+    toast(`Fee marked as paid for ${username}`);
+    loadMonthlyFees();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Rake Splits ──────────────────────────────────────────────────────────
+
+async function loadRakeSplits() {
+  try {
+    const data = await apiFetch('/api/admin/rake-splits');
+    renderRakeSplits(data.splits || [], data.byHost || []);
+  } catch {}
+}
+
+function renderRakeSplits(splits, byHost) {
+  // Earnings by host summary
+  const summaryEl = document.getElementById('rake-splits-by-host');
+  if (summaryEl) {
+    if (!byHost.length) {
+      summaryEl.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:16px;font-size:.88rem">No rake splits yet — splits are recorded when a table session is closed.</div>';
+    } else {
+      summaryEl.innerHTML = byHost.map(h => {
+        const roleLabel = h.host_type === 'admin' ? '<span style="color:var(--gold);font-size:.72rem">Admin (20%)</span>' : '<span style="color:var(--chip-green);font-size:.72rem">Host (40%)</span>';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:12px 16px">
+          <div>
+            <strong style="color:var(--text)">${esc(h.host_username || '—')}</strong>
+            &nbsp;${roleLabel}
+          </div>
+          <div style="text-align:right">
+            <div style="color:var(--gold);font-weight:700;font-size:1.1rem">$${fmt(h.total_earned)}</div>
+            <div style="color:var(--text-dim);font-size:.75rem">${h.sessions} session${h.sessions !== 1 ? 's' : ''}</div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Split history table
+  const tbody = document.getElementById('rake-splits-body');
+  if (!tbody) return;
+  if (!splits.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No rake splits recorded yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = splits.map(s => {
+    const date  = new Date(s.created_at).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    const hType = s.host_type === 'admin' ? '<span style="color:var(--gold);font-size:.75rem">Admin</span>' : s.host_type ? '<span style="color:var(--chip-green);font-size:.75rem">Host</span>' : '—';
+    return `<tr>
+      <td>${esc(s.table_name || '—')}</td>
+      <td style="font-size:.8rem;color:var(--text-dim)">${date}</td>
+      <td style="color:var(--text)">$${fmt(s.total_rake)}</td>
+      <td>${esc(s.host_username || '—')} ${hType}</td>
+      <td style="color:var(--text-dim)">${s.host_percent}%</td>
+      <td style="color:var(--chip-green);font-weight:600">$${fmt(s.host_amount)}</td>
+      <td style="color:var(--gold);font-weight:600">$${fmt(s.house_amount)}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ─── Create Admin Account ─────────────────────────────────────────────────
+
+let caGovIdData     = null;
+let caGovIdFilename = null;
+
+function caHandleFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 8 * 1024 * 1024) { toast('File too large (max 8MB)', 'error'); return; }
+  caGovIdFilename = file.name;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    caGovIdData = e.target.result;
+    document.getElementById('ca-upload-placeholder').style.display = 'none';
+    const done = document.getElementById('ca-upload-done');
+    done.style.display  = '';
+    done.textContent    = '✓ ' + file.name;
+    document.getElementById('ca-upload-zone').style.borderColor = 'var(--chip-green)';
+  };
+  reader.readAsDataURL(file);
+}
+
+async function submitCreateAdmin() {
+  const fullName  = document.getElementById('ca-fullname').value.trim();
+  const phone     = document.getElementById('ca-phone').value.trim();
+  const email     = document.getElementById('ca-email').value.trim();
+  const address   = document.getElementById('ca-address').value.trim();
+  const username  = document.getElementById('ca-username').value.trim();
+  const password  = document.getElementById('ca-password').value;
+  const feeAgree  = document.getElementById('ca-fee-agree').checked;
+  const rakeAgree = document.getElementById('ca-rake-agree').checked;
+  const errEl     = document.getElementById('ca-error');
+  errEl.textContent = '';
+
+  if (!fullName)    return (errEl.textContent = 'Full legal name is required');
+  if (!phone)       return (errEl.textContent = 'Phone is required');
+  if (!email)       return (errEl.textContent = 'Email is required');
+  if (!address)     return (errEl.textContent = 'Address is required');
+  if (!username)    return (errEl.textContent = 'Username is required');
+  if (!password || password.length < 6) return (errEl.textContent = 'Password required (min 6 chars)');
+  if (!caGovIdData) return (errEl.textContent = 'Government ID photo is required');
+  if (!feeAgree)    return (errEl.textContent = 'Must agree to the $40/month admin fee');
+  if (!rakeAgree)   return (errEl.textContent = 'Must agree to 20% rake contribution');
+
+  try {
+    const r = await apiFetch('/api/admin/create-admin', {
+      method: 'POST',
+      body: {
+        full_name: fullName,
+        phone, email, address, username, password,
+        government_id_data: caGovIdData,
+        government_id_filename: caGovIdFilename,
+        monthly_fee_agreed: feeAgree,
+        rake_agreed: rakeAgree
+      }
+    });
+    closeModal('create-admin-modal');
+    toast(`✅ Admin account created — username: ${r.username}`, 'success');
+    // Reset form
+    ['ca-fullname','ca-phone','ca-email','ca-address','ca-username','ca-password'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    document.getElementById('ca-fee-agree').checked  = false;
+    document.getElementById('ca-rake-agree').checked = false;
+    caGovIdData = null; caGovIdFilename = null;
+    document.getElementById('ca-upload-placeholder').style.display = '';
+    document.getElementById('ca-upload-done').style.display = 'none';
+    document.getElementById('ca-upload-zone').style.borderColor = '';
+    loadPlayers();
+    loadMonthlyFees();
+  } catch (e) { errEl.textContent = e.message; }
+}

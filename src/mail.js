@@ -115,4 +115,72 @@ async function sendPlayerSMS({ phone, text }) {
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS };
+async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
+  if (!isConfigured() || !to) return;
+  const isAdmin = hostType === 'admin';
+  const fee = isAdmin ? '$40' : '$20';
+  const rakePercent = isAdmin ? '20%' : '40%';
+  const role = isAdmin ? 'Admin' : 'Host';
+  const subject = `✅ Your ${role} Account is Approved — Boston Poker Club`;
+  const text = [
+    `Hi ${hostName},`,
+    '',
+    `Your ${role.toLowerCase()} account has been approved at Boston Poker Club!`,
+    '',
+    'Login credentials:',
+    `  Username: ${username}`,
+    `  Password: ${password}`,
+    '',
+    'Important details:',
+    `  • Monthly fee: ${fee} — due by the 1st of each month`,
+    `  • Rake share: You keep ${rakePercent} of rake from tables you host`,
+    '',
+    'Getting started:',
+    '  1. Log in at rabbsroom.com',
+    '  2. Go to the lobby and request a table',
+    '  3. Once approved, your table goes live',
+    '  4. Manage players directly from the table controls',
+    '',
+    'Questions? Contact bostonspokerclub.amitureflops@gmail.com',
+    '',
+    '— Boston Poker Club'
+  ].join('\n');
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+      <h2 style="color:#1a7a3f">✅ Welcome to Boston Poker Club, ${hostName}!</h2>
+      <p>Your <strong>${role.toLowerCase()}</strong> account has been approved.</p>
+      <div style="background:#f9f9f9;border-radius:8px;padding:16px 20px;margin:16px 0">
+        <h3 style="margin:0 0 10px;color:#333">Login Credentials</h3>
+        <table style="border-collapse:collapse;width:100%">
+          <tr><td style="padding:6px 12px;color:#555;width:120px">Username</td><td style="padding:6px 12px;font-weight:700">${username}</td></tr>
+          <tr style="background:#fff"><td style="padding:6px 12px;color:#555">Password</td><td style="padding:6px 12px;font-weight:700">${password}</td></tr>
+        </table>
+      </div>
+      <div style="background:#f0faf5;border:1px solid #b2dfcc;border-radius:8px;padding:16px 20px;margin:16px 0">
+        <h3 style="margin:0 0 10px;color:#1a7a3f">Your Account Details</h3>
+        <ul style="margin:0;padding-left:20px;color:#333;line-height:2">
+          <li><strong>Monthly fee:</strong> ${fee} — due by the 1st of each month</li>
+          <li><strong>Rake share:</strong> You keep ${rakePercent} of rake from every table you host</li>
+        </ul>
+      </div>
+      <div style="background:#fff9e6;border:1px solid #f5d78e;border-radius:8px;padding:16px 20px;margin:16px 0">
+        <h3 style="margin:0 0 10px;color:#a07800">Getting Started</h3>
+        <ol style="margin:0;padding-left:20px;color:#333;line-height:2">
+          <li>Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a></li>
+          <li>Go to the lobby and request a table</li>
+          <li>Once your request is approved, your table goes live</li>
+          <li>Manage your players directly from the table controls</li>
+        </ol>
+      </div>
+      <p style="color:#666;font-size:.85rem">Questions? Contact us at bostonspokerclub.amitureflops@gmail.com</p>
+      <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
+    </div>`;
+  try {
+    await sgMail.send({ from: FROM, to, subject, text, html });
+    console.log(`[mail] Host approval email sent to ${to}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send host approval email:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail };
