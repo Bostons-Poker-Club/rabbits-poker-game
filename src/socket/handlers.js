@@ -3,7 +3,7 @@
 const jwt = require('jsonwebtoken');
 const { PokerGame } = require('../game/poker-game');
 const { Tournament } = require('../game/tournament');
-const { sendTableRequestEmail, sendBroadcastEmail } = require('../mail');
+const { sendTableRequestEmail, sendBroadcastEmail, sendPlayerSMS } = require('../mail');
 const { supabaseAdmin } = require('../db/supabase');
 const { logTransaction } = require('../transactions');
 
@@ -75,6 +75,11 @@ const bannedUsers = new Set();
 const broadcastMessages = [];
 let broadcastMsgSeq = 0;
 const pendingMessages = new Map(); // userId -> msg[]
+
+// PTT admin controls per table
+const tableMicMuted  = new Map();  // tableId -> Set<userId>
+const tablePttMode   = new Map();  // tableId -> 'ptt' | 'openmic'
+const tableMicStatus = new Map();  // tableId -> Map<userId, string>
 
 async function loadBannedUsersFromDB() {
   try {
@@ -221,6 +226,22 @@ function setupGameWatchdog(io, tableId, game) {
   }, 15000);
 }
 
+function broadcastPttAdminState(io, tableId) {
+  const muted    = tableMicMuted.get(tableId)  || new Set();
+  const statuses = tableMicStatus.get(tableId) || new Map();
+  const mode     = tablePttMode.get(tableId)   || 'ptt';
+  const game     = activeGames.get(tableId);
+  if (!game) return;
+  const players = Array.from(game.players.values()).map(p => ({
+    userId: p.userId, username: p.username, seatNumber: p.seatNumber,
+    micStatus: statuses.get(p.userId) || 'idle',
+    mutedByAdmin: muted.has(p.userId)
+  }));
+  for (const sid of getAdminSockets(io)) {
+    io.to(sid).emit('ptt:admin_state', { tableId, players, mode });
+  }
+}
+
 function setupSocketHandlers(io) {
   jackpotIo = io;
   loadJackpotFromDB();
@@ -365,7 +386,7 @@ function setupSocketHandlers(io) {
 
         const { data: dbUser } = await supabaseAdmin
           .from('users')
-          .select('chips, is_banned')
+          .select('chips, is_banned, phone')
           .eq('id', userId)
           .single();
 
@@ -472,6 +493,11 @@ function setupSocketHandlers(io) {
 
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips });
         broadcastGameState(io, tableId, game);
+
+        // SMS: notify player they are seated
+        if (dbUser?.phone) {
+          sendPlayerSMS({ phone: dbUser.phone, text: `Boston Poker Club: You have been seated at ${game.tableName || tableId}. Good luck!` }).catch(() => {});
+        }
         // Send current puck state to joining player
         broadcastPuckState(io, tableId);
 
@@ -580,13 +606,97 @@ function setupSocketHandlers(io) {
     // Player unmuted (actively talking)
     socket.on('ptt:talking', () => {
       const tId = socket.currentTableId;
-      if (tId) socket.to(tId).emit('ptt:speaker_active', { userId, username });
+      if (!tId) return;
+      socket.to(tId).emit('ptt:speaker_active', { userId, username });
+      if (!tableMicStatus.has(tId)) tableMicStatus.set(tId, new Map());
+      tableMicStatus.get(tId).set(userId, 'speaking');
+      broadcastPttAdminState(io, tId);
     });
 
     // Player muted (released PTT)
     socket.on('ptt:silent', () => {
       const tId = socket.currentTableId;
-      if (tId) socket.to(tId).emit('ptt:speaker_stopped', { userId });
+      if (!tId) return;
+      socket.to(tId).emit('ptt:speaker_stopped', { userId });
+      if (tableMicStatus.has(tId)) {
+        tableMicStatus.get(tId).set(userId, 'idle');
+        broadcastPttAdminState(io, tId);
+      }
+    });
+
+    // Player reports mic status — forwarded to admins
+    socket.on('ptt:mic_status', ({ status }) => {
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      if (!tableMicStatus.has(tId)) tableMicStatus.set(tId, new Map());
+      tableMicStatus.get(tId).set(userId, status || 'idle');
+      broadcastPttAdminState(io, tId);
+    });
+
+    // Admin: mute a specific player's mic
+    socket.on('ptt:admin_mute', ({ targetUserId }) => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      if (!tableMicMuted.has(tId)) tableMicMuted.set(tId, new Set());
+      tableMicMuted.get(tId).add(targetUserId);
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('ptt:muted_by_admin', { message: 'Your mic has been muted by admin' });
+      broadcastPttAdminState(io, tId);
+    });
+
+    // Admin: unmute a specific player's mic
+    socket.on('ptt:admin_unmute', ({ targetUserId }) => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      tableMicMuted.get(tId)?.delete(targetUserId);
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('ptt:unmuted_by_admin', {});
+      broadcastPttAdminState(io, tId);
+    });
+
+    // Admin: mute all players (admin's own mic is unaffected)
+    socket.on('ptt:admin_mute_all', () => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      const game = activeGames.get(tId);
+      if (!game) return;
+      if (!tableMicMuted.has(tId)) tableMicMuted.set(tId, new Set());
+      const muted = tableMicMuted.get(tId);
+      for (const [uid] of game.players) {
+        if (uid === userId) continue;
+        muted.add(uid);
+        const targetSid = userSockets.get(uid);
+        if (targetSid) io.to(targetSid).emit('ptt:muted_by_admin', { message: 'Your mic has been muted by admin' });
+      }
+      broadcastPttAdminState(io, tId);
+    });
+
+    // Admin: unmute all players
+    socket.on('ptt:admin_unmute_all', () => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      const game = activeGames.get(tId);
+      if (!game) return;
+      tableMicMuted.get(tId)?.clear();
+      for (const [uid] of game.players) {
+        const targetSid = userSockets.get(uid);
+        if (targetSid) io.to(targetSid).emit('ptt:unmuted_by_admin', {});
+      }
+      broadcastPttAdminState(io, tId);
+    });
+
+    // Admin: switch between PTT and open-mic mode
+    socket.on('ptt:admin_set_mode', ({ mode }) => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId || (mode !== 'ptt' && mode !== 'openmic')) return;
+      tablePttMode.set(tId, mode);
+      io.to(tId).emit('ptt:mode_change', { mode });
+      broadcastPttAdminState(io, tId);
     });
 
     // ─── Host Actions ─────────────────────────────────────────────────────
@@ -1276,9 +1386,20 @@ async function startNewHand(io, tableId, game) {
     userId: game.seats.get(game.currentPlayerSeat)
   });
 
-  // Start shot clock for first player
+  // Start shot clock for first player + SMS warning after 10s
   const firstPlayer = game.getPlayerBySeat(game.currentPlayerSeat);
-  if (firstPlayer) game.startShotClock(firstPlayer.userId);
+  if (firstPlayer) {
+    game.startShotClock(firstPlayer.userId);
+    const _smsUid0 = firstPlayer.userId;
+    setTimeout(async () => {
+      try {
+        const currP = game.getPlayerBySeat(game.currentPlayerSeat);
+        if (!game.handActive || !currP || currP.userId !== _smsUid0) return;
+        const { data: pu } = await supabaseAdmin.from('users').select('phone').eq('id', _smsUid0).single();
+        if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: 'Your turn at Boston Poker Club! You have 10 seconds to act.' }).catch(() => {});
+      } catch {}
+    }, 10000);
+  }
 }
 
 function handleActionResult(io, tableId, game, result, _depth = 0) {
@@ -1318,7 +1439,7 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
       folded: handResult.folded || false
     });
 
-    // Log each winner's profit
+    // Log each winner's profit and send SMS
     for (const w of handResult.winners) {
       if (w.winner && w.amount > 0) {
         logTransaction({
@@ -1329,6 +1450,13 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
           tableName: tblName,
           notes: w.handResult?.name || (handResult.folded ? 'uncontested' : null)
         });
+        // SMS: winner notification (fire-and-forget)
+        (async () => {
+          try {
+            const { data: wu } = await supabaseAdmin.from('users').select('phone').eq('id', w.winner.userId).single();
+            if (wu?.phone) sendPlayerSMS({ phone: wu.phone, text: `Boston Poker Club: You won $${w.amount.toLocaleString()} at ${tblName}!` }).catch(() => {});
+          } catch {}
+        })();
       }
     }
 
@@ -1356,6 +1484,16 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
       });
       game.startShotClock(nextPlayer.userId);
       game.lastActionAt = Date.now();
+      // SMS after 10s of inactivity on their turn
+      const _smsUid = nextPlayer.userId;
+      setTimeout(async () => {
+        try {
+          const currP = game.getPlayerBySeat(game.currentPlayerSeat);
+          if (!game.handActive || !currP || currP.userId !== _smsUid) return;
+          const { data: pu } = await supabaseAdmin.from('users').select('phone').eq('id', _smsUid).single();
+          if (pu?.phone) sendPlayerSMS({ phone: pu.phone, text: 'Your turn at Boston Poker Club! You have 10 seconds to act.' }).catch(() => {});
+        } catch {}
+      }, 10000);
     } else if (game.handActive) {
       // No actionable player — all remaining are all-in; run out the board
       console.warn(`[result] no nextPlayer at seat ${game.currentPlayerSeat}, street ${game.currentStreet} — forcing board runout`);
@@ -1666,4 +1804,4 @@ async function leaveTable(socket, io, tableId, userId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots, getAdminSockets };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, tableJackpots, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };

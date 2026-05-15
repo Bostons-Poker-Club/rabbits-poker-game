@@ -30,6 +30,9 @@ let pttActive = false;
 const pttPeers = new Map();     // peerId -> RTCPeerConnection
 const pttAudioEls = new Map();  // peerId -> HTMLAudioElement
 const pttPending = new Map();   // peerId -> RTCIceCandidate[] (buffered before remoteDesc set)
+let adminMuted = false;        // true when admin has muted this client
+let openMicMode = false;       // true when in continuous open-mic mode
+let openMicActive = false;     // true when currently transmitting in open-mic mode
 
 const ICE_CFG = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
@@ -325,6 +328,47 @@ function connect() {
   // Speaking indicators
   socket.on('ptt:speaker_active', ({ userId: sid, username: sname }) => setSpeakingIndicator(sid, true, sname));
   socket.on('ptt:speaker_stopped', ({ userId: sid }) => setSpeakingIndicator(sid, false));
+
+  // Admin muted this player
+  socket.on('ptt:muted_by_admin', ({ message }) => {
+    adminMuted = true;
+    if (pttActive) stopPTT();
+    _stopOpenMic();
+    const btn = document.getElementById('ptt-btn');
+    if (btn) { btn.disabled = true; btn.style.opacity = '0.4'; btn.title = 'Muted by admin'; }
+    toast(message || 'Your mic has been muted by admin', 'error');
+    socket.emit('ptt:mic_status', { status: 'muted' });
+  });
+
+  // Admin unmuted this player
+  socket.on('ptt:unmuted_by_admin', () => {
+    adminMuted = false;
+    const btn = document.getElementById('ptt-btn');
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.title = micStream ? 'Mic ready — hold to talk' : ''; }
+    toast('Your mic has been unmuted');
+    socket.emit('ptt:mic_status', { status: 'idle' });
+    if (openMicMode) _startOpenMic();
+  });
+
+  // Audio mode changed by admin (PTT ↔ Open Mic)
+  socket.on('ptt:mode_change', ({ mode }) => {
+    openMicMode = (mode === 'openmic');
+    const btn = document.getElementById('ptt-btn');
+    if (openMicMode) {
+      if (btn) { btn.textContent = '🎙 Open Mic (on)'; btn.style.cursor = 'default'; btn.onmousedown = null; btn.onmouseup = null; btn.ontouchstart = null; btn.ontouchend = null; }
+      if (!adminMuted) _startOpenMic();
+    } else {
+      _stopOpenMic();
+      if (btn) { btn.textContent = '🎙 Hold to Talk'; btn.style.cursor = ''; btn.onmousedown = (e) => startPTT(e); btn.onmouseup = () => stopPTT(); btn.ontouchstart = (e) => startPTT(e); btn.ontouchend = () => stopPTT(); }
+    }
+    renderAdminPttPanel();
+  });
+
+  // Admin PTT state broadcast (admin-only)
+  socket.on('ptt:admin_state', ({ players, mode }) => {
+    openMicMode = (mode === 'openmic');
+    renderAdminPttPanel(players, mode);
+  });
 }
 
 // ─── Render Table ─────────────────────────────────────────────────────────
@@ -373,6 +417,9 @@ function renderHostControls(state) {
            </div>`
       }
     </div>`;
+
+  // Admin PTT controls
+  if (u?.isAdmin) renderAdminPttPanel();
 }
 
 function hostAddChips(targetUserId, username) {
@@ -790,7 +837,7 @@ function showAdminMessageToast(from, message, pending) {
 
 // Build and wire a fresh RTCPeerConnection for peerId.
 // Adds mic tracks immediately if available (must happen BEFORE createOffer/createAnswer).
-function _pttCreatePC(peerId) {
+function _pttCreatePC(peerId, addTrackNow = true) {
   // Tear down any existing connection and audio element for this peer
   if (pttPeers.has(peerId)) { pttPeers.get(peerId).close(); pttPeers.delete(peerId); }
   const oldAudio = pttAudioEls.get(peerId);
@@ -831,12 +878,19 @@ function _pttCreatePC(peerId) {
     }
   };
 
-  // CRITICAL: add mic track BEFORE creating offer/answer so the SDP includes audio
-  if (micStream) {
-    micStream.getTracks().forEach(t => pc.addTrack(t, micStream));
-    console.log(`[PTT] added mic track to PC for ${peerId} (enabled=${micStream.getAudioTracks()[0]?.enabled})`);
-  } else {
-    console.warn(`[PTT] no micStream yet for ${peerId} — audio may not flow until mic is acquired`);
+  // Offerer adds track now (SDP must include audio section for sendrecv).
+  // Answerer defers track-adding until after setRemoteDescription to avoid duplicate mid.
+  if (addTrackNow) {
+    if (micStream) {
+      const [audioTrack] = micStream.getAudioTracks();
+      if (audioTrack) {
+        pc.addTransceiver(audioTrack, { streams: [micStream], direction: 'sendrecv' });
+        console.log(`[PTT] added sendrecv transceiver for ${peerId}`);
+      }
+    } else {
+      pc.addTransceiver('audio', { direction: 'recvonly' });
+      console.warn(`[PTT] no mic for ${peerId} — recvonly transceiver`);
+    }
   }
 
   return pc;
@@ -844,7 +898,7 @@ function _pttCreatePC(peerId) {
 
 // Send an offer to peerId (we initiate)
 async function _pttOffer(peerId) {
-  const pc = _pttCreatePC(peerId);
+  const pc = _pttCreatePC(peerId, true); // offerer adds transceiver immediately
   try {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -859,7 +913,8 @@ async function _pttOffer(peerId) {
 
 // Respond with an answer to an offer from fromUserId
 async function _pttAnswer(fromUserId, sdp) {
-  const pc = _pttCreatePC(fromUserId);
+  // Don't add track now — do it after setRemoteDescription to avoid duplicate mids
+  const pc = _pttCreatePC(fromUserId, false);
   try {
     await pc.setRemoteDescription({ type: 'offer', sdp });
     // Flush any ICE candidates that arrived before the offer
@@ -867,6 +922,18 @@ async function _pttAnswer(fromUserId, sdp) {
       try { await pc.addIceCandidate(c); } catch {}
     }
     pttPending.set(fromUserId, []);
+    // Add mic to the existing transceiver (AFTER setRemoteDescription — avoids duplicate mids)
+    if (micStream) {
+      const [audioTrack] = micStream.getAudioTracks();
+      const transceivers = pc.getTransceivers();
+      if (transceivers.length > 0 && audioTrack) {
+        await transceivers[0].sender.replaceTrack(audioTrack);
+        transceivers[0].direction = 'sendrecv';
+        console.log(`[PTT] answer: set sendrecv track on transceiver for ${fromUserId}`);
+      } else if (audioTrack) {
+        pc.addTrack(audioTrack, micStream);
+      }
+    }
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     socket.emit('ptt:signal', { targetUserId: fromUserId, signal: { type: 'answer', sdp: pc.localDescription.sdp } });
@@ -943,6 +1010,8 @@ function showMicDeniedBanner() {
 async function startPTT(e) {
   if (e) e.preventDefault();
   if (pttActive) return;
+  if (adminMuted) { toast('Your mic has been muted by admin', 'error'); return; }
+  if (openMicMode) return; // open-mic transmits automatically
 
   // If mic wasn't acquired at join time, try again now
   if (!micStream) {
@@ -969,6 +1038,22 @@ function stopPTT() {
   pttActive = false;
   const btn = document.getElementById('ptt-btn');
   if (btn) { btn.classList.remove('speaking'); btn.textContent = '🎙 Hold to Talk'; }
+  socket.emit('ptt:silent');
+  setSpeakingIndicator(user.id, false);
+}
+
+function _startOpenMic() {
+  if (openMicActive || adminMuted || !micStream) return;
+  openMicActive = true;
+  micStream.getAudioTracks().forEach(t => { t.enabled = true; });
+  socket.emit('ptt:talking');
+  setSpeakingIndicator(user.id, true, user.username || 'Me');
+}
+
+function _stopOpenMic() {
+  if (!openMicActive) return;
+  openMicActive = false;
+  if (micStream) micStream.getAudioTracks().forEach(t => { t.enabled = false; });
   socket.emit('ptt:silent');
   setSpeakingIndicator(user.id, false);
 }
@@ -1034,6 +1119,60 @@ function setSpeakingIndicator(targetUserId, active, username) {
   }
   seatBox.classList.toggle('ptt-speaking', active);
 }
+
+// ─── Admin PTT Panel ──────────────────────────────────────────────────────────
+
+function renderAdminPttPanel(players, mode) {
+  const u = getUser();
+  if (!u?.isAdmin) return;
+
+  // Ensure container exists inside host-controls panel
+  let panel = document.getElementById('admin-ptt-panel');
+  if (!panel) {
+    const hostPanel = document.getElementById('host-controls');
+    if (!hostPanel) return;
+    panel = document.createElement('div');
+    panel.id = 'admin-ptt-panel';
+    hostPanel.appendChild(panel);
+  }
+
+  const isOpenMic = mode ? mode === 'openmic' : openMicMode;
+  let html = `
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
+      <div style="color:var(--gold);font-size:.7rem;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">🎙 Audio Controls</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
+        <button onclick="adminMuteAll()" style="font-size:.65rem;padding:3px 8px;background:rgba(180,20,20,.8);border:1px solid #e74c3c;color:#fff;border-radius:4px;cursor:pointer">🔇 Mute All</button>
+        <button onclick="adminUnmuteAll()" style="font-size:.65rem;padding:3px 8px;background:rgba(20,100,40,.8);border:1px solid var(--chip-green);color:#fff;border-radius:4px;cursor:pointer">🔊 Unmute All</button>
+        <button onclick="adminToggleMode()" style="font-size:.65rem;padding:3px 8px;background:rgba(50,80,140,.8);border:1px solid #6a9fd8;color:#fff;border-radius:4px;cursor:pointer">${isOpenMic ? '🎙 PTT Mode' : '📢 Open Mic'}</button>
+      </div>`;
+
+  if (players && players.length) {
+    for (const p of players) {
+      const micIcon  = p.mutedByAdmin ? '🔇' : (p.micStatus === 'speaking' ? '🔴' : '🎙');
+      const micColor = p.mutedByAdmin ? 'rgba(255,80,80,.9)' : (p.micStatus === 'speaking' ? '#e74c3c' : 'var(--chip-green)');
+      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.75rem">
+        <span style="color:${micColor}">${micIcon}</span>
+        <span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.username}</span>
+        ${p.mutedByAdmin
+          ? `<button onclick="adminUnmutePlayer('${p.userId}')" style="font-size:.6rem;padding:2px 6px;background:rgba(20,100,40,.7);border:1px solid var(--chip-green);color:#fff;border-radius:3px;cursor:pointer">Unmute</button>`
+          : `<button onclick="adminMutePlayer('${p.userId}')" style="font-size:.6rem;padding:2px 6px;background:rgba(180,20,20,.7);border:1px solid #e74c3c;color:#fff;border-radius:3px;cursor:pointer">Mute</button>`}
+      </div>`;
+    }
+  } else {
+    html += `<div style="color:var(--text-dim);font-size:.72rem">No players seated</div>`;
+  }
+
+  html += `</div>`;
+  panel.innerHTML = html;
+}
+
+function adminMuteAll()   { socket?.emit('ptt:admin_mute_all'); }
+function adminUnmuteAll() { socket?.emit('ptt:admin_unmute_all'); }
+function adminToggleMode() {
+  socket?.emit('ptt:admin_set_mode', { mode: openMicMode ? 'ptt' : 'openmic' });
+}
+function adminMutePlayer(targetUserId)   { socket?.emit('ptt:admin_mute',   { targetUserId }); }
+function adminUnmutePlayer(targetUserId) { socket?.emit('ptt:admin_unmute', { targetUserId }); }
 
 // ─── Seat Timer ───────────────────────────────────────────────────────────
 
