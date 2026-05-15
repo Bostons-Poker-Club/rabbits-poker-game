@@ -28,8 +28,12 @@ html, body {
 
 a { color: var(--gold); text-decoration: none; }
 a:hover { text-decoration: underline; }
-button { cursor: pointer; font-family: inherit; }
+button { cursor: pointer; font-family: inherit; touch-action: manipulation; }
 input, select, textarea { font-family: inherit; }
+/* Prevent iOS Safari auto-zoom on input focus (needs ≥16px) */
+@media (max-width: 480px) {
+  input, select, textarea { font-size: 16px !important; }
+}
 
 /* ─── Auth Page ──────────────────────────────────────────────────────────── */
 .auth-page {
@@ -846,12 +850,19 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Responsive: Tablet ≤768px ──────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Table layout: collapse chat to overlay */
   .table-main { grid-template-columns: 1fr; }
   .chat-panel { display: none; }
-  .chat-panel.open { display: flex; position: fixed; inset: 0; z-index: 100; }
+  .chat-panel.open {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: rgba(0,0,0,0.95);
+  }
 
-  .table-header { padding: 6px 10px; font-size: 0.78rem; flex-wrap: wrap; gap: 4px; }
-  .table-header .table-info-bar { gap: 8px; flex-wrap: wrap; }
+  .table-header { padding: 5px 10px; font-size: 0.78rem; flex-wrap: wrap; gap: 4px; }
+  .table-header .table-info-bar { gap: 6px; flex-wrap: wrap; }
 
   .poker-area { padding: 4px; }
   .poker-table-wrap { max-width: 100%; }
@@ -862,71 +873,214 @@ input, select, textarea { font-family: inherit; }
 
   .my-cards-area { padding: 8px 10px; gap: 8px; }
   .action-btn { min-width: 72px; min-height: 54px; font-size: 0.92rem; }
-  .ptt-btn { padding: 10px 18px; font-size: 0.85rem; min-height: 44px; }
+  .ptt-btn { padding: 10px 18px; font-size: 0.85rem; min-height: 48px; }
   .tables-grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+
+  /* Admin nav: horizontal scroll — no wrapping */
+  .admin-nav {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    padding: 8px 12px;
+    gap: 2px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .admin-nav::-webkit-scrollbar { display: none; }
+  .admin-nav .logo { flex-shrink: 0; font-size: 1rem; margin-right: 6px; }
+  .admin-tab-btn { flex-shrink: 0; white-space: nowrap; padding: 6px 10px; font-size: 0.8rem; }
+
+  /* Admin body: tighter padding */
+  .admin-body { padding: 14px 12px; }
+  .stats-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+  .jackpot-admin-card { grid-template-columns: 1fr; }
+  .jackpot-admin-actions { flex-direction: row; flex-wrap: wrap; }
+
+  /* Data tables: allow horizontal scroll */
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+  .data-table { min-width: 520px; }
 }
 
 /* ─── Responsive: Phone ≤480px ───────────────────────────────────────────── */
 @media (max-width: 480px) {
-  /* Auth */
-  .auth-card { padding: 22px 14px; }
+  /* ── Auth page ── */
+  .auth-card { padding: 20px 14px; }
+  /* Stack first/last name fields vertically */
+  .auth-name-row { flex-direction: column !important; gap: 0 !important; }
+  .form-group input { font-size: 16px; } /* prevents iOS zoom on focus */
 
-  /* Table header: compact two-line */
-  .table-header { flex-direction: column; align-items: flex-start; padding: 5px 10px; gap: 3px; }
-  .table-header .table-info-bar { font-size: 0.72rem; gap: 6px; flex-wrap: wrap; }
+  /* ── Table header: compact single row, no vertical stack ── */
+  .table-header {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 4px 8px;
+    gap: 6px;
+    font-size: 0.7rem;
+    overflow: hidden;
+  }
+  .table-header .table-info-bar {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.65rem;
+    gap: 4px;
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
+  /* Hide less-critical header elements on very small screens */
+  #hdr-jackpot-timer { display: none; }
 
-  /* Oval */
+  /* ── Poker oval: tighter seats ── */
+  .poker-area { padding: 2px; }
   .poker-table-oval { border-radius: 40%; border-width: 4px; }
-  .seats-container { inset: -48px; }
-  .seat-box { min-width: 62px; padding: 3px 5px; font-size: 0.64rem; border-radius: 7px; }
-  .seat-name { max-width: 56px; font-size: 0.64rem; }
-  .seat-chips { font-size: 0.6rem; }
-  .seat-cards .card { width: 32px; height: 46px; font-size: 0.68rem; }
+  .seats-container { inset: -40px; }
+  .seat-box {
+    min-width: 60px;
+    padding: 3px 4px;
+    font-size: 0.62rem;
+    border-radius: 7px;
+  }
+  .seat-name { max-width: 54px; font-size: 0.62rem; }
+  .seat-chips { font-size: 0.58rem; }
+  .seat-bet { font-size: 0.56rem; min-height: 12px; }
+  .seat-cards .card { width: 30px; height: 44px; font-size: 0.62rem; }
+  .seat-cards .card .rank { font-size: 1.1em; }
   .dealer-puck { width: 18px; height: 18px; font-size: 0.52rem; top: -9px; right: -9px; }
+  .money-puck { min-width: 32px; height: 20px; font-size: 0.54rem; }
 
-  /* My cards strip */
-  .my-cards-area { padding: 6px 8px; gap: 6px; flex-direction: column; align-items: stretch; }
+  /* Community cards: keep readable */
+  .community-cards { gap: 4px; }
+  .pot-display .pot-amount { font-size: 1.05rem; }
+
+  /* ── My cards strip: stack vertically ── */
+  .my-cards-area {
+    padding: 6px 8px 8px;
+    gap: 6px;
+    flex-direction: column;
+    align-items: stretch;
+  }
   .my-hole-cards { gap: 10px; justify-content: center; }
-  .card.large { width: 72px; height: 104px; font-size: 1.28rem; }
-
-  /* Action buttons: 4-column grid, big touch targets */
-  .action-area { flex-wrap: wrap; justify-content: center; gap: 5px; }
-  .action-btn { flex: 1 1 calc(25% - 5px); min-height: 62px; min-width: 0; font-size: 0.82rem; padding: 6px 2px; }
-  .raise-controls { flex: 1 1 100%; flex-wrap: wrap; justify-content: center; gap: 6px; }
-  .raise-controls input[type=range] { flex: 1; min-width: 100px; }
-  .raise-controls input[type=number] { width: 68px; }
-
-  /* PTT — full-width thumb button */
-  .ptt-btn { flex: 1 1 100%; min-height: 52px; font-size: 0.92rem; border-radius: 12px; padding: 14px; text-align: center; }
-
-  .break-btn { font-size: 0.7rem; padding: 5px 8px; }
-
-  /* Lobby */
-  .lobby-header { flex-direction: column; align-items: flex-start; padding: 10px 12px; gap: 8px; }
-  .lobby-header .player-info { flex-wrap: wrap; gap: 6px; }
-  .lobby-body { padding: 12px; }
-  .tables-grid { grid-template-columns: 1fr; }
-  .section-header h2 { font-size: 1rem; }
-  .jackpot-banner { font-size: 0.82rem; padding: 8px 12px; }
-
-  /* Modal */
-  .modal { padding: 18px 14px; }
-  .modal h2 { font-size: 1.05rem; margin-bottom: 14px; }
-  .modal-footer { flex-direction: column; gap: 8px; }
-  .modal-footer .btn { width: 100%; }
-
-  /* Toast */
-  .toast-container { right: 8px; left: 8px; }
-  .toast { font-size: 0.82rem; padding: 10px 12px; }
-
-  /* Shot clock */
-  .shot-clock { width: 38px; height: 38px; }
+  .card.large { width: 68px; height: 98px; font-size: 1.2rem; }
+  .shot-clock { align-self: center; width: 38px; height: 38px; flex-shrink: 0; }
   .shot-clock-number { font-size: 0.75rem; }
 
-  /* Hand result */
-  .hand-result-box { padding: 20px 18px; max-width: 300px; }
+  /* ── Action buttons: 3 side-by-side + raise row + PTT row ── */
+  .action-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    align-items: stretch;
+  }
+  .action-btn {
+    flex: 1 1 calc(33% - 4px);
+    min-height: 58px;
+    min-width: 0;
+    font-size: 0.82rem;
+    padding: 6px 3px;
+    border-radius: 10px;
+  }
+  .raise-controls {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    align-items: center;
+  }
+  /* Taller slider for easier thumb control */
+  .raise-controls input[type=range] {
+    flex: 1;
+    min-width: 100px;
+    height: 36px;
+    accent-color: var(--blue);
+  }
+  .raise-controls input[type=number] {
+    width: 72px;
+    padding: 8px 6px;
+    font-size: 0.95rem;
+  }
+  /* PTT: full-width, large touch target */
+  .ptt-btn {
+    flex: 1 1 100%;
+    min-height: 52px;
+    font-size: 0.92rem;
+    border-radius: 12px;
+    padding: 14px 12px;
+    text-align: center;
+    touch-action: none;
+  }
+  .break-btn { font-size: 0.68rem; padding: 5px 8px; min-height: 36px; }
+
+  /* ── Lobby ── */
+  .lobby-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .lobby-header .logo { font-size: 1.1rem; }
+  .lobby-header .player-info { flex-wrap: wrap; gap: 4px; }
+  .lobby-header .player-info .btn { padding: 6px 10px; min-height: 38px; font-size: 0.78rem; }
+  .lobby-body { padding: 10px 12px; }
+  .tables-grid { grid-template-columns: 1fr; gap: 10px; }
+  .table-card { padding: 14px 16px; }
+  .section-header h2 { font-size: 0.95rem; }
+  .section-header { margin-bottom: 10px; }
+  .jackpot-banner { font-size: 0.8rem; padding: 6px 12px; gap: 8px; }
+  .jackpot-amount { font-size: 1.05rem; }
+
+  /* ── Modals: bottom-sheet style ── */
+  .modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+  .modal {
+    border-radius: 14px 14px 0 0;
+    max-height: 88vh;
+    padding: 20px 14px 36px;
+    max-width: 100%;
+    width: 100%;
+  }
+  .modal h2 { font-size: 1.05rem; margin-bottom: 14px; }
+  .modal-footer { flex-direction: column; gap: 8px; }
+  .modal-footer .btn { width: 100%; min-height: 48px; font-size: 1rem; }
+
+  /* ── Toast: above action area ── */
+  .toast-container { right: 8px; left: 8px; top: 56px; }
+  .toast { font-size: 0.82rem; padding: 10px 12px; max-width: 100%; }
+
+  /* ── Hand result overlay ── */
+  .hand-result-box { padding: 18px 14px; max-width: 88vw; }
   .hand-result-box .winner-name { font-size: 1.2rem; }
-  .hand-result-box .won-amount { font-size: 1.6rem; }
+  .hand-result-box .won-amount { font-size: 1.5rem; }
+  .hand-result-box .winner-cards { flex-wrap: wrap; }
+
+  /* ── Admin ── */
+  .admin-body { padding: 10px 8px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+  .stat-card { padding: 12px 10px; }
+  .stat-card .stat-value { font-size: 1.4rem; }
+  .jackpot-admin-card { grid-template-columns: 1fr; padding: 14px; }
+  .jackpot-admin-amount { font-size: 2rem; }
+  .jackpot-admin-actions { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+
+  /* Player detail modal grid */
+  .pd-row { flex-direction: column; gap: 2px; }
+  .pd-value { text-align: left; }
+}
+
+/* ─── Responsive: Very small phones ≤390px (iPhone 14, iPhone SE) ─────────── */
+@media (max-width: 390px) {
+  .seats-container { inset: -32px; }
+  .seat-box { min-width: 54px; padding: 2px 4px; font-size: 0.58rem; }
+  .seat-name { max-width: 48px; font-size: 0.58rem; }
+  .seat-chips { font-size: 0.52rem; }
+  .seat-cards .card { width: 26px; height: 38px; font-size: 0.56rem; }
+  .card.large { width: 62px; height: 90px; font-size: 1.1rem; }
+  .action-btn { min-height: 54px; font-size: 0.78rem; }
+  .lobby-body { padding: 8px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .stat-card .stat-value { font-size: 1.25rem; }
 }
 
 /* Scrollbar */
@@ -994,4 +1148,39 @@ input, select, textarea { font-family: inherit; }
   outline: 3px solid #00e676 !important;
   outline-offset: 2px;
   box-shadow: 0 0 14px rgba(0,230,118,0.8) !important;
+}
+
+/* ─── Safe-area insets for notched iPhones (viewport-fit=cover) ────────── */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .my-cards-area {
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+  .table-header {
+    padding-top: max(8px, env(safe-area-inset-top));
+  }
+}
+
+/* ─── Straddle prompt: responsive ─────────────────────────────────────── */
+@media (max-width: 480px) {
+  .straddle-prompt {
+    bottom: auto;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    min-width: 80vw;
+    max-width: 92vw;
+    padding: 14px 16px;
+  }
+}
+
+/* ─── Host controls panel: scrollable on mobile ─────────────────────── */
+@media (max-width: 480px) {
+  #host-controls {
+    max-height: 60vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    top: 4px !important;
+    right: 4px !important;
+    min-width: 160px !important;
+    max-width: 85vw;
+  }
 }
