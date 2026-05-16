@@ -70,7 +70,16 @@ function adminMiddleware(req, res, next) {
 }
 
 function hostMiddleware(req, res, next) {
-  if (req.user?.isAdmin || hostSet.has(req.user?.id)) return next();
+  if (req.user?.isAdmin || hostSet.has(req.user?.id)) {
+    // Block fee-suspended hosts/admins from hosting features
+    try {
+      const { feeSuspendedUsers } = require('../fees');
+      if (feeSuspendedUsers.has(req.user.id)) {
+        return res.status(403).json({ error: 'Your hosting privileges are suspended due to an unpaid monthly fee. Contact bostonspokerclub.amitureflops@gmail.com' });
+      }
+    } catch {}
+    return next();
+  }
   return res.status(403).json({ error: 'Host or admin access required' });
 }
 
@@ -1475,10 +1484,9 @@ router.post('/admin/create-admin', authMiddleware, adminMiddleware, async (req, 
 // ─── Monthly Fees ─────────────────────────────────────────────────────────────
 
 router.get('/admin/monthly-fees', authMiddleware, adminMiddleware, async (req, res) => {
-  // Mark overdue records where next_due_date has passed and never paid
   const today = new Date().toISOString().slice(0, 10);
   await supabaseAdmin.from('monthly_fees')
-    .update({ is_overdue: true })
+    .update({ is_overdue: true, updated_at: new Date().toISOString() })
     .lt('next_due_date', today)
     .catch(() => {});
 
@@ -1487,21 +1495,99 @@ router.get('/admin/monthly-fees', authMiddleware, adminMiddleware, async (req, r
     .order('role_type', { ascending: false })
     .order('username');
   if (error) return res.status(500).json({ error: error.message });
+
+  // Enrich with nickname from users table
+  if (data?.length) {
+    const userIds = [...new Set(data.map(r => r.user_id))];
+    const { data: users } = await supabaseAdmin.from('users')
+      .select('id, nickname, phone').in('id', userIds).catch(() => ({ data: [] }));
+    const userMap = {};
+    (users || []).forEach(u => { userMap[u.id] = u; });
+    data.forEach(r => { r.nickname = userMap[r.user_id]?.nickname || null; r.phone = userMap[r.user_id]?.phone || null; });
+  }
+
   res.json(data || []);
 });
 
+// Must be defined BEFORE the /:userId route to avoid path collision
+router.post('/admin/monthly-fees/send-reminders', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { runDailyFeeCheck } = require('../fees');
+    await runDailyFeeCheck();
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/admin/monthly-fees/:userId/mark-paid', authMiddleware, adminMiddleware, async (req, res) => {
+  const { payment_method, notes } = req.body;
+  const userId = req.params.userId;
+
   const nextDue = new Date();
   nextDue.setDate(1);
   nextDue.setMonth(nextDue.getMonth() + 1);
+
+  const { data: fee } = await supabaseAdmin.from('monthly_fees')
+    .select('username, role_type, fee_amount')
+    .eq('user_id', userId)
+    .single();
+
   const { error } = await supabaseAdmin.from('monthly_fees').update({
     last_paid_at: new Date().toISOString(),
     next_due_date: nextDue.toISOString().slice(0, 10),
     is_overdue: false,
+    fee_suspended: false,
+    suspended_at: null,
+    payment_method: payment_method || null,
+    payment_notes: notes || null,
     updated_at: new Date().toISOString()
-  }).eq('user_id', req.params.userId);
+  }).eq('user_id', userId);
   if (error) return res.status(500).json({ error: error.message });
+
+  // Restore user access if suspended
+  await supabaseAdmin.from('users').update({ fee_suspended: false }).eq('id', userId).catch(() => {});
+
+  // Remove from in-memory suspended set
+  try { const { feeSuspendedUsers } = require('../fees'); feeSuspendedUsers.delete(userId); } catch {}
+
+  // Record payment in history table
+  if (fee) {
+    const forMonth = new Date(); forMonth.setDate(1);
+    await supabaseAdmin.from('monthly_fee_payments').insert({
+      user_id: userId,
+      username: fee.username,
+      role_type: fee.role_type,
+      amount: fee.fee_amount,
+      for_month: forMonth.toISOString().slice(0, 10),
+      payment_method: payment_method || null,
+      notes: notes || null
+    }).catch(() => {});
+  }
+
   res.json({ ok: true });
+});
+
+router.get('/admin/fee-income', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { data: payments } = await supabaseAdmin.from('monthly_fee_payments')
+      .select('amount, created_at');
+    const all = payments || [];
+    const total = all.reduce((s, p) => s + (p.amount || 0), 0);
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthTotal = all
+      .filter(p => new Date(p.created_at) >= monthStart)
+      .reduce((s, p) => s + (p.amount || 0), 0);
+
+    const { data: overdueRows } = await supabaseAdmin.from('monthly_fees')
+      .select('id', { count: 'exact' }).eq('is_overdue', true);
+
+    res.json({ total, monthTotal, unpaidCount: (overdueRows || []).length });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Rake Splits ──────────────────────────────────────────────────────────────

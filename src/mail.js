@@ -318,4 +318,29 @@ async function sendHostSessionEmail({ to, hostUsername, tableName, gameType, han
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail };
+async function sendFeeReminderEmail({ to, username, amount, subject, message }) {
+  if (!isConfigured() || !to) return;
+  try {
+    await sgMail.send({
+      from: FROM, to, subject,
+      text: `Hi ${username || 'there'},\n\n${message}\n\nLog in at https://rabbsroom.com to check your account status.\n\n— Boston Poker Club`,
+      html: `
+        <div style="font-family:sans-serif;max-width:500px;margin:0 auto">
+          <h2 style="color:#c0392b">💳 Hosting Fee Reminder — Boston Poker Club</h2>
+          <p>Hi <strong>${username || 'there'}</strong>,</p>
+          <p style="background:#fff9e6;border:1px solid #f5d78e;border-radius:8px;padding:14px 18px;font-size:1rem;line-height:1.6">${message}</p>
+          <p style="color:#666;font-size:.85rem">Log in to <a href="https://rabbsroom.com" style="color:#1a7a3f">RabbsRoom</a> to check your account status.</p>
+          <p style="color:#999;font-size:.8rem">— Boston Poker Club · bostonspokerclub.amitureflops@gmail.com</p>
+        </div>`
+    });
+    console.log(`[mail] Fee reminder sent to ${to}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send fee reminder:', e.message);
+  }
+}
+
+async function sendFeeReminderSMS({ phone, text }) {
+  return sendPlayerSMS({ phone, text });
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail, sendFeeReminderEmail, sendFeeReminderSMS };

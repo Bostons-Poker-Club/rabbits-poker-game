@@ -1861,52 +1861,109 @@ async function viewGovernmentId(appId) {
 
 async function loadMonthlyFees() {
   try {
-    const list = await apiFetch('/api/admin/monthly-fees');
+    const [list, income] = await Promise.all([
+      apiFetch('/api/admin/monthly-fees'),
+      apiFetch('/api/admin/fee-income').catch(() => ({ total: 0, monthTotal: 0, unpaidCount: 0 }))
+    ]);
     renderMonthlyFees(list);
-    const overdue = list.filter(f => f.is_overdue).length;
-    const badge = document.getElementById('fees-badge');
-    if (badge) {
-      badge.textContent = overdue;
-      badge.style.display = overdue ? '' : 'none';
-    }
+    _renderFeeIncome(income);
   } catch {}
+}
+
+function _renderFeeIncome(income) {
+  const overdue = income.unpaidCount || 0;
+  const badge = document.getElementById('fees-badge');
+  if (badge) { badge.textContent = overdue; badge.style.display = overdue ? '' : 'none'; }
+  const monthEl   = document.getElementById('fee-month-total');
+  const allEl     = document.getElementById('fee-all-time-total');
+  const unpaidEl  = document.getElementById('fee-unpaid-count');
+  if (monthEl)  monthEl.textContent  = '$' + fmt(income.monthTotal || 0);
+  if (allEl)    allEl.textContent    = '$' + fmt(income.total || 0);
+  if (unpaidEl) unpaidEl.textContent = overdue;
+  const statFeeIncome = document.getElementById('stat-fee-income');
+  const statFeeUnpaid = document.getElementById('stat-fee-unpaid');
+  if (statFeeIncome) statFeeIncome.textContent = '$' + fmt(income.monthTotal || 0);
+  if (statFeeUnpaid) statFeeUnpaid.textContent = overdue;
 }
 
 function renderMonthlyFees(list) {
   const tbody = document.getElementById('fees-body');
   if (!tbody) return;
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No fee records yet. Records are created automatically when hosts or admins are approved.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-dim)">No fee records yet. Records are created automatically when hosts or admins are approved.</td></tr>';
     return;
   }
   tbody.innerHTML = list.map(f => {
-    const lastPaid  = f.last_paid_at ? new Date(f.last_paid_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
-    const nextDue   = f.next_due_date ? new Date(f.next_due_date + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : '—';
-    const overdue   = f.is_overdue;
-    const statusHtml = overdue
-      ? '<span style="background:var(--red);color:#fff;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:8px">OVERDUE</span>'
-      : '<span style="color:var(--chip-green);font-size:.82rem">Current</span>';
+    const lastPaid = f.last_paid_at
+      ? new Date(f.last_paid_at).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+      : '—';
+    const nextDue = f.next_due_date
+      ? new Date(f.next_due_date + 'T00:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })
+      : '—';
+    let statusHtml;
+    if (f.fee_suspended) {
+      statusHtml = '<span style="background:#6b0000;color:#ff8080;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:8px;border:1px solid #c0392b">SUSPENDED</span>';
+    } else if (f.is_overdue) {
+      statusHtml = '<span style="background:var(--red);color:#fff;font-size:.68rem;font-weight:700;padding:2px 7px;border-radius:8px">OVERDUE</span>';
+    } else {
+      statusHtml = '<span style="background:rgba(46,204,113,.15);color:var(--chip-green);font-size:.72rem;font-weight:600;padding:2px 7px;border-radius:8px">Paid</span>';
+    }
     const roleLabel = f.role_type === 'admin'
       ? '<span style="color:var(--gold);font-size:.8rem;font-weight:700">Admin</span>'
       : '<span style="color:var(--chip-green);font-size:.8rem">Host</span>';
-    return `<tr style="${overdue ? 'background:rgba(255,0,0,.06)' : ''}">
-      <td><strong style="color:${overdue ? 'var(--red)' : 'var(--text)'}">${esc(f.username || '—')}</strong></td>
+    const methodNote = f.payment_method
+      ? `<br><span style="color:var(--text-dim);font-size:.7rem">${esc(f.payment_method)}</span>` : '';
+    const rowBg = f.fee_suspended ? 'background:rgba(139,0,0,.1)' : f.is_overdue ? 'background:rgba(255,0,0,.06)' : '';
+    const nameColor = f.fee_suspended ? '#ff8080' : f.is_overdue ? 'var(--red)' : 'var(--text)';
+    return `<tr style="${rowBg}">
+      <td><strong style="color:${nameColor}">${esc(f.username || '—')}</strong></td>
+      <td style="color:var(--text-dim);font-size:.82rem">${esc(f.nickname || '—')}</td>
       <td>${roleLabel}</td>
       <td style="color:var(--gold)">$${f.fee_amount}/mo</td>
-      <td style="color:var(--text-dim);font-size:.82rem">${lastPaid}</td>
-      <td style="color:${overdue ? 'var(--red)' : 'var(--text-dim)'};font-size:.82rem">${nextDue}</td>
+      <td style="color:var(--text-dim);font-size:.82rem">${lastPaid}${methodNote}</td>
+      <td style="color:${f.is_overdue ? 'var(--red)' : 'var(--text-dim)'};font-size:.82rem">${nextDue}</td>
       <td>${statusHtml}</td>
-      <td><button class="btn btn-sm btn-green" onclick="markFeePaid('${f.user_id}','${esc(f.username||'')}')">Mark Paid</button></td>
+      <td><button class="btn btn-sm btn-green" onclick="openMarkFeePaid('${f.user_id}','${esc(f.username||'')}','${f.fee_amount}')">Mark Paid</button></td>
     </tr>`;
   }).join('');
 }
 
-async function markFeePaid(userId, username) {
-  if (!confirm(`Mark monthly fee as paid for ${username}?`)) return;
+function openMarkFeePaid(userId, username, amount) {
+  document.getElementById('mfp-user-id').value = userId;
+  document.getElementById('mfp-user-info').textContent = `${username} — $${amount}/month`;
+  document.getElementById('mfp-method').value = '';
+  document.getElementById('mfp-notes').value = '';
+  document.getElementById('mfp-error').textContent = '';
+  openModal('mark-fee-paid-modal');
+}
+
+async function submitMarkFeePaid() {
+  const userId = document.getElementById('mfp-user-id').value;
+  const method = document.getElementById('mfp-method').value;
+  const notes  = document.getElementById('mfp-notes').value.trim();
+  const errEl  = document.getElementById('mfp-error');
+  errEl.textContent = '';
+  if (!method) { errEl.textContent = 'Please select a payment method'; return; }
   try {
-    await apiFetch(`/api/admin/monthly-fees/${userId}/mark-paid`, { method: 'POST' });
-    toast(`Fee marked as paid for ${username}`);
+    await apiFetch(`/api/admin/monthly-fees/${userId}/mark-paid`, {
+      method: 'POST',
+      body: { payment_method: method, notes }
+    });
+    closeModal('mark-fee-paid-modal');
+    toast('Fee marked as paid', 'success');
     loadMonthlyFees();
+  } catch (e) { errEl.textContent = e.message; }
+}
+
+async function markFeePaid(userId, username) {
+  openMarkFeePaid(userId, username, '?');
+}
+
+async function sendFeeReminders() {
+  if (!confirm('Send email + SMS reminders to all hosts/admins with unpaid fees?')) return;
+  try {
+    await apiFetch('/api/admin/monthly-fees/send-reminders', { method: 'POST' });
+    toast('Reminders sent', 'success');
   } catch (e) { toast(e.message, 'error'); }
 }
 

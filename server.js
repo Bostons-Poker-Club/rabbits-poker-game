@@ -17,6 +17,7 @@ const path = require('path');
 
 const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers } = require('./src/socket/handlers');
+const { startFeeScheduler } = require('./src/fees');
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +49,7 @@ app.get('*', (req, res) => {
 });
 
 setupSocketHandlers(io);
+startFeeScheduler();
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
