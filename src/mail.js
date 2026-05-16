@@ -183,10 +183,12 @@ async function sendHostApprovalEmail({ to, hostName, username, password, hostTyp
   }
 }
 
-async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolume, handsPlayed, hostUsername, hostType, hostPercent, hostAmount, houseAmount, hands }) {
+async function sendSessionReportEmail({ reportId, tableName, gameType, totalRake, potVolume, handsPlayed, hostUsername, hostType, hostPercent, hostAmount, houseAmount, hands }) {
   if (!isConfigured()) return;
-  const date = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const timeStr = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   const fmt = n => (n || 0).toLocaleString();
+  const gameLabel = gameType === 'plo' ? 'PLO' : "Texas Hold'em";
   const hostLabel = hostUsername ? `${hostUsername} (${hostType === 'admin' ? 'Admin' : 'Host'})` : 'No host';
 
   const handsRows = (hands || []).map(h =>
@@ -199,7 +201,8 @@ async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolum
 
   const textLines = [
     `SESSION REPORT — ${tableName}`,
-    `Date: ${date}`,
+    `Date: ${dateStr} at ${timeStr}`,
+    `Game: ${gameLabel}`,
     '',
     `Hands Played: ${handsPlayed}`,
     `Total Pot Volume: $${fmt(potVolume)}`,
@@ -218,10 +221,13 @@ async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolum
   const html = `
     <div style="font-family:sans-serif;max-width:620px;margin:0 auto">
       <h2 style="color:#1a7a3f">🃏 Session Report — ${tableName}</h2>
-      <p style="color:#666;margin-bottom:20px">${date}</p>
+      <p style="color:#666;margin-bottom:4px">${dateStr} at ${timeStr}</p>
+      <p style="color:#888;font-size:.88rem;margin-bottom:20px">Game: <strong>${gameLabel}</strong></p>
 
       <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px;overflow:hidden;margin-bottom:20px">
-        <tr><td style="padding:9px 14px;color:#555;width:200px">Hands Played</td><td style="padding:9px 14px;font-weight:700">${handsPlayed}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555;width:200px">Table</td><td style="padding:9px 14px;font-weight:700">${tableName}</td></tr>
+        <tr style="background:#fff"><td style="padding:9px 14px;color:#555">Game Type</td><td style="padding:9px 14px;font-weight:700">${gameLabel}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555">Hands Played</td><td style="padding:9px 14px;font-weight:700">${handsPlayed}</td></tr>
         <tr style="background:#fff"><td style="padding:9px 14px;color:#555">Total Pot Volume</td><td style="padding:9px 14px;font-weight:700">$${fmt(potVolume)}</td></tr>
         <tr><td style="padding:9px 14px;color:#555">Total Rake Collected</td><td style="padding:9px 14px;font-weight:700;color:#1a7a3f">$${fmt(totalRake)}</td></tr>
       </table>
@@ -252,7 +258,7 @@ async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolum
   try {
     await sgMail.send({
       from: FROM, to: ADMIN_EMAIL,
-      subject: `📊 Session Report — ${tableName} (${handsPlayed} hands, $${fmt(totalRake)} rake)`,
+      subject: `📊 Session Report — ${tableName} — ${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} (${handsPlayed} hands, $${fmt(totalRake)} rake)`,
       text: textLines, html
     });
     console.log(`[mail] Session report emailed for ${tableName}`);
@@ -261,4 +267,55 @@ async function sendSessionReportEmail({ reportId, tableName, totalRake, potVolum
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail };
+async function sendHostSessionEmail({ to, hostUsername, tableName, gameType, handsPlayed, totalRake, hostPercent, hostAmount, houseAmount, reportId }) {
+  if (!isConfigured() || !to) return;
+  const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const fmt = n => (n || 0).toLocaleString();
+  const gameLabel = gameType === 'plo' ? 'PLO' : "Texas Hold'em";
+  const subject = `Your rake earnings — ${tableName} session — Boston Poker Club`;
+  const text = [
+    `Hi ${hostUsername},`,
+    '',
+    `Your session at ${tableName} has ended. Here are your earnings:`,
+    '',
+    `Table: ${tableName}`,
+    `Game: ${gameLabel}`,
+    `Date: ${dateStr}`,
+    `Hands played: ${handsPlayed}`,
+    `Total rake collected: $${fmt(totalRake)}`,
+    '',
+    `Your cut (${hostPercent}%): $${fmt(hostAmount)}`,
+    `House cut: $${fmt(houseAmount)}`,
+    '',
+    'Thank you for hosting at Boston Poker Club!',
+    '— Boston Poker Club'
+  ].join('\n');
+  const html = `
+    <div style="font-family:sans-serif;max-width:520px;margin:0 auto">
+      <h2 style="color:#1a7a3f">🎰 Session Earnings — ${tableName}</h2>
+      <p>Hi <strong>${hostUsername}</strong>,</p>
+      <p>Your session at <strong>${tableName}</strong> has ended. Here's a summary of your rake earnings:</p>
+      <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px;overflow:hidden;margin:16px 0">
+        <tr><td style="padding:9px 14px;color:#555;width:180px">Table</td><td style="padding:9px 14px;font-weight:700">${tableName}</td></tr>
+        <tr style="background:#fff"><td style="padding:9px 14px;color:#555">Game</td><td style="padding:9px 14px">${gameLabel}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555">Date</td><td style="padding:9px 14px">${dateStr}</td></tr>
+        <tr style="background:#fff"><td style="padding:9px 14px;color:#555">Hands Played</td><td style="padding:9px 14px">${handsPlayed}</td></tr>
+        <tr><td style="padding:9px 14px;color:#555">Total Rake</td><td style="padding:9px 14px;color:#1a7a3f;font-weight:700">$${fmt(totalRake)}</td></tr>
+      </table>
+      <div style="background:#f0faf5;border:1px solid #b2dfcc;border-radius:8px;padding:16px 20px;margin:16px 0">
+        <div style="font-size:1.15rem;font-weight:700;color:#1a7a3f;margin-bottom:6px">Your Earnings: $${fmt(hostAmount)}</div>
+        <div style="color:#555;font-size:.88rem">Your ${hostPercent}% cut of $${fmt(totalRake)} total rake</div>
+        <div style="color:#888;font-size:.82rem;margin-top:4px">House cut: $${fmt(houseAmount)}</div>
+      </div>
+      <p style="color:#666;font-size:.88rem">Contact us at <a href="mailto:bostonspokerclub.amitureflops@gmail.com" style="color:#1a7a3f">bostonspokerclub.amitureflops@gmail.com</a> with any questions.</p>
+      <p style="color:#999;font-size:.8rem">— Boston Poker Club${reportId ? ` · Report #${reportId}` : ''}</p>
+    </div>`;
+  try {
+    await sgMail.send({ from: FROM, to, subject, text, html });
+    console.log(`[mail] Host session email sent to ${to} for ${tableName}`);
+  } catch (e) {
+    console.warn('[mail] Failed to send host session email:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail };

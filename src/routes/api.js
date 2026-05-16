@@ -258,28 +258,37 @@ router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) =
 
   // Record rake split + session report before closing
   try {
-    const { data: tbl } = await supabaseAdmin.from('tables').select('name, host_id').eq('id', tableId).single();
+    const { data: tbl } = await supabaseAdmin.from('tables').select('name, host_id, game_type').eq('id', tableId).single();
     const { sessionRake } = require('../socket/handlers');
     const entry = sessionRake.byTable.get(tableId);
     const totalRake    = entry?.total      || 0;
     const potVolume    = entry?.potVolume  || 0;
     const handsPlayed  = entry?.hands?.length || 0;
     const handsDetail  = entry?.hands || [];
+    const gameType     = tbl?.game_type || 'holdem';
 
     // Resolve host info (prefer in-memory game data, fall back to DB)
     let hostId       = entry?.hostId       || tbl?.host_id || null;
     let hostUsername = entry?.hostUsername || null;
     let hostType     = entry?.hostType     || null;
     let hostPercent  = entry?.hostPercent  || 0;
+    let hostEmail    = null;
 
     if (hostId && !hostUsername) {
       try {
-        const { data: hostUser } = await supabaseAdmin.from('users').select('username, is_admin, host_type').eq('id', hostId).single();
+        const { data: hostUser } = await supabaseAdmin.from('users').select('username, email, is_admin, host_type').eq('id', hostId).single();
         if (hostUser) {
           hostUsername = hostUser.username;
           hostType     = hostUser.is_admin ? 'admin' : (hostUser.host_type || 'host');
           hostPercent  = hostType === 'admin' ? 20 : 40;
+          hostEmail    = hostUser.email;
         }
+      } catch {}
+    } else if (hostId) {
+      // Username known but we still need the email
+      try {
+        const { data: hostUser } = await supabaseAdmin.from('users').select('email').eq('id', hostId).single();
+        hostEmail = hostUser?.email || null;
       } catch {}
     }
 
@@ -297,21 +306,32 @@ router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) =
 
     // Save detailed session report
     const { data: reportRow } = await supabaseAdmin.from('session_reports').insert({
-      table_id: tableId, table_name: tableName,
+      table_id: tableId, table_name: tableName, game_type: gameType,
       total_rake: totalRake, pot_volume: potVolume, hands_played: handsPlayed,
       host_id: hostId, host_username: hostUsername, host_type: hostType,
       host_percent: hostPercent, host_amount: hostAmount, house_amount: houseAmount,
       hands_detail: handsDetail
     }).select('id').single();
 
-    // Email session report to admin
-    const { sendSessionReportEmail } = require('../mail');
+    const { sendSessionReportEmail, sendHostSessionEmail } = require('../mail');
+
+    // Email full report to admin
     sendSessionReportEmail({
       reportId: reportRow?.id,
-      tableName, totalRake, potVolume, handsPlayed,
+      tableName, gameType, totalRake, potVolume, handsPlayed,
       hostUsername, hostType, hostPercent, hostAmount, houseAmount,
       hands: handsDetail
     }).catch(() => {});
+
+    // Email earnings summary to host (if different from admin)
+    if (hostEmail && hostAmount > 0) {
+      sendHostSessionEmail({
+        to: hostEmail,
+        hostUsername, tableName, gameType, handsPlayed,
+        totalRake, hostPercent, hostAmount, houseAmount,
+        reportId: reportRow?.id
+      }).catch(() => {});
+    }
 
   } catch (e) {
     console.warn('[close-table] Session report error:', e.message);

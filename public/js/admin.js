@@ -658,6 +658,7 @@ function renderSessionReports(list) {
   }
   el.innerHTML = list.map(r => {
     const date = new Date(r.created_at).toLocaleString();
+    const gameLabel = r.game_type === 'plo' ? 'PLO' : "Hold'em";
     const hostLabel = r.host_username
       ? `${esc(r.host_username)} <span style="color:var(--text-dim);font-size:.75rem">(${r.host_type === 'admin' ? 'admin' : 'host'})</span>`
       : '<span style="color:var(--text-dim)">No host</span>';
@@ -665,7 +666,7 @@ function renderSessionReports(list) {
       <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;margin-bottom:14px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:12px">
           <div>
-            <div style="color:var(--gold);font-weight:700;font-size:1rem">🃏 ${esc(r.table_name)}</div>
+            <div style="color:var(--gold);font-weight:700;font-size:1rem">🃏 ${esc(r.table_name)} <span style="color:var(--text-dim);font-size:.78rem;font-weight:400">— ${gameLabel}</span></div>
             <div style="color:var(--text-dim);font-size:.78rem;margin-top:3px">${date}</div>
           </div>
           <button class="btn btn-sm btn-outline" onclick="viewReportDetail('${r.id}')">View Details</button>
@@ -733,7 +734,7 @@ async function viewReportDetail(reportId) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
         <div>
           <h2 style="color:var(--gold);margin:0;font-size:1.1rem">📊 ${esc(report.table_name)}</h2>
-          <div style="color:var(--text-dim);font-size:.78rem;margin-top:3px">${new Date(report.created_at).toLocaleString()}</div>
+          <div style="color:var(--text-dim);font-size:.78rem;margin-top:3px">${new Date(report.created_at).toLocaleString()} · ${report.game_type === 'plo' ? 'PLO' : "Texas Hold'em"}</div>
         </div>
         <button onclick="document.getElementById('report-detail-modal').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer">✕</button>
       </div>
@@ -803,7 +804,8 @@ function showPanel(name) {
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`panel-${name}`)?.classList.add('active');
   event.currentTarget.classList.add('active');
-  if (name === 'banned') loadBannedPlayers();
+  if (name === 'banned')   loadBannedPlayers();
+  if (name === 'reports')  loadSessionReports();
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -1204,7 +1206,7 @@ function renderTablesAdmin(list) {
       <td>${t.rake_percent}%</td>
       <td><span style="color:${t.status === 'closed' ? '#888' : 'var(--chip-green)'}">${t.status}</span></td>
       <td><div class="actions">
-        ${t.status !== 'closed' ? `<button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">Close</button>` : ''}
+        ${t.status !== 'closed' ? `<button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">End Session</button>` : ''}
       </div></td>
     </tr>
   `).join('');
@@ -1228,7 +1230,7 @@ function renderOverviewTables(list) {
       <td>${rakeDisplay}</td>
       <td><div class="actions">
         <a href="/table.html?tableId=${t.id}&buyIn=${t.stakes_big_blind * 20}"><button class="btn btn-sm btn-outline">View</button></a>
-        <button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">Close</button>
+        <button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">End Session</button>
       </div></td>
     </tr>`;
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No active tables</td></tr>';
