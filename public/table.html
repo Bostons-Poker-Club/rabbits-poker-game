@@ -54,6 +54,21 @@
       </div>
     </div>
 
+    <!-- Tournament Blind Timer -->
+    <div id="blind-timer-panel">
+      <div class="btp-level" id="btp-level">Level 1</div>
+      <div class="btp-blinds" id="btp-blinds">25/50</div>
+      <div class="btp-countdown" id="btp-countdown">15:00</div>
+      <div class="btp-next" id="btp-next"></div>
+      <div class="btp-controls" id="btp-controls" style="display:none">
+        <button class="btp-btn" id="btp-pause-btn" onclick="toggleBlindTimer()">⏸ Pause</button>
+        <button class="btp-btn" onclick="openBlindSchedule()">📋 Schedule</button>
+      </div>
+      <div style="display:none" id="btp-schedule-btn-wrap">
+        <button class="btp-btn" style="margin-top:4px" onclick="openBlindSchedule()">📋 Schedule</button>
+      </div>
+    </div>
+
     <!-- Hand result overlay -->
     <div class="hand-result-overlay hidden" id="hand-result-overlay">
       <div class="hand-result-box">
@@ -147,6 +162,17 @@
     <div class="rotate-title">Rotate Your Phone</div>
     <div class="rotate-subtitle">Landscape mode gives you the best poker experience</div>
     <button onclick="document.getElementById('rotate-overlay').style.display='none'" style="margin-top:20px;background:rgba(255,255,255,.12);border:1px solid var(--border);color:var(--text);padding:10px 24px;border-radius:20px;font-size:.88rem;cursor:pointer">Continue Anyway</button>
+  </div>
+</div>
+
+<!-- Blind Schedule Modal -->
+<div class="modal-overlay hidden" id="blind-schedule-modal">
+  <div class="modal" style="max-width:420px">
+    <h2 style="color:var(--gold)">📋 Blind Schedule</h2>
+    <div id="blind-sched-rows"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-outline" onclick="closeModal('blind-schedule-modal')">Close</button>
+    </div>
   </div>
 </div>
 

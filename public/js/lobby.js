@@ -147,6 +147,18 @@ if (typeof io !== 'undefined') {
     handleJackpotState(state);
   });
 
+  // Tournament timer events
+  lobbySocket.on('tournament_started', ({ timerState }) => {
+    if (timerState) _updateTournamentTimer(timerState);
+    loadTournaments();
+  });
+  lobbySocket.on('tournament_timer', _updateTournamentTimer);
+  lobbySocket.on('tournament_timer_paused',  ({ timerState }) => { if (timerState) _updateTournamentTimer(timerState); });
+  lobbySocket.on('tournament_timer_resumed', ({ timerState }) => { if (timerState) _updateTournamentTimer(timerState); });
+  lobbySocket.on('blind_increase', ({ tournamentId, blindLevel, small_blind, big_blind, timerState }) => {
+    if (timerState) _updateTournamentTimer(timerState);
+  });
+
   lobbySocket.on('jackpot_awarded', ({ amount, tableId }) => {
     showToast(`🏆 High Hand Jackpot of $${fmtChips(amount)} awarded!`, 'success');
     loadJackpot();
@@ -183,8 +195,10 @@ function renderTables(tables) {
       : '';
 
     const minBuyIn = getMinBuyIn(t.stakes_small_blind, t.stakes_big_blind, t.game_type);
+    const feltColor = t.felt_color || '#1a5c2a';
     return `
     <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_small_blind}, ${t.stakes_big_blind}, '${t.game_type}')">
+      <div class="table-card-felt" style="background:${feltColor}"></div>
       <div class="table-card-header">
         <div class="table-name">${esc(t.name)}</div>
         <span class="game-badge">${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</span>
@@ -214,9 +228,19 @@ function renderTournaments(list) {
     return;
   }
 
+  list.forEach(t => {
+    if (t.status === 'active' && lobbySocket) {
+      lobbySocket.emit('join_tournament_room', { tournamentId: t.id });
+      lobbySocket.emit('get_tournament_timer', { tournamentId: t.id });
+    }
+  });
+
   el.innerHTML = list.map(t => {
     const players = t.tournament_players?.[0]?.count || 0;
     const statusColor = { registering: '#2ecc71', active: '#e63946', completed: '#888' }[t.status] || '#888';
+    const blindsSnippet = t.blind_schedule?.[0]
+      ? `Blinds: $${t.blind_schedule[0].small_blind}/$${t.blind_schedule[0].big_blind}+`
+      : '';
     return `
     <div class="table-card">
       <div class="table-card-header">
@@ -224,10 +248,10 @@ function renderTournaments(list) {
         <span class="game-badge" style="background:${statusColor}22;color:${statusColor}">${t.status}</span>
       </div>
       <div class="table-stakes">Buy-in: ${fmtChips(t.buy_in)} chips</div>
-      <div class="table-info">Starting: ${fmtChips(t.starting_chips)} chips</div>
+      <div class="table-info">Starting: ${fmtChips(t.starting_chips)} chips${blindsSnippet ? ' · ' + blindsSnippet : ''}</div>
+      ${t.status === 'active' ? `<div id="tn-timer-${t.id}" style="font-size:.82rem;color:var(--text-dim);margin:4px 0">Loading timer…</div>` : ''}
       <div class="player-count"><span class="player-dot"></span> ${players} registered</div>
       ${t.status === 'registering' ? `<button class="btn btn-gold btn-sm btn-full" onclick="registerTournament('${t.id}')">Register →</button>` : ''}
-      ${t.status === 'active' ? `<button class="btn btn-blue btn-sm btn-full">Spectate</button>` : ''}
     </div>`;
   }).join('');
 }
@@ -241,6 +265,35 @@ async function registerTournament(id) {
   } catch (e) {
     showToast(e.message, 'error');
   }
+}
+
+// ─── Tournament Timer ─────────────────────────────────────────────────────
+
+const _tournamentTimers = {};      // tournamentId -> { state, interval }
+
+function _updateTournamentTimer(state) {
+  const id = state.tournamentId;
+  if (!id) return;
+  if (_tournamentTimers[id]) clearInterval(_tournamentTimers[id].interval);
+  const interval = state.isPaused ? null : setInterval(() => {
+    if (_tournamentTimers[id]) {
+      _tournamentTimers[id].state.remainingMs = Math.max(0, _tournamentTimers[id].state.remainingMs - 1000);
+      _renderTournamentTimerEl(id);
+    }
+  }, 1000);
+  _tournamentTimers[id] = { state, interval };
+  _renderTournamentTimerEl(id);
+}
+
+function _renderTournamentTimerEl(id) {
+  const el = document.getElementById(`tn-timer-${id}`);
+  if (!el) return;
+  const t = _tournamentTimers[id]?.state;
+  if (!t) return;
+  const rem = Math.max(0, t.remainingMs);
+  const m = Math.floor(rem / 60000);
+  const s = Math.floor((rem % 60000) / 1000).toString().padStart(2, '0');
+  el.innerHTML = `<span style="color:var(--gold);font-weight:700">Level ${t.currentLevel}</span> · $${t.smallBlind}/$${t.bigBlind} · <span style="color:${rem<=30000?'#e74c3c':'var(--text)'}">${t.isPaused ? '⏸ ' : ''}${m}:${s}</span>`;
 }
 
 // ─── Jackpot ──────────────────────────────────────────────────────────────
@@ -384,6 +437,15 @@ function openCreateTable() {
   }
 }
 
+function selectFelt(el, groupId) {
+  document.querySelectorAll(`#${groupId} .felt-swatch`).forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function _selectedFelt(groupId) {
+  return document.querySelector(`#${groupId} .felt-swatch.selected`)?.dataset.color || '#1a5c2a';
+}
+
 async function createTable() {
   const name = document.getElementById('ct-name').value.trim();
   if (!name) return showToast('Table name required', 'error');
@@ -396,7 +458,8 @@ async function createTable() {
         stakes_small_blind: parseInt(document.getElementById('ct-sb').value),
         stakes_big_blind: parseInt(document.getElementById('ct-bb').value),
         max_players: parseInt(document.getElementById('ct-max').value),
-        rake_percent: parseFloat(document.getElementById('ct-rake').value)
+        rake_percent: parseFloat(document.getElementById('ct-rake').value),
+        felt_color: _selectedFelt('ct-felt-swatches')
       }
     });
     closeModal('create-table-modal');

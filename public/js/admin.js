@@ -1256,9 +1256,23 @@ async function loadTables() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+const FELT_COLORS = [
+  { color: '#1a5c2a', label: 'Classic' },
+  { color: '#0a1628', label: 'Midnight' },
+  { color: '#4a0a0a', label: 'Deep Red' },
+  { color: '#2a0a4a', label: 'Purple' },
+  { color: '#0a0a0a', label: 'Black' },
+  { color: '#0a3a3a', label: 'Teal' }
+];
+
 function renderTablesAdmin(list) {
   const tbody = document.getElementById('tables-body');
-  tbody.innerHTML = list.map(t => `
+  tbody.innerHTML = list.map(t => {
+    const feltColor = t.felt_color || '#1a5c2a';
+    const swatches = FELT_COLORS.map(f =>
+      `<span class="felt-swatch${f.color === feltColor ? ' selected' : ''}" data-color="${f.color}" style="background:${f.color};width:20px;height:20px;display:inline-block;border-radius:50%;cursor:pointer;border:2px solid ${f.color === feltColor ? 'var(--gold)' : 'transparent'};margin:1px;vertical-align:middle" onclick="patchTableFeltColor('${t.id}','${f.color}')" title="${f.label}"></span>`
+    ).join('');
+    return `
     <tr>
       <td>${esc(t.name)}</td>
       <td>${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</td>
@@ -1266,11 +1280,12 @@ function renderTablesAdmin(list) {
       <td>${t.max_players}</td>
       <td>${t.rake_percent}%</td>
       <td><span style="color:${t.status === 'closed' ? '#888' : 'var(--chip-green)'}">${t.status}</span></td>
+      <td><div style="display:flex;align-items:center;gap:4px">${swatches}</div></td>
       <td><div class="actions">
         ${t.status !== 'closed' ? `<button class="btn btn-sm btn-red" onclick="closeTable('${t.id}')">End Session</button>` : ''}
       </div></td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 function renderOverviewTables(list) {
@@ -1297,6 +1312,15 @@ function renderOverviewTables(list) {
   }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No active tables</td></tr>';
 }
 
+function selectFelt(el, groupId) {
+  document.querySelectorAll(`#${groupId} .felt-swatch`).forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function _selectedFelt(groupId) {
+  return document.querySelector(`#${groupId} .felt-swatch.selected`)?.dataset.color || '#1a5c2a';
+}
+
 async function createTable() {
   const name = document.getElementById('ct-name').value.trim();
   if (!name) return toast('Name required', 'error');
@@ -1309,11 +1333,20 @@ async function createTable() {
         stakes_small_blind: parseInt(document.getElementById('ct-sb').value),
         stakes_big_blind: parseInt(document.getElementById('ct-bb').value),
         max_players: parseInt(document.getElementById('ct-max').value),
-        rake_percent: parseFloat(document.getElementById('ct-rake').value)
+        rake_percent: parseFloat(document.getElementById('ct-rake').value),
+        felt_color: _selectedFelt('ct-felt-swatches-admin')
       }
     });
     closeModal('create-table-modal');
     toast('Table created');
+    loadTables();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function patchTableFeltColor(tableId, color) {
+  try {
+    await apiFetch(`/api/admin/tables/${tableId}/felt-color`, { method: 'PATCH', body: { felt_color: color } });
+    toast('Felt color updated');
     loadTables();
   } catch (e) { toast(e.message, 'error'); }
 }
@@ -1362,16 +1395,108 @@ function renderTournamentsAdmin(list) {
   }).join('');
 }
 
+// ─── Blind Schedule Editor ────────────────────────────────────────────────────
+
+const DEFAULT_BLIND_SCHEDULE = [
+  { level:1, small_blind:25,  big_blind:50,   duration_minutes:15 },
+  { level:2, small_blind:50,  big_blind:100,  duration_minutes:15 },
+  { level:3, small_blind:75,  big_blind:150,  duration_minutes:15 },
+  { level:4, small_blind:100, big_blind:200,  duration_minutes:15 },
+  { level:5, small_blind:150, big_blind:300,  duration_minutes:15 },
+  { level:6, small_blind:200, big_blind:400,  duration_minutes:15 },
+  { level:7, small_blind:300, big_blind:600,  duration_minutes:15 },
+  { level:8, small_blind:500, big_blind:1000, duration_minutes:15 }
+];
+
+function initBlindScheduleEditor() {
+  const container = document.getElementById('tn-blind-schedule');
+  if (!container) return;
+  container.innerHTML = `
+    <div style="display:grid;grid-template-columns:28px 1fr 1fr 60px 28px;gap:6px;margin-bottom:4px;font-size:.7rem;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.04em">
+      <div>#</div><div>Small Blind</div><div>Big Blind</div><div>Mins</div><div></div>
+    </div>
+    ${DEFAULT_BLIND_SCHEDULE.map((lvl, i) => _blindLevelRow(i, lvl)).join('')}`;
+}
+
+function _blindLevelRow(i, lvl) {
+  return `<div id="bsr-${i}" style="display:grid;grid-template-columns:28px 1fr 1fr 60px 28px;gap:6px;align-items:center;margin-bottom:6px;font-size:.82rem">
+    <span style="color:var(--text-dim);font-size:.75rem;text-align:center">${i+1}</span>
+    <input type="number" value="${lvl.small_blind}" min="1" placeholder="SB" title="Small Blind"
+      style="padding:6px 8px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%;box-sizing:border-box">
+    <input type="number" value="${lvl.big_blind}" min="1" placeholder="BB" title="Big Blind"
+      style="padding:6px 8px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:6px;color:var(--text);width:100%;box-sizing:border-box">
+    <div style="display:flex;align-items:center;gap:3px">
+      <input type="number" value="${lvl.duration_minutes}" min="1" max="60" title="Minutes"
+        style="padding:6px 4px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:6px;color:var(--text);width:42px;box-sizing:border-box">
+      <span style="color:var(--text-dim);font-size:.7rem">m</span>
+    </div>
+    <button onclick="removeBlindLevel(${i})" style="background:none;border:1px solid rgba(255,80,80,.4);color:var(--red);border-radius:5px;cursor:pointer;font-size:.75rem;padding:2px 5px">✕</button>
+  </div>`;
+}
+
+function addBlindLevel() {
+  const container = document.getElementById('tn-blind-schedule');
+  if (!container) return;
+  const rows = _dataRows();
+  const count = rows.length;
+  const lastRow = rows[count - 1];
+  const lastInputs = lastRow ? lastRow.querySelectorAll('input') : [];
+  const lastSb = parseInt(lastInputs[0]?.value) || 500;
+  const lastBb = parseInt(lastInputs[1]?.value) || 1000;
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = _blindLevelRow(count, { small_blind: lastSb * 2, big_blind: lastBb * 2, duration_minutes: 15 });
+  container.appendChild(wrapper.firstElementChild);
+  _reindexBlindRows();
+}
+
+function removeBlindLevel(idx) {
+  const rows = _dataRows();
+  if (rows.length <= 2) return;
+  rows[idx]?.remove();
+  _reindexBlindRows();
+}
+
+function _dataRows() {
+  const container = document.getElementById('tn-blind-schedule');
+  if (!container) return [];
+  // Skip the header row (first child has no inputs with type=number for blinds)
+  return Array.from(container.children).filter(r => r.querySelectorAll('input').length >= 3);
+}
+
+function _reindexBlindRows() {
+  _dataRows().forEach((row, i) => {
+    row.id = `bsr-${i}`;
+    const numEl = row.querySelector('span');
+    if (numEl) numEl.textContent = i + 1;
+    const rmBtn = row.querySelector('button');
+    if (rmBtn) rmBtn.setAttribute('onclick', `removeBlindLevel(${i})`);
+  });
+}
+
+function _readBlindSchedule() {
+  return _dataRows().map((row, i) => {
+    const inputs = row.querySelectorAll('input');
+    return {
+      level: i + 1,
+      small_blind: parseInt(inputs[0]?.value) || 25,
+      big_blind:   parseInt(inputs[1]?.value) || 50,
+      duration_minutes: parseInt(inputs[2]?.value) || 15
+    };
+  });
+}
+
 async function createTournamentAdmin() {
   const name = document.getElementById('tn-name-a').value.trim();
   if (!name) return toast('Name required', 'error');
+  const schedule = _readBlindSchedule();
   try {
     await apiFetch('/api/tournaments', {
       method: 'POST',
       body: {
         name,
         buy_in: parseInt(document.getElementById('tn-buyin-a').value),
-        starting_chips: parseInt(document.getElementById('tn-chips-a').value)
+        starting_chips: parseInt(document.getElementById('tn-chips-a').value),
+        blind_schedule: schedule || undefined
       }
     });
     closeModal('create-tournament-modal-admin');

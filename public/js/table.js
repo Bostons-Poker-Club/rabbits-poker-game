@@ -111,10 +111,11 @@ function connect() {
     toast(`Connection error: ${err.message}`, 'error');
   });
 
-  socket.on('joined_table', ({ seatNumber, chips, tableName }) => {
+  socket.on('joined_table', ({ seatNumber, chips, tableName, feltColor }) => {
     toast(`Joined seat ${seatNumber} with ${fmt(chips)} chips`);
     document.getElementById('hdr-chips').textContent = fmt(chips);
     if (tableName) document.getElementById('hdr-table-name').textContent = tableName;
+    if (feltColor) applyFeltColor(feltColor);
     // Show High Hand submit button for hosts and admins
     if (user?.isHost || user?.isAdmin) {
       const hhBtn = document.getElementById('host-hh-btn');
@@ -317,9 +318,32 @@ function connect() {
     if (winnerId) chatMsg('system', `🏆 JACKPOT AWARDED: $${amount}`);
   });
 
-  socket.on('blind_increase', ({ blindLevel, small_blind, big_blind }) => {
-    toast(`Blinds increased to $${small_blind}/$${big_blind} (Level ${blindLevel})`);
-    chatMsg('system', `Blinds: $${small_blind}/$${big_blind}`);
+  socket.on('blind_increase', ({ blindLevel, small_blind, big_blind, timerState }) => {
+    toast(`🔼 Blinds Level ${blindLevel}: $${small_blind}/$${big_blind}`);
+    chatMsg('system', `Blinds increased to $${small_blind}/$${big_blind} (Level ${blindLevel})`);
+    if (window.Sound) Sound.notification();
+    if (timerState) updateBlindTimer(timerState);
+  });
+
+  socket.on('blind_warning', ({ nextLevel, nextSmallBlind, nextBigBlind, secondsUntil }) => {
+    toast(`⚠️ Blinds increase in ${secondsUntil}s → Level ${nextLevel}: $${nextSmallBlind}/$${nextBigBlind}`, 'warn');
+    if (window.Sound) Sound.notification();
+  });
+
+  socket.on('tournament_started', ({ timerState }) => {
+    if (timerState) updateBlindTimer(timerState);
+  });
+
+  socket.on('tournament_timer', (timerState) => {
+    updateBlindTimer(timerState);
+  });
+
+  socket.on('tournament_timer_paused', ({ timerState }) => {
+    updateBlindTimer(timerState);
+  });
+
+  socket.on('tournament_timer_resumed', ({ timerState }) => {
+    updateBlindTimer(timerState);
   });
 
   socket.on('chat', ({ username, message }) => {
@@ -1920,6 +1944,116 @@ function openHandHistory() {
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
+}
+
+// ─── Felt Color ───────────────────────────────────────────────────────────────
+
+function applyFeltColor(color) {
+  const oval = document.getElementById('poker-oval');
+  if (!oval) return;
+  // Derive a lighter variant for radial gradient center
+  oval.style.background = `radial-gradient(ellipse, ${color}dd 60%, ${color} 100%)`;
+}
+
+// ─── Tournament Blind Timer ───────────────────────────────────────────────────
+
+let _blindTimerInterval = null;
+let _timerState = null;
+let _tournamentId = null;
+
+function updateBlindTimer(state) {
+  _timerState = state;
+  _tournamentId = state.tournamentId;
+
+  const panel = document.getElementById('blind-timer-panel');
+  if (!panel) return;
+  panel.style.display = '';
+  panel.classList.toggle('paused', !!state.isPaused);
+
+  // Show admin/host controls
+  const isHostAdmin = user?.isAdmin || user?.isHost;
+  const ctrlEl = document.getElementById('btp-controls');
+  const schedWrap = document.getElementById('btp-schedule-btn-wrap');
+  if (ctrlEl)   ctrlEl.style.display   = isHostAdmin ? '' : 'none';
+  if (schedWrap) schedWrap.style.display = isHostAdmin ? 'none' : '';
+
+  _renderTimerDisplay(state);
+
+  // Start/restart the countdown interval
+  if (_blindTimerInterval) clearInterval(_blindTimerInterval);
+  if (!state.isPaused) {
+    _blindTimerInterval = setInterval(_tickTimer, 500);
+  }
+}
+
+function _tickTimer() {
+  if (!_timerState || _timerState.isPaused) return;
+  _timerState.remainingMs = Math.max(0, _timerState.remainingMs - 500);
+  _renderTimerDisplay(_timerState);
+}
+
+function _renderTimerDisplay(state) {
+  const levelEl  = document.getElementById('btp-level');
+  const blindsEl = document.getElementById('btp-blinds');
+  const countEl  = document.getElementById('btp-countdown');
+  const nextEl   = document.getElementById('btp-next');
+  const pauseBtn = document.getElementById('btp-pause-btn');
+
+  if (!levelEl) return;
+
+  const rem = Math.max(0, state.remainingMs);
+  const mins = Math.floor(rem / 60000);
+  const secs = Math.floor((rem % 60000) / 1000).toString().padStart(2, '0');
+
+  levelEl.textContent  = `Level ${state.currentLevel}`;
+  blindsEl.textContent = `$${state.smallBlind} / $${state.bigBlind}`;
+  countEl.textContent  = state.isPaused ? `${mins}:${secs} ⏸` : `${mins}:${secs}`;
+  countEl.classList.toggle('warn', !state.isPaused && rem <= 30_000);
+
+  if (nextEl) {
+    nextEl.textContent = state.nextSmallBlind !== undefined
+      ? `Next: Level ${state.nextLevel} — $${state.nextSmallBlind}/$${state.nextBigBlind} in ${mins}:${secs}`
+      : '';
+  }
+
+  if (pauseBtn) {
+    pauseBtn.textContent = state.isPaused ? '▶ Resume' : '⏸ Pause';
+  }
+}
+
+function toggleBlindTimer() {
+  if (!_tournamentId) return;
+  if (_timerState?.isPaused) {
+    socket.emit('tournament_resume_timer', { tournamentId: _tournamentId });
+  } else {
+    socket.emit('tournament_pause_timer', { tournamentId: _tournamentId });
+  }
+}
+
+function openBlindSchedule() {
+  if (!_timerState?.schedule) return;
+  const rows = document.getElementById('blind-sched-rows');
+  if (!rows) return;
+
+  rows.innerHTML = `
+    <div style="display:grid;grid-template-columns:30px 1fr 1fr 1fr;gap:8px;padding:4px 0;margin-bottom:6px;font-size:.7rem;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">
+      <div>#</div><div>Small / Big</div><div>Duration</div><div></div>
+    </div>
+    ${_timerState.schedule.map((lvl, i) => {
+      const isCurrent = (i + 1) === _timerState.currentLevel;
+      const rem = isCurrent ? Math.max(0, _timerState.remainingMs) : null;
+      const remStr = rem !== null
+        ? `${Math.floor(rem/60000)}:${Math.floor((rem%60000)/1000).toString().padStart(2,'0')}`
+        : '';
+      return `<div style="display:grid;grid-template-columns:30px 1fr 1fr 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem${isCurrent?';color:var(--gold);font-weight:700':''}">
+        <div>${lvl.level}</div>
+        <div>$${lvl.small_blind}/$${lvl.big_blind}</div>
+        <div>${lvl.duration_minutes}m</div>
+        <div style="font-size:.75rem;color:var(--chip-green)">${remStr ? `⏱ ${remStr}` : ''}</div>
+      </div>`;
+    }).join('')}`;
+
+  openModal('blind-schedule-modal');
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────

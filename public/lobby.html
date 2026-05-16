@@ -225,6 +225,35 @@
       <label>Rake %</label>
       <input type="number" id="ct-rake" value="5" min="0" max="10" step="0.5" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
     </div>
+    <div class="form-group">
+      <label>Felt Color</label>
+      <div class="felt-swatches" id="ct-felt-swatches">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch selected" data-color="#1a5c2a" style="background:#1a5c2a" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Classic</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a1628" style="background:#0a1628" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Midnight</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#4a0a0a" style="background:#4a0a0a" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Deep Red</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#2a0a4a" style="background:#2a0a4a" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Purple</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a0a0a" style="background:#0a0a0a" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Black</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a3a3a" style="background:#0a3a3a" onclick="selectFelt(this,'ct-felt-swatches')"></div>
+          <div class="felt-swatch-label">Teal</div>
+        </div>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('create-table-modal')">Cancel</button>
       <button class="btn btn-gold" onclick="createTable()">Create</button>

@@ -278,8 +278,10 @@ router.get('/tables', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
+const VALID_FELT_COLORS = ['#1a5c2a', '#0a1628', '#4a0a0a', '#2a0a4a', '#0a0a0a', '#0a3a3a'];
+
 router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
-  const { name, game_type, stakes_small_blind, stakes_big_blind, max_players, rake_percent } = req.body;
+  const { name, game_type, stakes_small_blind, stakes_big_blind, max_players, rake_percent, felt_color } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
 
   const { data, error } = await supabaseAdmin
@@ -291,13 +293,22 @@ router.post('/tables', authMiddleware, hostMiddleware, async (req, res) => {
       stakes_big_blind: stakes_big_blind || 10,
       max_players: max_players || 9,
       rake_percent: rake_percent || 5,
-      host_id: req.user.id
+      host_id: req.user.id,
+      felt_color: VALID_FELT_COLORS.includes(felt_color) ? felt_color : '#1a5c2a'
     })
     .select()
     .single();
 
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
+});
+
+router.patch('/admin/tables/:id/felt-color', authMiddleware, adminMiddleware, async (req, res) => {
+  const { felt_color } = req.body;
+  if (!VALID_FELT_COLORS.includes(felt_color)) return res.status(400).json({ error: 'Invalid felt color' });
+  const { error } = await supabaseAdmin.from('tables').update({ felt_color }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
 });
 
 router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) => {

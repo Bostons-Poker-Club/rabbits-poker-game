@@ -351,7 +351,7 @@
   <div class="admin-panel" id="panel-tournaments">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--gold)">Tournaments</h2>
-      <button class="btn btn-gold btn-sm" onclick="openModal('create-tournament-modal-admin')">+ Create Tournament</button>
+      <button class="btn btn-gold btn-sm" onclick="openModal('create-tournament-modal-admin');initBlindScheduleEditor()">+ Create Tournament</button>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -378,7 +378,7 @@
     </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Max</th><th>Rake</th><th>Status</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Type</th><th>Blinds</th><th>Max</th><th>Rake</th><th>Status</th><th>Felt</th><th>Actions</th></tr></thead>
         <tbody id="tables-body"></tbody>
       </table>
     </div>
@@ -593,6 +593,35 @@
       <label>Rake %</label>
       <input type="number" id="ct-rake" value="5" min="0" max="10" step="0.5" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
     </div>
+    <div class="form-group">
+      <label>Felt Color</label>
+      <div class="felt-swatches" id="ct-felt-swatches-admin">
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch selected" data-color="#1a5c2a" style="background:#1a5c2a" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Classic</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a1628" style="background:#0a1628" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Midnight</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#4a0a0a" style="background:#4a0a0a" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Deep Red</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#2a0a4a" style="background:#2a0a4a" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Purple</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a0a0a" style="background:#0a0a0a" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Black</div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center">
+          <div class="felt-swatch" data-color="#0a3a3a" style="background:#0a3a3a" onclick="selectFelt(this,'ct-felt-swatches-admin')"></div>
+          <div class="felt-swatch-label">Teal</div>
+        </div>
+      </div>
+    </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('create-table-modal')">Cancel</button>
       <button class="btn btn-gold" onclick="createTable()">Create</button>
@@ -602,20 +631,34 @@
 
 <!-- Create Tournament Modal (Admin) -->
 <div class="modal-overlay hidden" id="create-tournament-modal-admin">
-  <div class="modal">
+  <div class="modal" style="max-width:560px">
     <h2>Create Tournament</h2>
-    <div class="form-group">
-      <label>Name</label>
-      <input type="text" id="tn-name-a" placeholder="Sunday Special" maxlength="50">
-    </div>
-    <div class="form-group">
-      <label>Buy-In (chips)</label>
-      <input type="number" id="tn-buyin-a" value="100" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="tn-name-a" placeholder="Sunday Special" maxlength="50" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
+      </div>
+      <div class="form-group">
+        <label>Buy-In (chips)</label>
+        <input type="number" id="tn-buyin-a" value="100" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
+      </div>
     </div>
     <div class="form-group">
       <label>Starting Chips per Player</label>
-      <input type="number" id="tn-chips-a" value="10000" min="1000" step="500" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
+      <input type="number" id="tn-chips-a" value="10000" min="1000" step="500" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
     </div>
+
+    <!-- Blind Schedule Editor -->
+    <div class="form-group">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <label style="margin:0">Blind Schedule</label>
+        <button class="btn btn-sm btn-outline" onclick="addBlindLevel()" style="font-size:.75rem;padding:3px 10px">+ Add Level</button>
+      </div>
+      <div id="tn-blind-schedule" style="max-height:260px;overflow-y:auto">
+        <!-- Rows injected by JS -->
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('create-tournament-modal-admin')">Cancel</button>
       <button class="btn btn-gold" onclick="createTournamentAdmin()">Create</button>

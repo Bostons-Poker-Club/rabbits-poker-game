@@ -1677,3 +1677,55 @@ input, select, textarea { font-family: inherit; }
 .lb-table tbody tr:hover td { background: rgba(255,255,255,.03); }
 .lb-me-row td { background: rgba(212,175,55,.05) !important; }
 .lb-me-row td:nth-child(2) { border-left: 3px solid var(--gold); }
+
+/* ─── Felt Color Swatches ───────────────────────────────────────────────────── */
+.felt-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+.felt-swatch {
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer;
+  border: 3px solid transparent; transition: border-color .15s, transform .1s;
+  box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  flex-shrink: 0;
+}
+.felt-swatch:hover { transform: scale(1.15); }
+.felt-swatch.selected { border-color: var(--gold); transform: scale(1.1); }
+.felt-swatch-label { font-size: .72rem; color: var(--text-dim); text-align: center; margin-top: 4px; }
+
+/* ─── Table Card Felt Strip ─────────────────────────────────────────────────── */
+.table-card-felt {
+  height: 6px; border-radius: 3px 3px 0 0;
+  margin: -20px -20px 12px; /* bleed to card edges */
+  opacity: .85;
+}
+
+/* ─── Tournament Blind Timer ─────────────────────────────────────────────────── */
+#blind-timer-panel {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  background: rgba(8, 16, 12, .92); border: 1px solid rgba(200,168,75,.4);
+  border-radius: 10px; padding: 8px 16px; z-index: 40;
+  text-align: center; min-width: 200px; backdrop-filter: blur(6px);
+  display: none;
+}
+#blind-timer-panel.paused { border-color: rgba(255,80,80,.5); }
+.btp-level { font-size: .7rem; color: var(--text-dim); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2px; }
+.btp-blinds { font-size: 1.05rem; font-weight: 700; color: var(--gold); }
+.btp-countdown { font-size: 1.4rem; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.btp-countdown.warn { color: #e74c3c; animation: btp-pulse 1s ease-in-out infinite; }
+.btp-next { font-size: .72rem; color: var(--text-dim); margin-top: 2px; }
+.btp-controls { display: flex; gap: 6px; justify-content: center; margin-top: 6px; }
+.btp-btn {
+  padding: 3px 10px; font-size: .72rem; background: rgba(255,255,255,.08);
+  border: 1px solid var(--border); border-radius: 5px; color: var(--text); cursor: pointer;
+}
+.btp-btn:hover { background: rgba(255,255,255,.15); }
+
+@keyframes btp-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+/* ─── Blind Schedule Modal ───────────────────────────────────────────────────── */
+#blind-schedule-modal .sched-row {
+  display: grid; grid-template-columns: 30px 1fr 1fr 1fr; gap: 8px;
+  align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.05);
+  font-size: .82rem;
+}
+#blind-schedule-modal .sched-row:last-child { border-bottom: none; }
+#blind-schedule-modal .sched-header { color: var(--text-dim); font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+#blind-schedule-modal .sched-current { color: var(--gold); font-weight: 700; }

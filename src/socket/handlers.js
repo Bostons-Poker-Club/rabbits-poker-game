@@ -385,7 +385,8 @@ function setupSocketHandlers(io) {
               tableId,
               tableName: existingGame.tableName || tableId,
               seatNumber: existingPlayer.seatNumber,
-              chips: existingPlayer.chips
+              chips: existingPlayer.chips,
+              feltColor: existingGame.feltColor || '#1a5c2a'
             });
             broadcastGameState(io, tableId, existingGame);
             broadcastPuckState(io, tableId);
@@ -499,6 +500,7 @@ function setupSocketHandlers(io) {
             } catch {}
           }
 
+          game.feltColor = table.felt_color || '#1a5c2a';
           game.onBroadcast = (event, data) => io.to(tableId).emit(event, data);
           game.onPrivate = (uid, event, data) => {
             const sid = userSockets.get(uid);
@@ -562,7 +564,7 @@ function setupSocketHandlers(io) {
         socket.join(tableId);
         socket.currentTableId = tableId;
 
-        socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips });
+        socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips, feltColor: game.feltColor || '#1a5c2a' });
         broadcastGameState(io, tableId, game);
 
         // SMS + email: notify player they are seated
@@ -1361,6 +1363,26 @@ function setupSocketHandlers(io) {
       } catch (err) {
         socket.emit('error', { message: err.message });
       }
+    });
+
+    socket.on('tournament_pause_timer', ({ tournamentId }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament) return;
+      tournament.pause();
+    });
+
+    socket.on('tournament_resume_timer', ({ tournamentId }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament) return;
+      tournament.resume();
+    });
+
+    socket.on('get_tournament_timer', ({ tournamentId }) => {
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament || tournament.status !== 'active') return;
+      socket.emit('tournament_timer', tournament.getTimerState());
     });
 
     // ─── Admin Events ──────────────────────────────────────────────────────
