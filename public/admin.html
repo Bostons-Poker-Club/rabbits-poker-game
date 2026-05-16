@@ -15,6 +15,7 @@
   <button class="admin-tab-btn" onclick="showPanel('buyins')">💰 Buy-Ins <span id="buyin-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('jackpot')">Jackpot</button>
   <button class="admin-tab-btn" onclick="showPanel('players')">Players</button>
+  <button class="admin-tab-btn" onclick="showPanel('banned')">🚫 Banned <span id="banned-count-badge" style="font-size:.75rem;color:var(--red);margin-left:3px"></span></button>
   <button class="admin-tab-btn" onclick="showPanel('hosts')">🎰 Hosts <span id="hosts-badge" style="display:none;background:var(--gold);color:#111;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('applications')">📋 Applications <span id="app-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('fees')">💳 Fees <span id="fees-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
@@ -240,6 +241,32 @@
       <table class="data-table">
         <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Status</th><th>Set Chips</th><th>Actions</th></tr></thead>
         <tbody id="players-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Banned Players -->
+  <div class="admin-panel" id="panel-banned">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--red)">🚫 Banned Players</h2>
+      <button class="btn btn-sm btn-outline" onclick="loadBannedPlayers()">Refresh</button>
+    </div>
+    <p style="color:var(--text-dim);font-size:.83rem;margin-bottom:16px">Banned players cannot log in, access any page, or re-register with the same email or phone. Unbanning restores their access immediately.</p>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Username</th>
+          <th>Full Name</th>
+          <th>Nickname</th>
+          <th>Phone</th>
+          <th>Email</th>
+          <th>Date Banned</th>
+          <th>Reason</th>
+          <th>Actions</th>
+        </tr></thead>
+        <tbody id="banned-players-body">
+          <tr><td colspan="8" style="color:var(--text-dim);text-align:center;padding:16px">Loading…</td></tr>
+        </tbody>
       </table>
     </div>
   </div>

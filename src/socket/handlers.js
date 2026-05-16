@@ -300,6 +300,38 @@ function setupSocketHandlers(io) {
         if (s) s.disconnect(true);
       }, 500);
     }
+    // Send suspension email to the banned player
+    try {
+      const { data: bannedUser } = await supabaseAdmin
+        .from('users').select('email, username').eq('id', userId).single();
+      if (bannedUser?.email) {
+        await sendPlayerEmail({
+          to: bannedUser.email,
+          subject: 'Your Boston Poker Club account has been suspended',
+          text: [
+            `Hi ${bannedUser.username || 'there'},`,
+            '',
+            'Your Boston Poker Club account has been suspended.',
+            '',
+            'If you believe this is a mistake, please contact us to appeal:',
+            'bostonspokerclub.amitureflops@gmail.com',
+            '',
+            '— Boston Poker Club'
+          ].join('\n'),
+          html: `
+            <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+              <h2 style="color:#c0392b">Account Suspended</h2>
+              <p>Hi <strong>${bannedUser.username || 'there'}</strong>,</p>
+              <p>Your <strong>Boston Poker Club</strong> account has been suspended.</p>
+              <p>If you believe this is a mistake, please contact us to appeal:</p>
+              <p><a href="mailto:bostonspokerclub.amitureflops@gmail.com" style="color:#1a7a3f">bostonspokerclub.amitureflops@gmail.com</a></p>
+              <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
+            </div>`
+        });
+      }
+    } catch (e) {
+      console.warn('[ban] Failed to send suspension email:', e.message);
+    }
   });
 
   appEvents.on('player:unbanned', ({ userId }) => {

@@ -803,6 +803,7 @@ function showPanel(name) {
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`panel-${name}`)?.classList.add('active');
   event.currentTarget.classList.add('active');
+  if (name === 'banned') loadBannedPlayers();
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -1131,11 +1132,54 @@ async function deletePlayer(id, username) {
 }
 
 async function toggleBan(id, banned) {
+  let ban_reason = null;
+  if (banned) {
+    ban_reason = prompt('Reason for ban (optional — saved to record and visible in admin panel):') || null;
+  }
   try {
-    await apiFetch(`/api/admin/players/${id}/ban`, { method: 'POST', body: { banned } });
+    await apiFetch(`/api/admin/players/${id}/ban`, { method: 'POST', body: { banned, ban_reason } });
     toast(banned ? 'Player banned' : 'Player unbanned');
     loadPlayers();
+    if (document.getElementById('panel-banned')?.classList.contains('active')) loadBannedPlayers();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+async function loadBannedPlayers() {
+  const el = document.getElementById('banned-players-body');
+  if (!el) return;
+  el.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:16px">Loading…</td></tr>';
+  try {
+    const list = await apiFetch('/api/admin/banned-players');
+    renderBannedPlayers(list);
+  } catch (e) {
+    el.innerHTML = `<tr><td colspan="7" style="color:var(--red);text-align:center;padding:16px">${esc(e.message)}</td></tr>`;
+  }
+}
+
+function renderBannedPlayers(list) {
+  const el = document.getElementById('banned-players-body');
+  if (!el) return;
+  if (!list.length) {
+    el.innerHTML = '<tr><td colspan="7" style="color:var(--text-dim);text-align:center;padding:16px">No banned players.</td></tr>';
+    const badge = document.getElementById('banned-count-badge');
+    if (badge) badge.textContent = '';
+    return;
+  }
+  const badge = document.getElementById('banned-count-badge');
+  if (badge) badge.textContent = `(${list.length})`;
+  el.innerHTML = list.map(p => {
+    const bannedDate = p.banned_at ? new Date(p.banned_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '–';
+    return `<tr>
+      <td>${esc(p.username || '–')}</td>
+      <td>${esc(p.full_name || '–')}</td>
+      <td>${esc(p.nickname || '–')}</td>
+      <td>${esc(p.phone || '–')}</td>
+      <td>${esc(p.email || '–')}</td>
+      <td>${bannedDate}</td>
+      <td style="max-width:180px;word-break:break-word">${esc(p.ban_reason || '–')}</td>
+      <td><button class="btn btn-sm btn-green" onclick="toggleBan('${p.id}', false)">Unban</button></td>
+    </tr>`;
+  }).join('');
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────

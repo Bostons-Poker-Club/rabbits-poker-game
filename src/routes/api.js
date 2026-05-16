@@ -85,6 +85,20 @@ router.post('/auth/register', async (req, res) => {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
+  // Block registration with email or phone belonging to a banned account
+  const orFilters = [`email.eq.${email}`];
+  if (phone) orFilters.push(`phone.eq.${phone}`);
+  const { data: bannedMatch } = await supabaseAdmin
+    .from('users')
+    .select('id')
+    .eq('is_banned', true)
+    .or(orFilters.join(','))
+    .limit(1)
+    .single();
+  if (bannedMatch) {
+    return res.status(403).json({ error: 'This email/phone is associated with a suspended account. Contact bostonspokerclub.amitureflops@gmail.com' });
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   // Try with extended profile fields first; fall back to base fields if migration not yet applied
@@ -611,6 +625,12 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
   let banChanged = false;
   if (is_banned !== undefined) {
     updates.is_banned = is_banned;
+    if (is_banned && !current?.is_banned) {
+      updates.banned_at = new Date().toISOString();
+    } else if (!is_banned) {
+      updates.banned_at = null;
+      updates.ban_reason = null;
+    }
     banChanged = true;
   }
 
@@ -722,19 +742,36 @@ router.post('/admin/refill-chips', authMiddleware, adminMiddleware, async (req, 
 });
 
 router.post('/admin/players/:id/ban', authMiddleware, adminMiddleware, async (req, res) => {
-  const { banned } = req.body;
+  const { banned, ban_reason } = req.body;
+  const updates = { is_banned: banned };
+  if (banned) {
+    updates.banned_at = new Date().toISOString();
+    updates.ban_reason = ban_reason || null;
+  } else {
+    updates.banned_at = null;
+    updates.ban_reason = null;
+  }
   const { error } = await supabaseAdmin
     .from('users')
-    .update({ is_banned: banned })
+    .update(updates)
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
-  // Kick immediately if banning, re-allow if unbanning
   if (banned) {
     appEvents.emit('player:banned', { userId: req.params.id });
   } else {
     appEvents.emit('player:unbanned', { userId: req.params.id });
   }
   res.json({ success: true });
+});
+
+router.get('/admin/banned-players', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, username, full_name, nickname, phone, email, banned_at, ban_reason')
+    .eq('is_banned', true)
+    .order('banned_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
 });
 
 router.get('/admin/session-rake', authMiddleware, adminMiddleware, (req, res) => {
