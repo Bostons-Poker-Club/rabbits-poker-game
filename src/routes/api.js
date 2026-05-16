@@ -1,14 +1,29 @@
 'use strict';
 
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
+const express    = require('express');
+const bcrypt     = require('bcryptjs');
+const jwt        = require('jsonwebtoken');
+const rateLimit  = require('express-rate-limit');
 const { supabaseAdmin } = require('../db/supabase');
-const appEvents = require('../events');
+const appEvents  = require('../events');
 const { logTransaction } = require('../transactions');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+// ─── Login rate limiter ────────────────────────────────────────────────────────
+// Counts only failed attempts (skipSuccessfulRequests). Blocks after 5 failures.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  skipSuccessfulRequests: true,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  handler: (_req, res) => {
+    res.status(429).json({ error: 'Too many login attempts. Please try again in 15 minutes.' });
+  },
+  keyGenerator: (req) => req.ip,
+});
 
 // In-memory high hand state
 let highHandState = { description: '', holder: '', setAt: null };
@@ -143,24 +158,42 @@ router.post('/auth/register', async (req, res) => {
   res.json({ token, user: { id: data.id, username: data.username, email: data.email, chips: 0, isAdmin: data.is_admin } });
 });
 
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
+  const ip        = req.ip || req.connection?.remoteAddress || 'unknown';
+  const userAgent = String(req.headers['user-agent'] || '').slice(0, 400);
+
+  async function _audit(userId, success, reason) {
+    await supabaseAdmin.from('login_audit').insert({
+      user_id: userId || null,
+      username: String(username).slice(0, 50),
+      ip_address: ip,
+      user_agent: userAgent,
+      success,
+      failure_reason: reason || null
+    }).catch(() => {});
+  }
+
   // Try Supabase first
   const { data: user, error: dbError } = await supabaseAdmin
-    .from('users')
-    .select('*')
-    .eq('username', username)
-    .single();
+    .from('users').select('*').eq('username', username).single();
 
   console.log(`[login] user=${username} db_found=${!!user} db_error=${dbError?.code || 'none'}`);
 
   if (user) {
-    if (user.is_banned) return res.status(403).json({ error: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
+    if (user.is_banned) {
+      await _audit(user.id, false, 'account_banned');
+      return res.status(403).json({ error: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
+    }
     const valid = await bcrypt.compare(password, user.password_hash);
     console.log(`[login] db bcrypt valid=${valid}`);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!valid) {
+      await _audit(user.id, false, 'wrong_password');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    await _audit(user.id, true, null);
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin } });
   }
@@ -169,11 +202,16 @@ router.post('/auth/login', async (req, res) => {
   if (username === LOCAL_ADMIN.username) {
     const valid = await bcrypt.compare(password, LOCAL_ADMIN.passwordHash);
     console.log(`[login] local bypass bcrypt valid=${valid}`);
-    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!valid) {
+      await _audit(LOCAL_ADMIN.id, false, 'wrong_password');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    await _audit(LOCAL_ADMIN.id, true, null);
     const token = jwt.sign({ id: LOCAL_ADMIN.id, username: LOCAL_ADMIN.username, isAdmin: true }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token, user: { id: LOCAL_ADMIN.id, username: LOCAL_ADMIN.username, email: LOCAL_ADMIN.email, chips: LOCAL_ADMIN.chips, isAdmin: true } });
   }
 
+  await _audit(null, false, 'user_not_found');
   return res.status(401).json({ error: 'Invalid credentials' });
 });
 
@@ -1677,6 +1715,82 @@ router.post('/admin/leaderboard/reset', authMiddleware, adminMiddleware, async (
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ─── Login Audit ──────────────────────────────────────────────────────────────
+
+router.get('/admin/login-audit', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 200, 500);
+    const failOnly = req.query.fail === '1';
+
+    const q = supabaseAdmin.from('login_audit')
+      .select('id, user_id, username, ip_address, user_agent, success, failure_reason, created_at')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    if (failOnly) q.eq('success', false);
+
+    const { data, error } = await q;
+    if (error) {
+      if (/does not exist|relation/.test(error.message)) return res.json({ entries: [], suspicious: [] });
+      return res.status(500).json({ error: error.message });
+    }
+
+    // Detect suspicious: same user_id from 2+ distinct IPs in last 24h
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const recent = (data || []).filter(e => e.success && e.created_at >= cutoff);
+    const ipsByUser = {};
+    recent.forEach(e => {
+      if (!e.user_id) return;
+      if (!ipsByUser[e.user_id]) ipsByUser[e.user_id] = new Set();
+      ipsByUser[e.user_id].add(e.ip_address);
+    });
+    const suspicious = Object.entries(ipsByUser)
+      .filter(([, ips]) => ips.size >= 2)
+      .map(([userId, ips]) => {
+        const entry = recent.find(e => e.user_id === userId);
+        return { userId, username: entry?.username, ipCount: ips.size, ips: [...ips] };
+      });
+
+    res.json({ entries: data || [], suspicious });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/admin/players/:id/login-history', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin.from('login_audit')
+      .select('ip_address, user_agent, success, failure_reason, created_at')
+      .eq('user_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(100);
+    if (error) {
+      if (/does not exist|relation/.test(error.message)) return res.json([]);
+      return res.status(500).json({ error: error.message });
+    }
+    res.json(data || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/admin/export/login-audit.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('login_audit')
+    .select('created_at, username, ip_address, success, failure_reason, user_agent')
+    .gte('created_at', from + 'T00:00:00Z')
+    .lte('created_at', to   + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (/does not exist|relation/.test(error.message)) return _sendCsv(res, 'login_audit_empty.csv', [_csvRow(['Run migration 009 first'])]);
+    return res.status(500).json({ error: error.message });
+  }
+  const rows = [
+    _csvRow(['Date','Username','IP Address','Success','Failure Reason','User Agent']),
+    ...(data || []).map(r => _csvRow([r.created_at?.slice(0,19), r.username, r.ip_address, r.success ? 'Yes' : 'No', r.failure_reason || '', r.user_agent || '']))
+  ];
+  _sendCsv(res, `login_audit_${from}_${to}.csv`, rows);
 });
 
 // ─── Financial Dashboard ──────────────────────────────────────────────────────

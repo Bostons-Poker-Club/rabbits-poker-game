@@ -109,8 +109,19 @@
       <h2 style="color:var(--gold)">🔔 Alert Feed</h2>
       <button class="btn btn-sm btn-outline" onclick="markAllRead()">Mark All Read</button>
     </div>
-    <div id="alerts-feed" style="max-height:600px;overflow-y:auto">
+    <div id="alerts-feed" style="max-height:400px;overflow-y:auto">
       <div style="text-align:center;padding:24px;color:var(--text-dim)">No alerts yet this session</div>
+    </div>
+
+    <!-- Failed Login Attempts -->
+    <div style="margin-top:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="color:var(--gold);font-size:.95rem;margin:0">🔒 Recent Failed Logins</h3>
+        <button class="btn btn-sm btn-outline" onclick="loadFailedLogins()">Refresh</button>
+      </div>
+      <div id="failed-logins-list" style="max-height:280px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+        <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:16px">Loading…</div>
+      </div>
     </div>
   </div>
 
@@ -543,6 +554,7 @@
         <button class="btn btn-sm btn-outline" onclick="downloadCSV('rake-report')" title="Per-hand rake history">🎰 Rake (Per Hand)</button>
         <button class="btn btn-sm btn-outline" onclick="downloadCSV('transactions')" title="Buy-ins, cash-outs, all transactions">💳 Transactions</button>
         <button class="btn btn-sm btn-outline" onclick="downloadCSV('fee-payments')" title="Monthly fee payment history">📋 Fee Payments</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('login-audit')" title="All login attempts with IP and result">🔒 Login Audit</button>
       </div>
       <div style="font-size:.75rem;color:var(--text-dim);margin-top:8px">Leave dates blank to export all records. Files open in Excel with UTF-8 encoding.</div>
     </div>
@@ -639,6 +651,7 @@
     <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:16px">
       <button id="pd-tab-profile" onclick="pdSwitchTab('profile')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-size:.85rem;font-weight:700;cursor:pointer">Profile</button>
       <button id="pd-tab-logs" onclick="pdSwitchTab('logs')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">Logs</button>
+      <button id="pd-tab-login" onclick="pdSwitchTab('login')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">🔐 Login</button>
     </div>
     <div id="pd-panel-profile">
       <div class="player-detail-grid" id="pd-grid"></div>
@@ -646,6 +659,11 @@
     <div id="pd-panel-logs" style="display:none">
       <div id="pd-logs-stats" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px"></div>
       <div id="pd-logs-list" style="max-height:320px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+        <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Loading…</div>
+      </div>
+    </div>
+    <div id="pd-panel-login" style="display:none">
+      <div id="pd-login-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
         <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Loading…</div>
       </div>
     </div>

@@ -107,7 +107,7 @@ if (typeof io !== 'undefined') {
 }
 
 async function loadAll() {
-  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies(), loadSessionReports()]);
+  await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies(), loadSessionReports(), loadFailedLogins()]);
 }
 
 async function loadPendingPlayers() {
@@ -807,6 +807,7 @@ function showPanel(name) {
   if (name === 'banned')   loadBannedPlayers();
   if (name === 'reports')  loadSessionReports();
   if (name === 'finance')  loadFinancialDashboard();
+  if (name === 'alerts')   loadFailedLogins();
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -970,21 +971,25 @@ async function viewPlayer(id) {
       pdAdminBtn.style.display = 'none';
     }
 
-    // Always start on Profile tab and pre-load logs in background
+    // Always start on Profile tab and pre-load logs + login history in background
     pdSwitchTab('profile');
     openModal('player-detail-modal');
     _loadPlayerLogs(id);
+    _loadPlayerLoginHistory(id);
   } catch (e) { toast(e.message, 'error'); }
 }
 
 function pdSwitchTab(tab) {
-  const isProfile = tab === 'profile';
-  document.getElementById('pd-panel-profile').style.display = isProfile ? '' : 'none';
-  document.getElementById('pd-panel-logs').style.display    = isProfile ? 'none' : '';
-  document.getElementById('pd-tab-profile').style.borderBottomColor = isProfile ? 'var(--gold)' : 'transparent';
-  document.getElementById('pd-tab-profile').style.color = isProfile ? 'var(--gold)' : 'var(--text-dim)';
-  document.getElementById('pd-tab-logs').style.borderBottomColor = isProfile ? 'transparent' : 'var(--gold)';
-  document.getElementById('pd-tab-logs').style.color = isProfile ? 'var(--text-dim)' : 'var(--gold)';
+  ['profile', 'logs', 'login'].forEach(t => {
+    const panel = document.getElementById(`pd-panel-${t}`);
+    const btn   = document.getElementById(`pd-tab-${t}`);
+    if (!panel || !btn) return;
+    const active = t === tab;
+    panel.style.display = active ? '' : 'none';
+    btn.style.borderBottomColor = active ? 'var(--gold)' : 'transparent';
+    btn.style.color = active ? 'var(--gold)' : 'var(--text-dim)';
+    btn.style.fontWeight = active ? '700' : '600';
+  });
 }
 
 async function _loadPlayerLogs(playerId) {
@@ -1046,6 +1051,61 @@ async function _loadPlayerLogs(playerId) {
     }).join('');
   } catch (e) {
     listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">${e.message === 'Failed to fetch' ? 'Could not load logs.' : esc(e.message)}</div>`;
+  }
+}
+
+async function _loadPlayerLoginHistory(playerId) {
+  const listEl = document.getElementById('pd-login-list');
+  if (!listEl) return;
+  try {
+    const rows = await apiFetch(`/api/admin/players/${playerId}/login-history`);
+    if (!rows.length) {
+      listEl.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">No login history.</div>';
+      return;
+    }
+    listEl.innerHTML = rows.map(r => {
+      const dt = r.created_at ? new Date(r.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }) : '–';
+      const icon  = r.success ? '✅' : '❌';
+      const color = r.success ? 'var(--chip-green)' : 'var(--red)';
+      const label = r.success ? 'Success' : `Failed — ${esc(r.failure_reason || 'unknown')}`;
+      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:.82rem">
+        <span style="font-size:1rem;margin-top:1px">${icon}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:${color}">${label}</div>
+          <div style="color:var(--text-dim);font-size:.75rem">${esc(r.ip_address)} · ${dt}</div>
+          ${r.user_agent ? `<div style="color:var(--text-dim);font-size:.7rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.user_agent)}">${esc(r.user_agent.slice(0, 70))}${r.user_agent.length > 70 ? '…' : ''}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Could not load login history.</div>`;
+  }
+}
+
+async function loadFailedLogins() {
+  const listEl = document.getElementById('failed-logins-list');
+  if (!listEl) return;
+  try {
+    const { entries: records, suspicious } = await apiFetch('/api/admin/login-audit?fail=1&limit=30');
+    if (!records.length) {
+      listEl.innerHTML = '<div style="color:var(--text-dim);font-size:.82rem;text-align:center;padding:12px">No recent failed logins.</div>';
+      return;
+    }
+    const suspiciousIds = new Set((suspicious || []).map(s => s.userId));
+    listEl.innerHTML = records.map(r => {
+      const dt = r.created_at ? new Date(r.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'numeric', minute:'2-digit', hour12:true }) : '–';
+      const isSus = r.user_id && suspiciousIds.has(r.user_id);
+      return `<div style="display:flex;align-items:flex-start;gap:10px;padding:7px 10px;background:rgba(255,255,255,.04);border-radius:8px;font-size:.8rem${isSus ? ';border-left:3px solid var(--red)' : ''}">
+        <span style="font-size:.95rem;margin-top:1px">❌</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;color:var(--text)">${esc(r.username)}${isSus ? ' <span style="color:var(--red);font-size:.72rem">⚠ SUSPICIOUS</span>' : ''}</div>
+          <div style="color:var(--text-dim);font-size:.75rem">${esc(r.ip_address)} · ${dt}</div>
+          <div style="color:var(--text-dim);font-size:.73rem">${esc(r.failure_reason || '')}</div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    listEl.innerHTML = `<div style="color:var(--text-dim);font-size:.82rem;text-align:center;padding:12px">Could not load failed logins.</div>`;
   }
 }
 

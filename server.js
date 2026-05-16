@@ -15,6 +15,7 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 
+const helmet = require('helmet');
 const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
@@ -24,6 +25,36 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
+
+// Trust Railway's proxy so req.ip reflects the real client IP
+app.set('trust proxy', 1);
+
+// Security headers via helmet
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'", "'unsafe-inline'"],   // inline scripts used throughout app
+      styleSrc:    ["'self'", "'unsafe-inline'"],   // inline styles used throughout app
+      imgSrc:      ["'self'", 'data:', 'blob:'],
+      connectSrc:  ["'self'", 'wss:', 'ws:'],       // socket.io websocket
+      mediaSrc:    ["'self'"],
+      workerSrc:   ["'self'", 'blob:'],             // service worker
+      frameSrc:    ["'none'"],
+    }
+  },
+  crossOriginEmbedderPolicy: false,  // needed for some browser APIs used (WebRTC, AudioContext)
+}));
+
+// HTTPS redirect in production (Railway terminates TLS at proxy)
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+}
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));

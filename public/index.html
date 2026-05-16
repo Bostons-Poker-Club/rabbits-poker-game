@@ -93,6 +93,15 @@
   // Redirect if already logged in
   if (sessionStorage.getItem('rp_token')) window.location.href = '/lobby.html';
 
+  // Show timeout message if redirected from session expiry
+  (function () {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get('reason') === 'timeout') {
+      const el = document.getElementById('login-error');
+      if (el) { el.textContent = 'You were logged out due to inactivity.'; el.style.display = 'block'; }
+    }
+  })();
+
   function showTab(tab) {
     document.getElementById('tab-login').classList.toggle('active', tab === 'login');
     document.getElementById('tab-register').classList.toggle('active', tab === 'register');
