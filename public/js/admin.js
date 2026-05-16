@@ -806,6 +806,7 @@ function showPanel(name) {
   event.currentTarget.classList.add('active');
   if (name === 'banned')   loadBannedPlayers();
   if (name === 'reports')  loadSessionReports();
+  if (name === 'finance')  loadFinancialDashboard();
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -2093,3 +2094,169 @@ async function submitCreateAdmin() {
     loadMonthlyFees();
   } catch (e) { errEl.textContent = e.message; }
 }
+
+// ─── Financial Dashboard ──────────────────────────────────────────────────────
+
+let _finData = null;
+
+async function loadFinancialDashboard() {
+  try {
+    _finData = await apiFetch('/api/admin/financial-summary');
+    _renderFinancialStats(_finData);
+    _drawRakeChart(_finData.rake?.byDay || []);
+    _renderTopTables(_finData.rake?.topTables || []);
+    _renderTopPlayers(_finData.topPlayers || []);
+  } catch (e) {
+    console.warn('[finance] load error:', e.message);
+  }
+}
+
+function _renderFinancialStats(d) {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('fin-rake-alltime',  '$' + fmt(d.rake?.allTime));
+  set('fin-rake-month',    '$' + fmt(d.rake?.thisMonth));
+  set('fin-rake-week',     '$' + fmt(d.rake?.thisWeek));
+  set('fin-rake-today',    '$' + fmt(d.rake?.today));
+  set('fin-fees-month',    '$' + fmt(d.fees?.thisMonth));
+  set('fin-host-cuts',     '$' + fmt(d.hostCuts?.thisMonth));
+  set('fin-net-earnings',  '$' + fmt(d.netEarnings?.thisMonth));
+  set('fin-net-alltime',   '$' + fmt(d.netEarnings?.allTime));
+}
+
+function _drawRakeChart(byDay) {
+  const canvas = document.getElementById('rake-chart');
+  if (!canvas || !byDay.length) return;
+
+  // Size canvas to its CSS layout width
+  const W = canvas.parentElement?.clientWidth - 32 || 560;
+  const H = 120;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const maxVal = Math.max(...byDay.map(d => d.amount), 1);
+  const n = byDay.length;
+  const barW   = (W - 4) / n;
+  const padTop = 8, padBot = 20;
+  const chartH = H - padTop - padBot;
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const maxEl = document.getElementById('fin-chart-max');
+  if (maxEl) maxEl.textContent = `peak $${fmt(maxVal)}`;
+
+  ctx.clearRect(0, 0, W, H);
+
+  byDay.forEach((d, i) => {
+    const x = 2 + i * barW;
+    const barH = d.amount > 0 ? Math.max(2, (d.amount / maxVal) * chartH) : 1;
+    const y = padTop + chartH - barH;
+    ctx.fillStyle = d.date === todayStr ? '#f0c040'
+      : d.amount > 0 ? 'rgba(46,204,113,.75)'
+      : 'rgba(255,255,255,.06)';
+    ctx.fillRect(x + 1, y, barW - 2, barH);
+  });
+
+  // Date labels every ~10 bars
+  ctx.fillStyle = 'rgba(255,255,255,.3)';
+  ctx.font = `${9 * Math.min(1, W / 400)}px sans-serif`;
+  ctx.textAlign = 'center';
+  const interval = Math.ceil(n / 12);
+  byDay.forEach((d, i) => {
+    if (i % interval !== 0) return;
+    const x = 2 + i * barW + barW / 2;
+    const [, m, day] = d.date.split('-');
+    ctx.fillText(`${m}/${day}`, x, H - 4);
+  });
+
+  // Hover tooltip
+  canvas.onmousemove = (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const xPos = e.clientX - rect.left;
+    const idx  = Math.floor(xPos / barW);
+    const tip  = document.getElementById('rake-chart-tooltip');
+    if (tip && byDay[idx]) {
+      tip.textContent = `${byDay[idx].date}: $${fmt(byDay[idx].amount)}`;
+    }
+  };
+  canvas.onmouseleave = () => {
+    const tip = document.getElementById('rake-chart-tooltip');
+    if (tip) tip.textContent = '';
+  };
+}
+
+function _renderTopTables(tables) {
+  const el = document.getElementById('fin-top-tables');
+  if (!el) return;
+  if (!tables.length) { el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:12px">No session data yet</div>'; return; }
+  el.innerHTML = tables.map((t, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <span style="color:var(--text)">${i + 1}. ${esc(t.tableName)}</span>
+      <div style="text-align:right">
+        <span style="color:var(--chip-green);font-weight:600">$${fmt(t.total)}</span>
+        <span style="color:var(--text-dim);font-size:.72rem;margin-left:5px">${t.sessions} sess</span>
+      </div>
+    </div>`).join('');
+}
+
+function _renderTopPlayers(players) {
+  const el = document.getElementById('fin-top-players');
+  if (!el) return;
+  if (!players.length) { el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:12px">No buy-in transactions yet</div>'; return; }
+  el.innerHTML = players.map((p, i) => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.06)">
+      <span style="color:var(--text)">${i + 1}. ${esc(p.username)}</span>
+      <span style="color:var(--gold);font-weight:600">$${fmt(p.total)}</span>
+    </div>`).join('');
+}
+
+async function downloadCSV(type) {
+  const from = document.getElementById('export-from')?.value || '';
+  const to   = document.getElementById('export-to')?.value   || '';
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to)   params.set('to', to);
+  const url = `/api/admin/export/${type}.csv${params.toString() ? '?' + params : ''}`;
+  try {
+    const token = sessionStorage.getItem('rp_token');
+    const resp  = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
+    const blob  = await resp.blob();
+    const oUrl  = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href     = oUrl;
+    a.download = `${type}${from ? '_' + from : ''}${to ? '_to_' + to : ''}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(oUrl);
+    toast(`${type} exported`, 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function clearExportDates() {
+  const f = document.getElementById('export-from');
+  const t = document.getElementById('export-to');
+  if (f) f.value = '';
+  if (t) t.value = '';
+}
+
+async function sendWeeklySummary() {
+  if (!confirm('Send weekly financial summary email to bostonspokerclub.amitureflops@gmail.com?')) return;
+  try {
+    await apiFetch('/api/admin/send-weekly-summary', { method: 'POST' });
+    toast('Weekly summary emailed', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Initialize export date range defaults (current month)
+(function() {
+  const now = new Date();
+  const firstOfMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+  const today = now.toISOString().slice(0, 10);
+  const fromEl = document.getElementById('export-from');
+  const toEl   = document.getElementById('export-to');
+  if (fromEl && !fromEl.value) fromEl.value = firstOfMonth;
+  if (toEl   && !toEl.value)   toEl.value   = today;
+})();

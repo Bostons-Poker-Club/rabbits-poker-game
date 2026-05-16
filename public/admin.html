@@ -33,6 +33,7 @@
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
   <button class="admin-tab-btn" onclick="showPanel('reports')">📊 Reports</button>
+  <button class="admin-tab-btn" onclick="showPanel('finance')">📈 Finance</button>
   <button class="admin-tab-btn" onclick="showPanel('messages')">📨 Messages</button>
   <a href="/lobby.html"><button class="admin-tab-btn">← Lobby</button></a>
   <button id="mute-btn" class="admin-tab-btn" onclick="toggleMute()" title="Toggle notification sounds" style="font-size:1.1rem;position:relative">
@@ -474,6 +475,76 @@
     <p style="color:var(--text-dim);font-size:.88rem;margin-bottom:20px">Automatically generated when a table session is ended. Full per-hand rake breakdown. Reports are also emailed to the club admin.</p>
     <div id="session-reports-list">
       <div style="text-align:center;padding:32px;color:var(--text-dim)">No session reports yet</div>
+    </div>
+  </div>
+
+  <!-- Financial Dashboard -->
+  <div class="admin-panel" id="panel-finance">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h2 style="color:var(--gold)">📈 Financial Dashboard</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="sendWeeklySummary()" title="Send financial summary to bostonspokerclub.amitureflops@gmail.com">📧 Send Weekly Summary</button>
+        <button class="btn btn-sm btn-outline" onclick="loadFinancialDashboard()">↻ Refresh</button>
+      </div>
+    </div>
+
+    <!-- KPI Stats -->
+    <div class="stats-grid" style="margin-bottom:20px">
+      <div class="stat-card"><div class="stat-value" id="fin-rake-alltime">$0</div><div class="stat-label">All-Time Rake</div></div>
+      <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="fin-rake-month">$0</div><div class="stat-label">Rake This Month</div></div>
+      <div class="stat-card"><div class="stat-value" id="fin-rake-week">$0</div><div class="stat-label">Rake This Week</div></div>
+      <div class="stat-card"><div class="stat-value" id="fin-rake-today">$0</div><div class="stat-label">Rake Today</div></div>
+      <div class="stat-card" style="border-color:var(--gold)"><div class="stat-value" style="color:var(--gold)" id="fin-fees-month">$0</div><div class="stat-label">Fee Income (Month)</div></div>
+      <div class="stat-card" style="border-color:var(--red)"><div class="stat-value" style="color:var(--red)" id="fin-host-cuts">$0</div><div class="stat-label">Host Cuts (Month)</div></div>
+      <div class="stat-card" style="border-color:var(--chip-green)"><div class="stat-value" style="color:var(--chip-green)" id="fin-net-earnings">$0</div><div class="stat-label">Net Earnings (Month)</div></div>
+      <div class="stat-card"><div class="stat-value" id="fin-net-alltime">$0</div><div class="stat-label">Net Earnings (All-Time)</div></div>
+    </div>
+
+    <!-- Rake Chart -->
+    <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:20px">
+      <h3 style="color:var(--chip-green);margin-bottom:12px;font-size:.9rem">📊 Rake by Day — Last 60 Days <span id="fin-chart-max" style="color:var(--text-dim);font-size:.75rem;margin-left:8px"></span></h3>
+      <canvas id="rake-chart" height="120" style="width:100%;display:block;cursor:crosshair"></canvas>
+      <div id="rake-chart-tooltip" style="font-size:.8rem;color:var(--gold);margin-top:6px;text-align:center;min-height:1.2em"></div>
+    </div>
+
+    <!-- Top Tables + Top Players -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+      <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+        <h3 style="color:var(--gold);font-size:.88rem;margin-bottom:10px">🏆 Top Earning Tables</h3>
+        <div id="fin-top-tables" style="font-size:.82rem">
+          <div style="color:var(--text-dim);text-align:center;padding:12px">Loading…</div>
+        </div>
+      </div>
+      <div style="background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:var(--radius);padding:14px">
+        <h3 style="color:var(--gold);font-size:.88rem;margin-bottom:10px">💰 Top Players by Buy-In Volume</h3>
+        <div id="fin-top-players" style="font-size:.82rem">
+          <div style="color:var(--text-dim);text-align:center;padding:12px">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CSV Exports -->
+    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:18px">
+      <h3 style="color:var(--gold);font-size:.9rem;margin-bottom:14px">📥 Export Data to CSV</h3>
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px">
+        <div>
+          <label style="display:block;font-size:.78rem;color:var(--text-dim);margin-bottom:4px">From Date</label>
+          <input type="date" id="export-from" style="padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.85rem">
+        </div>
+        <div>
+          <label style="display:block;font-size:.78rem;color:var(--text-dim);margin-bottom:4px">To Date</label>
+          <input type="date" id="export-to" style="padding:7px 10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.85rem">
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="clearExportDates()">Clear (All Time)</button>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('players')" title="Name, phone, email, address, buy-in totals">👥 Players</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('session-reports')" title="Table sessions with rake breakdown">📊 Session Reports</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('rake-report')" title="Per-hand rake history">🎰 Rake (Per Hand)</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('transactions')" title="Buy-ins, cash-outs, all transactions">💳 Transactions</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCSV('fee-payments')" title="Monthly fee payment history">📋 Fee Payments</button>
+      </div>
+      <div style="font-size:.75rem;color:var(--text-dim);margin-top:8px">Leave dates blank to export all records. Files open in Excel with UTF-8 encoding.</div>
     </div>
   </div>
 </div>

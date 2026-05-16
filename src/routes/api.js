@@ -1679,4 +1679,245 @@ router.post('/admin/leaderboard/reset', authMiddleware, adminMiddleware, async (
   }
 });
 
+// ─── Financial Dashboard ──────────────────────────────────────────────────────
+
+router.get('/admin/financial-summary', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStr   = now.toISOString().slice(0, 10);
+    const weekAgo    = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const weekStr    = weekAgo.toISOString().slice(0, 10);
+    const monthStr   = monthStart.toISOString().slice(0, 10);
+
+    const { data: reports } = await supabaseAdmin.from('session_reports')
+      .select('session_date, total_rake, host_amount, house_amount, table_name, created_at')
+      .order('session_date', { ascending: false });
+    const allReports = reports || [];
+
+    const sum   = (arr, f) => arr.reduce((s, r) => s + (r[f] || 0), 0);
+    const since = (arr, d) => arr.filter(r => ((r.session_date || r.created_at?.slice(0,10)) || '') >= d);
+
+    const rakeAllTime    = sum(allReports, 'total_rake');
+    const rakeThisMonth  = sum(since(allReports, monthStr),  'total_rake');
+    const rakeThisWeek   = sum(since(allReports, weekStr),   'total_rake');
+    const rakeToday      = sum(since(allReports, todayStr),  'total_rake');
+    const hostCutsAll    = sum(allReports, 'host_amount');
+    const hostCutsMonth  = sum(since(allReports, monthStr),  'host_amount');
+    const houseAll       = sum(allReports, 'house_amount');
+    const houseMonth     = sum(since(allReports, monthStr),  'house_amount');
+
+    // Rake by day — last 60 days
+    const sixtyAgo = new Date(now); sixtyAgo.setDate(sixtyAgo.getDate() - 59);
+    const sixtyStr = sixtyAgo.toISOString().slice(0, 10);
+    const byDayMap = {};
+    since(allReports, sixtyStr).forEach(r => {
+      const d = r.session_date || r.created_at?.slice(0, 10);
+      if (d) byDayMap[d] = (byDayMap[d] || 0) + (r.total_rake || 0);
+    });
+    const byDay = [];
+    for (let i = 59; i >= 0; i--) {
+      const d = new Date(now); d.setDate(d.getDate() - i);
+      const ds = d.toISOString().slice(0, 10);
+      byDay.push({ date: ds, amount: byDayMap[ds] || 0 });
+    }
+
+    // Top tables all-time
+    const tableMap = {};
+    allReports.forEach(r => {
+      const n = r.table_name || 'Unknown';
+      if (!tableMap[n]) tableMap[n] = { tableName: n, total: 0, sessions: 0 };
+      tableMap[n].total += r.total_rake || 0;
+      tableMap[n].sessions++;
+    });
+    const topTables = Object.values(tableMap).sort((a, b) => b.total - a.total).slice(0, 10);
+
+    // Fee income
+    const { data: feeRows } = await supabaseAdmin.from('monthly_fee_payments')
+      .select('amount, created_at').catch(() => ({ data: [] }));
+    const allFees    = feeRows || [];
+    const feeAll     = sum(allFees, 'amount');
+    const feeMonth   = allFees.filter(f => f.created_at >= monthStart.toISOString()).reduce((s, f) => s + (f.amount || 0), 0);
+
+    // Top players by buy-in volume
+    const { data: txData } = await supabaseAdmin.from('transactions')
+      .select('username, amount').eq('type', 'buy_in').catch(() => ({ data: [] }));
+    const playerMap = {};
+    (txData || []).forEach(t => { playerMap[t.username] = (playerMap[t.username] || 0) + (t.amount || 0); });
+    const topPlayers = Object.entries(playerMap)
+      .map(([username, total]) => ({ username, total }))
+      .sort((a, b) => b.total - a.total).slice(0, 10);
+
+    res.json({
+      rake:        { allTime: rakeAllTime, thisMonth: rakeThisMonth, thisWeek: rakeThisWeek, today: rakeToday, byDay, topTables },
+      hostCuts:    { allTime: hostCutsAll,  thisMonth: hostCutsMonth },
+      house:       { allTime: houseAll,     thisMonth: houseMonth },
+      fees:        { allTime: feeAll,       thisMonth: feeMonth },
+      netEarnings: { allTime: houseAll + feeAll, thisMonth: houseMonth + feeMonth },
+      topPlayers
+    });
+  } catch (e) {
+    console.error('[financial-summary]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── CSV Exports ──────────────────────────────────────────────────────────────
+
+function _csvRow(fields) {
+  return fields.map(f => {
+    const s = String(f == null ? '' : f);
+    return /[,"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }).join(',');
+}
+
+function _csvRange(req) {
+  const from = req.query.from || '2020-01-01';
+  const to   = req.query.to   || new Date().toISOString().slice(0, 10);
+  return { from, to };
+}
+
+function _sendCsv(res, filename, rows) {
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send('﻿' + rows.join('\r\n'));
+}
+
+router.get('/admin/export/players.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('users')
+    .select('id, username, full_name, nickname, phone, email, address, city, state, zip, is_admin, is_host, host_type, created_at')
+    .gte('created_at', from + 'T00:00:00Z')
+    .lte('created_at', to   + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  const { data: txData } = await supabaseAdmin.from('transactions')
+    .select('user_id, type, amount').catch(() => ({ data: [] }));
+  const buyIns = {}, cashOuts = {};
+  (txData || []).forEach(t => {
+    if (t.type === 'buy_in')   buyIns[t.user_id]   = (buyIns[t.user_id]   || 0) + (t.amount || 0);
+    if (t.type === 'cash_out') cashOuts[t.user_id] = (cashOuts[t.user_id] || 0) + (t.amount || 0);
+  });
+
+  const rows = [
+    _csvRow(['Username','Full Name','Nickname','Phone','Email','Address','City','State','ZIP','Role','Join Date','Total Buy-Ins','Total Cash-Outs','Net']),
+    ...(data || []).map(p => {
+      const bi = buyIns[p.id] || 0, co = cashOuts[p.id] || 0;
+      const role = p.is_admin ? 'Admin' : p.is_host ? 'Host' : 'Player';
+      return _csvRow([p.username, p.full_name||'', p.nickname||'', p.phone||'', p.email||'',
+        p.address||'', p.city||'', p.state||'', p.zip||'', role, p.created_at?.slice(0,10)||'', bi, co, co-bi]);
+    })
+  ];
+  _sendCsv(res, `players_${from}_${to}.csv`, rows);
+});
+
+router.get('/admin/export/session-reports.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('session_reports')
+    .select('table_name, session_date, total_rake, pot_volume, hands_played, host_username, host_type, host_percent, host_amount, house_amount, created_at')
+    .gte('created_at', from + 'T00:00:00Z')
+    .lte('created_at', to   + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  const rows = [
+    _csvRow(['Table','Session Date','Total Rake','Pot Volume','Hands','Host','Host Type','Host %','Host Amount','House Amount','Created At']),
+    ...(data || []).map(r => _csvRow([r.table_name, r.session_date, r.total_rake, r.pot_volume, r.hands_played,
+      r.host_username||'', r.host_type||'', r.host_percent, r.host_amount, r.house_amount, r.created_at?.slice(0,10)]))
+  ];
+  _sendCsv(res, `session_reports_${from}_${to}.csv`, rows);
+});
+
+router.get('/admin/export/rake-report.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('hands')
+    .select('table_id, rake_collected, jackpot_contribution, started_at')
+    .eq('status', 'completed')
+    .gte('started_at', from + 'T00:00:00Z')
+    .lte('started_at', to   + 'T23:59:59Z')
+    .order('started_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  const rows = [
+    _csvRow(['Date','Table ID','Rake Collected','Jackpot Contribution']),
+    ...(data || []).map(h => _csvRow([h.started_at?.slice(0,10), h.table_id||'', h.rake_collected, h.jackpot_contribution]))
+  ];
+  _sendCsv(res, `rake_report_${from}_${to}.csv`, rows);
+});
+
+router.get('/admin/export/transactions.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('transactions')
+    .select('created_at, username, type, amount, table_name, payment_method, notes')
+    .gte('created_at', from + 'T00:00:00Z')
+    .lte('created_at', to   + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (/does not exist|relation/.test(error.message)) return _sendCsv(res, 'transactions_empty.csv', [_csvRow(['No Data — run migration 008'])]);
+    return res.status(500).json({ error: error.message });
+  }
+  const rows = [
+    _csvRow(['Date','Username','Type','Amount','Table','Payment Method','Notes']),
+    ...(data || []).map(t => _csvRow([t.created_at?.slice(0,10), t.username||'', t.type, t.amount||0, t.table_name||'', t.payment_method||'', t.notes||'']))
+  ];
+  _sendCsv(res, `transactions_${from}_${to}.csv`, rows);
+});
+
+router.get('/admin/export/fee-payments.csv', authMiddleware, adminMiddleware, async (req, res) => {
+  const { from, to } = _csvRange(req);
+  const { data, error } = await supabaseAdmin.from('monthly_fee_payments')
+    .select('created_at, username, role_type, amount, for_month, payment_method, notes')
+    .gte('created_at', from + 'T00:00:00Z')
+    .lte('created_at', to   + 'T23:59:59Z')
+    .order('created_at', { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+  const rows = [
+    _csvRow(['Date','Username','Role','Amount','For Month','Payment Method','Notes']),
+    ...(data || []).map(f => _csvRow([f.created_at?.slice(0,10), f.username||'', f.role_type||'', f.amount||0, f.for_month||'', f.payment_method||'', f.notes||'']))
+  ];
+  _sendCsv(res, `fee_payments_${from}_${to}.csv`, rows);
+});
+
+// ─── Weekly Financial Summary Email ───────────────────────────────────────────
+
+router.post('/admin/send-weekly-summary', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const now = new Date();
+    const weekAgo  = new Date(now); weekAgo.setDate(weekAgo.getDate() - 7);
+    const fromStr  = weekAgo.toISOString().slice(0, 10);
+    const toStr    = now.toISOString().slice(0, 10);
+
+    const { data: reports } = await supabaseAdmin.from('session_reports')
+      .select('total_rake, host_amount, house_amount, table_name, session_date')
+      .gte('session_date', fromStr);
+    const allR = reports || [];
+    const totalRake      = allR.reduce((s, r) => s + (r.total_rake   || 0), 0);
+    const hostCuts       = allR.reduce((s, r) => s + (r.host_amount  || 0), 0);
+    const houseRake      = allR.reduce((s, r) => s + (r.house_amount || 0), 0);
+
+    const { data: feeData } = await supabaseAdmin.from('monthly_fee_payments')
+      .select('amount, username').gte('created_at', weekAgo.toISOString()).catch(() => ({ data: [] }));
+    const feesCollected = (feeData || []).reduce((s, f) => s + (f.amount || 0), 0);
+
+    const tableMap = {};
+    allR.forEach(r => {
+      const n = r.table_name || 'Unknown';
+      if (!tableMap[n]) tableMap[n] = { total: 0, sessions: 0 };
+      tableMap[n].total += r.total_rake || 0;
+      tableMap[n].sessions++;
+    });
+
+    const { sendWeeklySummaryEmail } = require('../mail');
+    await sendWeeklySummaryEmail({
+      from: fromStr, to: toStr, sessions: allR.length,
+      totalRake, hostCuts, houseRake, feesCollected,
+      netEarnings: houseRake + feesCollected,
+      tableMap, feePayments: feeData || []
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[weekly-summary]', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

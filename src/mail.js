@@ -343,4 +343,83 @@ async function sendFeeReminderSMS({ phone, text }) {
   return sendPlayerSMS({ phone, text });
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail, sendFeeReminderEmail, sendFeeReminderSMS };
+async function sendWeeklySummaryEmail({ from, to, sessions, totalRake, hostCuts, houseRake, feesCollected, netEarnings, tableMap, feePayments }) {
+  if (!isConfigured()) return;
+  const fmtN = n => (n || 0).toLocaleString();
+  const subject = `📊 Weekly Financial Summary — Boston Poker Club (${from} to ${to})`;
+
+  const tableRows = Object.entries(tableMap || {})
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name, v]) => `  ${name}: $${fmtN(v.total)} (${v.sessions} session${v.sessions !== 1 ? 's' : ''})`)
+    .join('\n');
+
+  const text = [
+    `WEEKLY FINANCIAL SUMMARY — Boston Poker Club`,
+    `Period: ${from} → ${to}`,
+    '',
+    `Sessions played:          ${sessions}`,
+    `Total rake collected:     $${fmtN(totalRake)}`,
+    `Host/admin cuts paid out: $${fmtN(hostCuts)}`,
+    `House rake earnings:      $${fmtN(houseRake)}`,
+    `Monthly fees collected:   $${fmtN(feesCollected)}`,
+    '',
+    `NET HOUSE EARNINGS:       $${fmtN(netEarnings)}`,
+    '',
+    tableRows ? `Rake by Table:\n${tableRows}` : 'No sessions this week.',
+    feePayments?.length
+      ? `\nFee Payments:\n${feePayments.map(f => `  ${f.username}: $${f.amount}`).join('\n')}`
+      : '',
+    '',
+    '— Boston Poker Club Admin System'
+  ].filter(l => l !== undefined).join('\n');
+
+  const tableHtml = Object.entries(tableMap || {})
+    .sort((a, b) => b[1].total - a[1].total)
+    .map(([name, v]) => `<tr><td style="padding:6px 12px">${name}</td><td style="padding:6px 12px;text-align:right;color:#1a7a3f;font-weight:600">$${fmtN(v.total)}</td><td style="padding:6px 12px;text-align:right;color:#888">${v.sessions}</td></tr>`)
+    .join('');
+
+  const feesHtml = (feePayments || []).length
+    ? `<h3 style="color:#a07800;margin:18px 0 8px">Fee Payments This Week</h3>
+       <table style="border-collapse:collapse;width:100%;font-size:.88rem">
+         ${feePayments.map(f => `<tr style="border-bottom:1px solid #eee"><td style="padding:5px 10px">${f.username}</td><td style="padding:5px 10px;text-align:right;color:#a07800;font-weight:600">$${fmtN(f.amount)}</td></tr>`).join('')}
+       </table>` : '';
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:580px;margin:0 auto">
+      <h2 style="color:#1a7a3f">📊 Weekly Financial Summary</h2>
+      <p style="color:#666;margin-bottom:20px">Period: <strong>${from}</strong> → <strong>${to}</strong></p>
+
+      <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px;overflow:hidden;margin-bottom:20px">
+        <tr><td style="padding:10px 14px;color:#555;width:230px">Sessions Played</td><td style="padding:10px 14px;font-weight:700">${sessions}</td></tr>
+        <tr style="background:#fff"><td style="padding:10px 14px;color:#555">Total Rake Collected</td><td style="padding:10px 14px;font-weight:700;color:#1a7a3f">$${fmtN(totalRake)}</td></tr>
+        <tr><td style="padding:10px 14px;color:#555">Host / Admin Cuts</td><td style="padding:10px 14px;font-weight:700;color:#c0392b">−$${fmtN(hostCuts)}</td></tr>
+        <tr style="background:#fff"><td style="padding:10px 14px;color:#555">House Rake Earnings</td><td style="padding:10px 14px;font-weight:700;color:#1a7a3f">$${fmtN(houseRake)}</td></tr>
+        <tr><td style="padding:10px 14px;color:#555">Monthly Fees Collected</td><td style="padding:10px 14px;font-weight:700;color:#a07800">$${fmtN(feesCollected)}</td></tr>
+        <tr style="background:#e8f5ee"><td style="padding:10px 14px;color:#333;font-weight:700;font-size:1.05rem">NET HOUSE EARNINGS</td><td style="padding:10px 14px;font-weight:700;color:#1a7a3f;font-size:1.15rem">$${fmtN(netEarnings)}</td></tr>
+      </table>
+
+      ${tableHtml ? `
+      <h3 style="color:#333;margin-bottom:8px">Rake by Table</h3>
+      <table style="border-collapse:collapse;width:100%;font-size:.88rem;margin-bottom:18px">
+        <thead><tr style="background:#1a7a3f;color:#fff">
+          <th style="padding:7px 12px;text-align:left">Table</th>
+          <th style="padding:7px 12px;text-align:right">Rake</th>
+          <th style="padding:7px 12px;text-align:right">Sessions</th>
+        </tr></thead>
+        <tbody>${tableHtml}</tbody>
+      </table>` : '<p style="color:#888">No sessions this week.</p>'}
+
+      ${feesHtml}
+
+      <p style="color:#999;font-size:.8rem;margin-top:24px">— Boston Poker Club Admin System · auto-generated report</p>
+    </div>`;
+
+  try {
+    await sgMail.send({ from: FROM, to: ADMIN_EMAIL, subject, text, html });
+    console.log('[mail] Weekly summary sent');
+  } catch (e) {
+    console.warn('[mail] Failed to send weekly summary:', e.message);
+  }
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail, sendFeeReminderEmail, sendFeeReminderSMS, sendWeeklySummaryEmail };
