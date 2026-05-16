@@ -777,10 +777,16 @@ function setupSocketHandlers(io) {
         broadcastGameState(io, tId, game);
       }
 
-      // Persist to DB
+      // Persist to DB and notify player
       try {
-        const { data } = await supabaseAdmin.from('users').select('chips').eq('id', targetUserId).single();
-        if (data) await supabaseAdmin.from('users').update({ chips: data.chips + amount }).eq('id', targetUserId);
+        const { data: pu } = await supabaseAdmin.from('users').select('chips, phone, email, username').eq('id', targetUserId).single();
+        if (pu) {
+          await supabaseAdmin.from('users').update({ chips: pu.chips + amount }).eq('id', targetUserId);
+          const notifText = `Boston Poker Club: $${amount.toLocaleString()} chips added to your account. You can now join a table!`;
+          const notifHtml = `<p>Hi <strong>${pu.username || 'there'}</strong>,</p><p><strong>$${amount.toLocaleString()} chips</strong> have been added to your account by the host.</p><p>New balance: <strong>$${(pu.chips + amount).toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— Boston Poker Club</p>`;
+          if (pu.phone) sendPlayerSMS({ phone: pu.phone, text: notifText }).catch(() => {});
+          if (pu.email) sendPlayerEmail({ to: pu.email, subject: `$${amount.toLocaleString()} chips added — Boston Poker Club`, text: notifText, html: notifHtml }).catch(() => {});
+        }
       } catch {}
 
       socket.emit('chips_added', { targetUserId, amount, by: username });
@@ -1606,9 +1612,9 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
       }
     }
 
-    // SMS + email: low chips alert — once per session per player when stack < 10x big blind
+    // SMS + email: low chips alert — once per session per player when stack < minimum buy-in
     if (!game._lowChipsNotified) game._lowChipsNotified = new Set();
-    const lowThreshold = game.bigBlind * 10;
+    const lowThreshold = getMinBuyIn(game.smallBlind, game.bigBlind, game.gameType);
     for (const player of game.players.values()) {
       if (!player.isActive || game._lowChipsNotified.has(player.userId)) continue;
       if (player.chips > 0 && player.chips < lowThreshold) {

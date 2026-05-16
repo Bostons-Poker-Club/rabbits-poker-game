@@ -694,7 +694,7 @@ router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (
 
   const { data: user } = await supabaseAdmin
     .from('users')
-    .select('chips')
+    .select('chips, phone, email, username')
     .eq('id', req.params.id)
     .single();
 
@@ -705,6 +705,15 @@ router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (
     .eq('id', req.params.id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  if (amount > 0 && (user?.phone || user?.email)) {
+    const { sendPlayerEmail, sendPlayerSMS } = require('../mail');
+    const notifText = `Boston Poker Club: $${amount.toLocaleString()} chips added to your account. You can now join a table!`;
+    const notifHtml = `<p>Hi <strong>${user.username || 'there'}</strong>,</p><p><strong>$${amount.toLocaleString()} chips</strong> have been added to your account.</p><p>New balance: <strong>$${newChips.toLocaleString()}</strong> chips.</p><p>You can now join a table — good luck!<br>— Boston Poker Club</p>`;
+    if (user.phone) sendPlayerSMS({ phone: user.phone, text: notifText }).catch(() => {});
+    if (user.email) sendPlayerEmail({ to: user.email, subject: `$${amount.toLocaleString()} chips added — Boston Poker Club`, text: notifText, html: notifHtml }).catch(() => {});
+  }
+
   res.json({ success: true, newChips });
 });
 
@@ -1193,7 +1202,7 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
     const text = `Hi ${request.username},\n\nYour buy-in of $${request.amount.toLocaleString()} chips has been approved and added to your account.\n\nNew balance: $${newChips.toLocaleString()} chips.\n\nGood luck at the tables!\n— RabbsRoom`;
     const html = `<p>Hi <strong>${request.username}</strong>,</p><p>Your buy-in of <strong>$${request.amount.toLocaleString()}</strong> chips has been approved and added to your account.</p><p>New balance: <strong>$${newChips.toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— RabbsRoom</p>`;
     if (user.email) await sendPlayerEmail({ to: user.email, subject, text, html });
-    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips added. You can now join a table!` });
+    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips added to your account. You can now join a table!` });
   } catch (e) {
     console.warn('[buyin] Player notification error:', e.message);
   }
