@@ -18,6 +18,14 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Service worker must never be cached by the browser itself
+app.get('/sw.js', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Content-Type', 'application/javascript');
+  res.sendFile(path.join(__dirname, 'public', 'sw.js'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.set('io', io);

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" width="192" height="192">
+  <!-- Full-bleed background (maskable-safe) -->
+  <rect width="192" height="192" fill="#040e07"/>
+  <!-- Felt table circle -->
+  <circle cx="96" cy="96" r="86" fill="#0a2015"/>
+  <!-- Gold ring -->
+  <circle cx="96" cy="96" r="83" fill="none" stroke="#c8a84b" stroke-width="3"/>
+
+  <!-- Left ear outer -->
+  <ellipse cx="70" cy="55" rx="16" ry="36" fill="#e4e8e4" transform="rotate(-6 70 55)"/>
+  <!-- Left ear inner -->
+  <ellipse cx="70" cy="55" rx="9" ry="27" fill="#f0a0b8" transform="rotate(-6 70 55)"/>
+
+  <!-- Right ear outer -->
+  <ellipse cx="122" cy="55" rx="16" ry="36" fill="#e4e8e4" transform="rotate(6 122 55)"/>
+  <!-- Right ear inner -->
+  <ellipse cx="122" cy="55" rx="9" ry="27" fill="#f0a0b8" transform="rotate(6 122 55)"/>
+
+  <!-- Rabbit head -->
+  <ellipse cx="96" cy="108" rx="52" ry="46" fill="#e4e8e4"/>
+
+  <!-- Eyes - gold irises -->
+  <circle cx="81" cy="100" r="9" fill="#c8a84b"/>
+  <circle cx="111" cy="100" r="9" fill="#c8a84b"/>
+  <!-- Pupils -->
+  <circle cx="83" cy="100" r="5" fill="#0a0400"/>
+  <circle cx="113" cy="100" r="5" fill="#0a0400"/>
+  <!-- Eye glints -->
+  <circle cx="85" cy="97" r="2" fill="#fff"/>
+  <circle cx="115" cy="97" r="2" fill="#fff"/>
+
+  <!-- Nose -->
+  <ellipse cx="96" cy="116" rx="7" ry="5" fill="#f07888"/>
+
+  <!-- Mouth -->
+  <path d="M87 121 Q96 128 105 121" stroke="#bbb" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Playing card A♠ (bottom right) -->
+  <rect x="118" y="132" width="48" height="50" rx="5" fill="#fff" stroke="#c8a84b" stroke-width="2"/>
+  <text x="126" y="148" font-size="11" font-family="Georgia,serif" fill="#1a1a1a" font-weight="bold">A</text>
+  <text x="142" y="170" font-size="26" text-anchor="middle" font-family="Georgia,serif" fill="#1a1a1a">♠</text>
+
+  <!-- Second card peeking behind (A♥) -->
+  <rect x="106" y="138" width="48" height="50" rx="5" fill="#fafaf5" stroke="#c8a84b" stroke-width="1.5"/>
+  <text x="114" y="154" font-size="11" font-family="Georgia,serif" fill="#cc1111" font-weight="bold">A</text>
+  <text x="130" y="175" font-size="22" text-anchor="middle" font-family="Georgia,serif" fill="#cc1111">♥</text>
+</svg>
