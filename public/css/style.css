@@ -1311,3 +1311,176 @@ input, select, textarea { font-family: inherit; }
     max-height: 55vh;
   }
 }
+
+/* ─── Mic Panel: Collapse Button + Collapsed State ──────────────────────── */
+.mic-collapse-btn {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2);
+  color: var(--text);
+  font-size: .9rem;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: 1;
+  font-family: monospace;
+}
+.mic-collapse-btn:hover { background: rgba(255,255,255,.18); }
+
+#mic-controls-panel.collapsed {
+  min-width: 0 !important;
+  padding: 6px 10px !important;
+}
+#mic-controls-panel.collapsed #mic-controls-inner { display: none; }
+#mic-controls-panel.collapsed .mic-panel-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* ─── Portrait Rotate Overlay (table page only) ─────────────────────────── */
+.rotate-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: #040e07;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+}
+.rotate-icon {
+  font-size: 4rem;
+  color: var(--gold);
+  margin-bottom: 16px;
+  display: inline-block;
+  animation: rotate-hint 1.8s ease-in-out infinite;
+}
+@keyframes rotate-hint {
+  0%, 100% { transform: rotate(0deg); }
+  40%, 60% { transform: rotate(85deg); }
+}
+.rotate-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+.rotate-subtitle {
+  font-size: .9rem;
+  color: var(--text-dim);
+  max-width: 280px;
+  text-align: center;
+}
+
+/* ─── Landscape Mobile: Compact Table Layout ─────────────────────────────── */
+@media (max-height: 500px) and (orientation: landscape) {
+  body.table-page .table-header {
+    padding: 2px 8px;
+    font-size: 0.65rem;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  body.table-page .table-header .table-info-bar {
+    font-size: 0.62rem;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+  body.table-page #hdr-jackpot-timer { display: none; }
+  body.table-page .table-main { grid-template-columns: 1fr; }
+  body.table-page .chat-panel { display: none !important; }
+
+  body.table-page .poker-area { padding: 2px 4px; }
+  body.table-page .poker-table-wrap { max-width: 100%; }
+  body.table-page .seats-container { inset: -34px; }
+  body.table-page .seat-box {
+    min-width: 58px;
+    padding: 2px 4px;
+    font-size: 0.58rem;
+    border-radius: 6px;
+  }
+  body.table-page .seat-name { max-width: 52px; font-size: 0.58rem; }
+  body.table-page .seat-chips { font-size: 0.54rem; }
+  body.table-page .seat-bet { font-size: 0.5rem; min-height: 10px; }
+  body.table-page .seat-cards .card { width: 24px; height: 36px; font-size: 0.54rem; }
+  body.table-page .dealer-puck { width: 16px; height: 16px; font-size: 0.48rem; top: -8px; right: -8px; }
+  body.table-page .money-puck { min-width: 28px; height: 18px; font-size: 0.5rem; }
+  body.table-page .community-cards .card { width: 32px; height: 46px; font-size: 0.66rem; }
+  body.table-page .pot-display .pot-amount { font-size: 0.9rem; }
+
+  body.table-page .my-cards-area {
+    padding: 3px 8px 4px;
+    gap: 5px;
+    flex-wrap: nowrap;
+    align-items: center;
+    flex-direction: row;
+  }
+  body.table-page .my-hole-cards { gap: 4px; }
+  body.table-page .card.large { width: 44px; height: 62px; font-size: 0.82rem; }
+  body.table-page .shot-clock { width: 34px; height: 34px; }
+  body.table-page .shot-clock-number { font-size: 0.72rem; }
+
+  body.table-page .action-area {
+    flex-wrap: nowrap;
+    gap: 4px;
+    flex: 1;
+    align-items: center;
+  }
+  body.table-page .action-btn {
+    flex: 1;
+    min-height: 40px;
+    min-width: 0;
+    font-size: 0.72rem;
+    padding: 4px 2px;
+    border-radius: 8px;
+  }
+  body.table-page .raise-controls {
+    flex-wrap: nowrap;
+    gap: 4px;
+    flex: 2;
+    align-items: center;
+  }
+  body.table-page .raise-controls input[type=range] {
+    height: 26px;
+    min-width: 60px;
+    flex: 1;
+  }
+  body.table-page .raise-controls input[type=number] {
+    width: 52px;
+    padding: 4px;
+    font-size: 0.78rem;
+  }
+  body.table-page .ptt-btn {
+    flex: 0 0 auto;
+    min-height: 34px;
+    padding: 4px 10px;
+    font-size: 0.68rem;
+    border-radius: 8px;
+  }
+  body.table-page .break-btn {
+    font-size: 0.58rem;
+    padding: 3px 5px;
+    min-height: 30px;
+  }
+  body.table-page #mic-test-btn { display: none; }
+
+  #host-controls {
+    top: 4px !important;
+    right: 4px !important;
+    padding: 5px 8px !important;
+    min-width: 130px !important;
+    font-size: 0.68rem;
+  }
+  #mic-controls-panel {
+    top: 4px !important;
+    left: 4px !important;
+    max-height: 80vh;
+  }
+}

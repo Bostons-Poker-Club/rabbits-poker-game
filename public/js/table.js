@@ -58,6 +58,27 @@ const SEAT_POSITIONS = {
   9:  [{ x:50, y:92 }, { x:15, y:75 }, { x:3,  y:50 }, { x:10, y:20 }, { x:35, y:5 }, { x:65, y:5 }, { x:90, y:20 }, { x:97, y:50 }, { x:85, y:75 }]
 };
 
+// ─── Orientation Lock ─────────────────────────────────────────────────────
+
+(function initOrientation() {
+  // Try to lock to landscape — works on Android Chrome and installed PWAs
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(() => {});
+  }
+
+  function checkOrientation() {
+    const overlay = document.getElementById('rotate-overlay');
+    if (!overlay) return;
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const isMobile = Math.min(window.innerWidth, window.innerHeight) <= 500;
+    overlay.style.display = (isPortrait && isMobile) ? 'flex' : 'none';
+  }
+
+  window.addEventListener('resize', checkOrientation);
+  window.addEventListener('orientationchange', checkOrientation);
+  checkOrientation();
+})();
+
 // ─── Connect ──────────────────────────────────────────────────────────────
 
 function connect() {
@@ -1346,9 +1367,6 @@ function renderAdminPttPanel(players, mode) {
   }
 
   inner.innerHTML = `
-    <div class="mic-panel-header">
-      <span class="mic-panel-title">🎙 Mic Controls</span>
-    </div>
     <div class="mic-panel-actions">
       <button class="mic-btn mic-btn-mute-all"   onclick="adminMuteAll()">🔇 Mute All</button>
       <button class="mic-btn mic-btn-unmute-all" onclick="adminUnmuteAll()">🔊 Unmute All</button>
@@ -1358,6 +1376,23 @@ function renderAdminPttPanel(players, mode) {
     <div class="mic-mode-bar">Current mode: ${modeLabel}</div>`;
 
   panel.style.display = '';
+
+  // Apply saved collapse state; default to collapsed on mobile
+  const saved = localStorage.getItem('micPanelCollapsed');
+  const defaultCollapsed = window.innerWidth <= 768;
+  const shouldCollapse = saved !== null ? saved === '1' : defaultCollapsed;
+  panel.classList.toggle('collapsed', shouldCollapse);
+  const collapseBtn = panel.querySelector('.mic-collapse-btn');
+  if (collapseBtn) collapseBtn.textContent = shouldCollapse ? '+' : '−';
+}
+
+function toggleMicPanel() {
+  const panel = document.getElementById('mic-controls-panel');
+  if (!panel) return;
+  const collapsed = panel.classList.toggle('collapsed');
+  localStorage.setItem('micPanelCollapsed', collapsed ? '1' : '0');
+  const btn = panel.querySelector('.mic-collapse-btn');
+  if (btn) btn.textContent = collapsed ? '+' : '−';
 }
 
 function adminMuteAll()   { socket?.emit('ptt:admin_mute_all'); }

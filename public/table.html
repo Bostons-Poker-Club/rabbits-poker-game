@@ -72,7 +72,11 @@
     </div>
 
     <!-- Mic Controls Panel (admin only, separate from host controls) -->
-    <div id="mic-controls-panel" style="display:none;position:absolute;top:8px;left:8px;background:rgba(8,18,12,.97);border:1px solid rgba(46,204,113,.45);border-radius:10px;padding:12px 14px;min-width:210px;max-width:260px;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.6)">
+    <div id="mic-controls-panel" style="display:none;position:absolute;top:8px;left:8px;background:rgba(8,18,12,.97);border:1px solid rgba(46,204,113,.45);border-radius:10px;padding:10px 12px;min-width:210px;max-width:260px;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.6)">
+      <div class="mic-panel-header">
+        <span class="mic-panel-title">🎙 Mic Controls</span>
+        <button class="mic-collapse-btn" onclick="toggleMicPanel()" title="Collapse">−</button>
+      </div>
       <div id="mic-controls-inner"></div>
     </div>
   </div>
@@ -130,6 +134,16 @@
     <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()" ontouchcancel="stopPTT()">🎙 Hold to Talk</button>
     <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px" id="mic-test-btn">🎚 Mic</button>
     <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
+  </div>
+</div>
+
+<!-- Portrait rotate overlay (only shown in portrait on mobile) -->
+<div id="rotate-overlay" class="rotate-overlay">
+  <div style="text-align:center;padding:20px">
+    <div class="rotate-icon">↻</div>
+    <div class="rotate-title">Rotate Your Phone</div>
+    <div class="rotate-subtitle">Landscape mode gives you the best poker experience</div>
+    <button onclick="document.getElementById('rotate-overlay').style.display='none'" style="margin-top:20px;background:rgba(255,255,255,.12);border:1px solid var(--border);color:var(--text);padding:10px 24px;border-radius:20px;font-size:.88rem;cursor:pointer">Continue Anyway</button>
   </div>
 </div>
 
