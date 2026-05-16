@@ -1,5 +1,13 @@
 'use strict';
 
+// Prevent unhandled promise rejections or uncaught exceptions from killing the process
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[server] Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught Exception:', err);
+});
+
 require('dotenv').config();
 const express = require('express');
 const http = require('http');
@@ -18,6 +26,9 @@ const io = new Server(server, {
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// Health check endpoint for Railway / uptime monitors
+app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Service worker must never be cached by the browser itself
 app.get('/sw.js', (req, res) => {
