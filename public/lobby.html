@@ -37,6 +37,7 @@
     <a href="/admin.html" id="admin-link" style="display:none">
       <button class="btn btn-sm btn-outline">Admin</button>
     </a>
+    <button id="cam-opt-btn" class="btn btn-sm btn-outline" onclick="toggleCamOpt()" title="Camera at table — click to toggle" style="opacity:.5">📷</button>
     <button class="btn btn-sm btn-outline" onclick="logout()">Logout</button>
   </div>
 </header>
@@ -314,6 +315,28 @@
 <script src="/js/auth.js"></script>
 <script src="/js/lobby.js"></script>
 <script>
+// Camera opt-in toggle (persists to table.js auto-enable logic)
+(function initCamOpt() {
+  const btn = document.getElementById('cam-opt-btn');
+  if (!btn) return;
+  const on = localStorage.getItem('rp_cam_opt_in') === '1';
+  btn.style.opacity = on ? '1' : '.5';
+  btn.title = on ? 'Camera auto-enabled at table — click to disable' : 'Camera off at table — click to enable';
+  btn.style.borderColor = on ? 'var(--chip-green)' : '';
+})();
+
+function toggleCamOpt() {
+  const btn = document.getElementById('cam-opt-btn');
+  const current = localStorage.getItem('rp_cam_opt_in') === '1';
+  const next = !current;
+  localStorage.setItem('rp_cam_opt_in', next ? '1' : '0');
+  if (btn) {
+    btn.style.opacity = next ? '1' : '.5';
+    btn.title = next ? 'Camera auto-enabled at table — click to disable' : 'Camera off at table — click to enable';
+    btn.style.borderColor = next ? 'var(--chip-green)' : '';
+  }
+}
+
 // Inline broadcast listener — guaranteed to fire regardless of JS module scope
 (function waitAndBind() {
   var s = window.lobbySocket;

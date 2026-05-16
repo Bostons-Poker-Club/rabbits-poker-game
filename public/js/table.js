@@ -56,6 +56,32 @@ const ICE_CFG = { iceServers: [
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' }
 ] };
 
+// ─── Chip denomination config ─────────────────────────────────────────────
+const CHIP_DENOMS = [
+  { value: 1000, bg: '#d4af37', border: '#a07820', text: '#1a1000' }, // Yellow
+  { value: 500,  bg: '#7c3aed', border: '#4c1d95', text: '#ede9fe' }, // Purple
+  { value: 100,  bg: '#1e293b', border: '#475569', text: '#cbd5e1' }, // Black
+  { value: 25,   bg: '#15803d', border: '#14532d', text: '#bbf7d0' }, // Green
+  { value: 10,   bg: '#1d4ed8', border: '#1e3a8a', text: '#bfdbfe' }, // Blue
+  { value: 5,    bg: '#b91c1c', border: '#7f1d1d', text: '#fecaca' }, // Red
+  { value: 1,    bg: '#e5e7eb', border: '#9ca3af', text: '#374151' }, // White
+];
+
+function chipStack(amount) {
+  if (!amount || amount <= 0) return '<span style="color:var(--red);font-size:.75rem">0</span>';
+  let rem = Math.floor(amount);
+  const groups = [];
+  for (const d of CHIP_DENOMS) {
+    if (rem <= 0) break;
+    const n = Math.floor(rem / d.value);
+    if (n > 0) { groups.push({ ...d, count: n }); rem -= n * d.value; }
+  }
+  const dots = groups.slice(0, 4).map(g =>
+    `<span class="chip-dot" style="background:${g.bg};border-color:${g.border}" title="${g.count}×$${g.value}">${g.count > 1 ? `<span class="chip-dot-n" style="color:${g.text}">${g.count > 9 ? '9+' : g.count}</span>` : ''}</span>`
+  ).join('');
+  return `<span class="chip-stack">${dots}<span class="chip-total">${fmt(amount)}</span></span>`;
+}
+
 // ─── Seat Layout (positions as % of oval width/height offset from center) ──
 
 const SEAT_POSITIONS = {
@@ -92,6 +118,39 @@ const SEAT_POSITIONS = {
 
 // Initialise sound engine (reads mute preference from localStorage)
 if (window.Sound) Sound.init();
+
+function toggleSoundThemePanel() {
+  let panel = document.getElementById('sound-theme-panel');
+  if (panel) { panel.remove(); return; }
+  panel = document.createElement('div');
+  panel.id = 'sound-theme-panel';
+  panel.className = 'sound-theme-panel';
+  const current = window.Sound ? Sound.getTheme() : 'classic';
+  panel.innerHTML = `
+    <div class="stp-title">Sound Theme</div>
+    <button id="sfx-theme-classic" class="stp-btn${current === 'classic' ? ' active' : ''}" onclick="Sound.setTheme('classic');document.getElementById('sound-theme-panel')?.remove()">
+      🎰 Classic Casino
+    </button>
+    <button id="sfx-theme-modern" class="stp-btn${current === 'modern' ? ' active' : ''}" onclick="Sound.setTheme('modern');document.getElementById('sound-theme-panel')?.remove()">
+      🎧 Modern
+    </button>
+    <button id="sfx-theme-silent" class="stp-btn${current === 'silent' ? ' active' : ''}" onclick="Sound.setTheme('silent');document.getElementById('sound-theme-panel')?.remove()">
+      🔕 Silent
+    </button>`;
+  const btn = document.getElementById('sound-toggle-btn');
+  if (btn) {
+    const rect = btn.getBoundingClientRect();
+    panel.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+    panel.style.right  = (window.innerWidth - rect.right) + 'px';
+  }
+  document.body.appendChild(panel);
+  setTimeout(() => document.addEventListener('click', function _close(e) {
+    if (!document.getElementById('sound-theme-panel')?.contains(e.target)) {
+      document.getElementById('sound-theme-panel')?.remove();
+      document.removeEventListener('click', _close);
+    }
+  }, { capture: true }), 0);
+}
 
 // ─── Connect ──────────────────────────────────────────────────────────────
 
@@ -132,7 +191,7 @@ function connect() {
       for (const p of state.players) {
         const prev = prevBets[p.seatNumber] || 0;
         if (p.currentBet > prev && !p.hasFolded) {
-          animateChipToPot(p.seatNumber);
+          animateChipToPot(p.seatNumber, p.currentBet - prev);
         }
         prevBets[p.seatNumber] = p.currentBet;
       }
@@ -668,7 +727,7 @@ function renderSeats(state) {
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             <div class="seat-avatar" data-cam-uid="${player.userId}"><div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div></div>
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
-            <div class="seat-chips" style="font-weight:700;color:var(--chip-green)">${player.chips > 0 ? `🪙 ${fmt(player.chips)}` : '<span style="color:var(--red)">🪙 0 – Rebuy?</span>'}</div>
+            <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}
             ${player.isSittingOut ? '<div style="color:#888;font-size:.65rem">away</div>' : ''}
@@ -1072,11 +1131,24 @@ function toggleChat() {
 
 function cardHtml(card, appear = false, large = false) {
   if (!card || card.rank === '?') return '<div class="card back"></div>';
-  const isRed = card.suit === '♥' || card.suit === '♦';
-  const label = `${card.rank}${card.suit}`;
-  return `<div class="card ${isRed ? 'red' : 'black'} ${large ? 'large' : ''} ${appear ? 'card-appear' : ''}" title="${label}">
-    <div class="rank">${card.rank}</div>
-    <div class="suit">${card.suit}</div>
+  const isRed   = card.suit === '♥' || card.suit === '♦';
+  const isFace  = ['J', 'Q', 'K'].includes(card.rank);
+  const isAce   = card.rank === 'A';
+  const colorCls = isRed ? 'red' : 'black';
+
+  let center;
+  if (isFace) {
+    center = `<div class="card-center face-card"><span class="card-face-letter">${card.rank}</span><span class="card-face-suit">${card.suit}</span></div>`;
+  } else if (isAce) {
+    center = `<div class="card-center ace-card">${card.suit}</div>`;
+  } else {
+    center = `<div class="card-center">${card.suit}</div>`;
+  }
+
+  return `<div class="card ${colorCls}${large ? ' large' : ''}${appear ? ' card-appear' : ''}" title="${card.rank}${card.suit}">
+    <div class="card-corner tl"><span class="card-rank">${card.rank}</span><span class="card-pip">${card.suit}</span></div>
+    ${center}
+    <div class="card-corner br"><span class="card-rank">${card.rank}</span><span class="card-pip">${card.suit}</span></div>
   </div>`;
 }
 
@@ -1296,7 +1368,9 @@ function _expandCamVideo(vid, userId) {
 }
 
 function _showCamPrompt() {
-  if (camStream || sessionStorage.getItem('rp_cam_skip')) return;
+  if (camStream) return;
+  if (localStorage.getItem('rp_cam_opt_in') === '1') { _camEnable(); return; }
+  if (sessionStorage.getItem('rp_cam_skip')) return;
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.id = 'cam-prompt-modal';
@@ -1803,19 +1877,21 @@ function clearSeatTimer() {
 
 // ─── Chip Animation ───────────────────────────────────────────────────────
 
-function animateChipToPot(seatNumber) {
+function animateChipToPot(seatNumber, amount = 0) {
   const seatEl = document.querySelector(`.seat[data-seat="${seatNumber}"]`);
   const potEl = document.getElementById('pot-amount');
   if (!seatEl || !potEl) return;
 
   const seatRect = seatEl.getBoundingClientRect();
-  const potRect = potEl.getBoundingClientRect();
+  const potRect  = potEl.getBoundingClientRect();
 
+  const denom = CHIP_DENOMS.find(d => amount >= d.value) || CHIP_DENOMS[CHIP_DENOMS.length - 1];
   const chip = document.createElement('div');
   chip.className = 'chip-animate';
-  chip.textContent = '🪙';
-  chip.style.left = (seatRect.left + seatRect.width / 2) + 'px';
-  chip.style.top = (seatRect.top + seatRect.height / 2) + 'px';
+  chip.style.left   = (seatRect.left + seatRect.width  / 2 - 8) + 'px';
+  chip.style.top    = (seatRect.top  + seatRect.height / 2 - 8) + 'px';
+  chip.style.background = denom.bg;
+  chip.style.borderColor = denom.border;
   document.body.appendChild(chip);
 
   requestAnimationFrame(() => {

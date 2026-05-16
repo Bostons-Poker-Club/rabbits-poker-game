@@ -337,38 +337,86 @@ input, select, textarea { font-family: inherit; }
   width: 48px;
   height: 68px;
   background: var(--card-bg);
-  border-radius: 6px;
-  border: 1px solid #ddd;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  border-radius: 7px;
+  border: 1px solid #ccc;
+  display: block;
+  position: relative;
   font-size: 0.95rem;
   font-weight: bold;
-  box-shadow: 1px 2px 6px rgba(0,0,0,0.5);
-  position: relative;
+  box-shadow: 2px 3px 8px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.6);
   transition: transform 0.1s;
   flex-shrink: 0;
   user-select: none;
+  overflow: hidden;
 }
 .card.large { width: 72px; height: 104px; font-size: 1.35rem; }
-.card .rank { line-height: 1; font-weight: 900; letter-spacing: -0.02em; font-size: 1.1em; }
-.card .suit { line-height: 1; font-size: 1.05em; margin-top: 2px; }
-.card.red { color: var(--red); }
-.card.black { color: #222; }
+.card.red  { color: #c0001a; }
+.card.black { color: #111; }
+
+/* Corner labels */
+.card-corner {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1;
+  gap: 1px;
+}
+.card-corner.tl { top: 3px; left: 4px; }
+.card-corner.br { bottom: 3px; right: 4px; transform: rotate(180deg); }
+.card-rank { font-size: 0.72em; font-weight: 900; line-height: 1; }
+.card-pip  { font-size: 0.58em; line-height: 1; }
+
+/* Center content */
+.card-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.45em;
+  pointer-events: none;
+}
+.card-center.ace-card { font-size: 1.85em; }
+.card-center.face-card {
+  flex-direction: column;
+  gap: 1px;
+  font-size: 1.55em;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+.card-face-letter { line-height: 1; }
+.card-face-suit   { font-size: 0.55em; line-height: 1; }
+
+/* Legacy selectors kept for any code that still uses .rank/.suit */
+.card .rank { display: none; }
+.card .suit { display: none; }
+
+/* Card back — RabbsRoom themed with rabbit */
 .card.back {
-  background: linear-gradient(135deg, #1a1a6e 25%, #2a2a9e 50%, #1a1a6e 75%);
-  border: 2px solid #fff;
+  background:
+    repeating-linear-gradient(
+      45deg,
+      #0d3d22 0px, #0d3d22 4px,
+      #0f4a28 4px, #0f4a28 8px
+    );
+  border: 2px solid var(--gold);
+  box-shadow: inset 0 0 0 2px rgba(212,175,55,0.3), 2px 3px 8px rgba(0,0,0,0.55);
 }
 .card.back::after {
-  content: '🃏';
+  content: '🐇';
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
   font-size: 1.4em;
 }
+
 .card.placeholder { background: rgba(255,255,255,0.05); border: 1px dashed rgba(255,255,255,0.2); }
 .card-appear { animation: cardFlip 0.3s ease-out; }
 @keyframes cardFlip {
   from { transform: rotateY(90deg) scale(0.8); opacity: 0; }
-  to { transform: rotateY(0) scale(1); opacity: 1; }
+  to   { transform: rotateY(0) scale(1); opacity: 1; }
 }
 
 /* ─── Player Seats ───────────────────────────────────────────────────────── */
@@ -405,12 +453,40 @@ input, select, textarea { font-family: inherit; }
 .seat-box.empty { border: 1px dashed rgba(255,255,255,0.2); color: #555; cursor: pointer; }
 .seat-box.empty:hover { border-color: var(--gold); color: var(--gold); }
 .seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
-.seat-chips { color: var(--gold); font-size: 0.82rem; }
+.seat-chips { font-size: 0.80rem; line-height: 1.4; }
 .seat-bet { color: var(--chip-green); font-size: 0.78rem; min-height: 14px; }
 .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
-.seat-cards .card { width: 40px; height: 58px; font-size: 0.85rem; border-radius: 4px; }
-.seat-cards .card .rank { font-size: 1.15em; font-weight: 900; }
-.seat-cards .card .suit { font-size: 0.95em; }
+.seat-cards .card { width: 40px; height: 58px; font-size: 0.82rem; border-radius: 5px; }
+
+/* ─── Chip Stack visuals ─────────────────────────────────────────────────── */
+.chip-stack { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.chip-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 2px 3px rgba(255,255,255,.25), inset 0 -2px 3px rgba(0,0,0,.45), 0 1px 4px rgba(0,0,0,.6);
+  flex-shrink: 0;
+  position: relative;
+}
+.chip-dot::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.15);
+}
+.chip-dot-n {
+  font-size: 7px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  z-index: 1;
+}
+.chip-total { color: var(--gold); font-size: 0.78rem; font-weight: 700; margin-left: 2px; }
 
 .dealer-puck {
   position: absolute;
@@ -823,30 +899,42 @@ input, select, textarea { font-family: inherit; }
   to   { box-shadow: 0 0 18px rgba(0,230,118,0.9), 0 0 30px rgba(0,230,118,0.4); outline-color: #69f0ae; }
 }
 
-/* ─── Custom Card Back (RabbsRoom themed) ────────────────────────────────── */
-.card.back {
-  background:
-    repeating-linear-gradient(
-      45deg,
-      #0d3d22 0px, #0d3d22 4px,
-      #0f4a28 4px, #0f4a28 8px
-    );
-  border: 2px solid var(--gold);
-  box-shadow: inset 0 0 0 2px rgba(212,175,55,0.3), 1px 2px 6px rgba(0,0,0,0.5);
+/* ─── Sound Theme Panel ──────────────────────────────────────────────────── */
+.sound-theme-panel {
+  position: fixed;
+  z-index: 9999;
+  background: #0d1a12;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.7);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
 }
-.card.back::after {
-  content: '🐇';
-  font-size: 1.3em;
+.stp-title {
+  font-size: .7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  padding: 0 4px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
 }
-
-/* ─── Chip Icon in Seat ──────────────────────────────────────────────────── */
-.seat-chips::before {
-  content: '⬤ ';
-  font-size: 0.5em;
-  color: var(--chip-green);
-  vertical-align: middle;
-  margin-right: 2px;
+.stp-btn {
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--text);
+  font-size: .82rem;
+  padding: 7px 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background .15s, border-color .15s;
 }
+.stp-btn:hover { background: rgba(255,255,255,.12); border-color: var(--gold); }
+.stp-btn.active { border-color: var(--gold); color: var(--gold); background: rgba(212,175,55,.12); }
 
 /* ─── Responsive: Tablet ≤768px ──────────────────────────────────────────── */
 @media (max-width: 768px) {
@@ -943,7 +1031,6 @@ input, select, textarea { font-family: inherit; }
   .seat-chips { font-size: 0.58rem; }
   .seat-bet { font-size: 0.56rem; min-height: 12px; }
   .seat-cards .card { width: 30px; height: 44px; font-size: 0.62rem; }
-  .seat-cards .card .rank { font-size: 1.1em; }
   .dealer-puck { width: 18px; height: 18px; font-size: 0.52rem; top: -9px; right: -9px; }
   .money-puck { min-width: 32px; height: 20px; font-size: 0.54rem; }
 
@@ -1075,6 +1162,8 @@ input, select, textarea { font-family: inherit; }
   .seat-box { min-width: 54px; padding: 2px 4px; font-size: 0.58rem; }
   .seat-name { max-width: 48px; font-size: 0.58rem; }
   .seat-chips { font-size: 0.52rem; }
+  .chip-dot { width: 11px; height: 11px; }
+  .chip-total { font-size: 0.70rem; }
   .seat-cards .card { width: 26px; height: 38px; font-size: 0.56rem; }
   .card.large { width: 62px; height: 90px; font-size: 1.1rem; }
   .action-btn { min-height: 54px; font-size: 0.78rem; }
@@ -1118,20 +1207,18 @@ input, select, textarea { font-family: inherit; }
 /* ─── Chip Animation ─────────────────────────────────────────────────────── */
 .chip-animate {
   position: fixed;
-  font-size: 1.2rem;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  box-shadow: inset 0 2px 3px rgba(255,255,255,.25), inset 0 -2px 3px rgba(0,0,0,.45), 0 2px 8px rgba(0,0,0,.7);
   z-index: 9998;
   pointer-events: none;
-  transition: transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.6s ease;
+  transition: transform 0.55s cubic-bezier(0.25, 0.46, 0.45, 0.94), opacity 0.55s ease;
   transform: translate(0, 0);
 }
 
-/* ─── Chip Stack in Seat ─────────────────────────────────────────────────── */
-.seat-chips {
-  font-size: 0.75rem;
-  color: var(--chip-green);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
+/* ─── Chip Stack in Seat (overrides handled by chipStack() JS) ───────────── */
 .seat-chips::before { content: none; }
 
 /* ─── PTT Speaking State ─────────────────────────────────────────────────── */
@@ -1408,6 +1495,8 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .seat-name { max-width: 52px; font-size: 0.58rem; }
   body.table-page .seat-chips { font-size: 0.54rem; }
+  body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
+  body.table-page .chip-total { font-size: 0.66rem; }
   body.table-page .seat-bet { font-size: 0.5rem; min-height: 10px; }
   body.table-page .seat-cards .card { width: 24px; height: 36px; font-size: 0.54rem; }
   body.table-page .dealer-puck { width: 16px; height: 16px; font-size: 0.48rem; top: -8px; right: -8px; }
