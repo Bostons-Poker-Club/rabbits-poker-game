@@ -543,6 +543,22 @@ function setupSocketHandlers(io) {
 
         game.addPlayer(userId, username, chips, finalSeat);
 
+        // Increment sessions_played on first join to any table this session
+        // Use a per-socket flag to avoid double-counting
+        if (!socket._statsSessionCounted) {
+          socket._statsSessionCounted = true;
+          (async () => {
+            try {
+              const { data: ps } = await supabaseAdmin.from('player_stats').select('sessions_played').eq('user_id', userId).single();
+              if (ps) {
+                await supabaseAdmin.from('player_stats').update({ sessions_played: ps.sessions_played + 1, username, updated_at: new Date().toISOString() }).eq('user_id', userId);
+              } else {
+                await supabaseAdmin.from('player_stats').insert({ user_id: userId, username, sessions_played: 1 });
+              }
+            } catch {}
+          })();
+        }
+
         socket.join(tableId);
         socket.currentTableId = tableId;
 
@@ -2051,6 +2067,56 @@ async function persistHandResult(tableId, result) {
       community_cards: result.communityCards || [],
       ended_at: new Date().toISOString()
     }).eq('table_id', tableId).eq('status', 'active');
+
+    // Update player_stats for everyone who played this hand
+    const game = activeGames.get(tableId);
+    if (game) {
+      const winnerIds = new Set((result.winners || []).map(w => w.winner.userId));
+      const winnerAmounts = new Map((result.winners || []).map(w => [w.winner.userId, w.amount]));
+      const winnerHands = new Map((result.winners || []).map(w => [w.winner.userId, w.handResult?.name]));
+
+      for (const player of game.players.values()) {
+        const isWinner = winnerIds.has(player.userId);
+        const wonAmount = winnerAmounts.get(player.userId) || 0;
+        const handName = winnerHands.get(player.userId) || null;
+        const lostAmount = isWinner ? 0 : (player.totalBetThisHand || 0);
+
+        // Upsert player_stats row
+        const { data: existing } = await supabaseAdmin
+          .from('player_stats')
+          .select('hands_played, hands_won, total_won, total_lost, biggest_pot, favorite_hand, sessions_played')
+          .eq('user_id', player.userId)
+          .single();
+
+        if (existing) {
+          const updates = {
+            username: player.username,
+            hands_played: existing.hands_played + 1,
+            hands_won: existing.hands_won + (isWinner ? 1 : 0),
+            total_won: existing.total_won + wonAmount,
+            total_lost: existing.total_lost + lostAmount,
+            biggest_pot: Math.max(existing.biggest_pot, wonAmount),
+            last_hand_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          if (handName && isWinner) updates.favorite_hand = handName; // simplified: last win's hand
+          await supabaseAdmin.from('player_stats').update(updates).eq('user_id', player.userId);
+        } else {
+          await supabaseAdmin.from('player_stats').insert({
+            user_id: player.userId,
+            username: player.username,
+            hands_played: 1,
+            hands_won: isWinner ? 1 : 0,
+            total_won: wonAmount,
+            total_lost: lostAmount,
+            biggest_pot: wonAmount,
+            favorite_hand: handName,
+            sessions_played: 1,
+            last_hand_at: new Date().toISOString()
+          });
+        }
+      }
+    }
   } catch {}
 }
 

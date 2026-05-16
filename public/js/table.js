@@ -156,6 +156,8 @@ function connect() {
 
   socket.on('hand_started', ({ handNumber, dealerSeat }) => {
     console.log('[hand_started] hand:', handNumber, 'dealer seat:', dealerSeat);
+    _clearShowdownHighlights();
+    currentRunoutCards = null;
     if (window.Sound) Sound.newHand();
     chatMsg('system', `Hand #${handNumber} started`);
     hideHandResult();
@@ -248,6 +250,7 @@ function connect() {
     lastHandResult = result;
     // Reveal all hole cards at showdown
     if (result.allHoleCards) _revealAllSeatsCards(result.allHoleCards);
+    if (result.allHoleCards && !result.folded) _highlightWinners(result.winners);
     if (window.Sound) {
       Sound.potSlide();
       const iWon = result.winners?.some(w => w.userId === user.id);
@@ -1803,6 +1806,29 @@ function openModal(id) { document.getElementById(id)?.classList.remove('hidden')
 function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
 
 // ─── Showdown / Runout helpers ─────────────────────────────────────────────
+
+// Highlight winning seats with gold glow + hand name badge
+function _highlightWinners(winners) {
+  for (const w of (winners || [])) {
+    if (!w.userId || !w.handName) continue;
+    const seatBox = document.querySelector(`.seat-box[data-user-id="${w.userId}"]`);
+    if (!seatBox) continue;
+    seatBox.classList.add('showdown-winner');
+    // Add hand name badge
+    let badge = seatBox.querySelector('.showdown-hand-badge');
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.className = 'showdown-hand-badge';
+      seatBox.appendChild(badge);
+    }
+    badge.textContent = w.handName;
+  }
+}
+
+function _clearShowdownHighlights() {
+  document.querySelectorAll('.showdown-winner').forEach(el => el.classList.remove('showdown-winner'));
+  document.querySelectorAll('.showdown-hand-badge').forEach(el => el.remove());
+}
 
 // Show all hole cards on their seat boxes (all-in runout + showdown reveal)
 function _revealAllSeatsCards(allHoleCards) {

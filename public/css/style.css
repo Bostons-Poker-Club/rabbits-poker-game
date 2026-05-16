@@ -1609,3 +1609,71 @@ input, select, textarea { font-family: inherit; }
   padding-top: 4px;
   border-top: 1px solid rgba(255,255,255,.08);
 }
+
+/* ─── Showdown Winner Highlight ─────────────────────────────────────────── */
+.seat-box.showdown-winner {
+  border-color: var(--gold) !important;
+  box-shadow: 0 0 20px rgba(212,175,55,0.8), 0 0 40px rgba(212,175,55,0.4) !important;
+  animation: showdown-glow 1s ease-in-out infinite alternate;
+}
+@keyframes showdown-glow {
+  from { box-shadow: 0 0 12px rgba(212,175,55,0.6), 0 0 24px rgba(212,175,55,0.3); }
+  to   { box-shadow: 0 0 28px rgba(212,175,55,1),   0 0 50px rgba(212,175,55,0.5); }
+}
+.showdown-hand-badge {
+  position: absolute;
+  bottom: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--gold);
+  color: #111;
+  font-size: .62rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ─── Leaderboard Page ───────────────────────────────────────────────────── */
+.lb-tab {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.15);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: .85rem;
+  cursor: pointer;
+  transition: all .15s;
+}
+.lb-tab:hover { border-color: var(--gold); color: var(--gold); }
+.lb-tab.active { background: rgba(212,175,55,.15); border-color: var(--gold); color: var(--gold); font-weight: 700; }
+
+.lb-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(0,0,0,.3);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.lb-table th {
+  background: rgba(255,255,255,.05);
+  color: var(--text-dim);
+  font-size: .72rem;
+  font-weight: 600;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.lb-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.05);
+  color: var(--text);
+  font-size: .88rem;
+}
+.lb-table tbody tr:last-child td { border-bottom: none; }
+.lb-table tbody tr:hover td { background: rgba(255,255,255,.03); }
+.lb-me-row td { background: rgba(212,175,55,.05) !important; }
+.lb-me-row td:nth-child(2) { border-left: 3px solid var(--gold); }

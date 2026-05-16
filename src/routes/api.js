@@ -1527,4 +1527,70 @@ router.get('/admin/rake-splits', authMiddleware, adminMiddleware, async (req, re
   res.json({ splits: data || [], byHost: Object.values(byHost).sort((a, b) => b.total_earned - a.total_earned) });
 });
 
+// ─── Leaderboard ──────────────────────────────────────────────────────────────
+
+// GET /api/leaderboard?by=total_won  (by = total_won | biggest_pot | sessions_played | win_rate)
+router.get('/leaderboard', authMiddleware, async (req, res) => {
+  try {
+    const by = req.query.by || 'total_won';
+    const validColumns = ['total_won', 'biggest_pot', 'sessions_played', 'hands_won'];
+    const orderCol = validColumns.includes(by) ? by : 'total_won';
+
+    const { data, error } = await supabaseAdmin
+      .from('player_stats')
+      .select('user_id, username, hands_played, hands_won, total_won, total_lost, biggest_pot, favorite_hand, sessions_played, last_hand_at')
+      .order(orderCol, { ascending: false })
+      .limit(10);
+
+    if (error) throw error;
+
+    // Compute win_rate
+    const rows = (data || []).map((r, i) => ({
+      rank: i + 1,
+      ...r,
+      win_rate: r.hands_played > 0 ? Math.round((r.hands_won / r.hands_played) * 100) : 0
+    }));
+
+    res.json({ leaderboard: rows });
+  } catch (err) {
+    console.error('[leaderboard]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/players/:id/stats
+router.get('/players/:id/stats', authMiddleware, async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    // Only allow viewing own stats unless admin
+    if (targetId !== req.user.id && !req.user.isAdmin) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { data, error } = await supabaseAdmin
+      .from('player_stats')
+      .select('*')
+      .eq('user_id', targetId)
+      .single();
+
+    if (error || !data) return res.json({ stats: null });
+    const stats = {
+      ...data,
+      win_rate: data.hands_played > 0 ? Math.round((data.hands_won / data.hands_played) * 100) : 0
+    };
+    res.json({ stats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/admin/leaderboard/reset  (admin only — wipes player_stats)
+router.post('/admin/leaderboard/reset', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    await supabaseAdmin.from('player_stats').delete().neq('user_id', '00000000-0000-0000-0000-000000000000');
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
