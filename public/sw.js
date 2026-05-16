@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'bpc-v1';
+const CACHE = 'bpc-v2';
 
 const SHELL = [
   '/index.html',
@@ -19,6 +19,8 @@ const SHELL = [
   '/manifest.json',
   '/icons/icon-192.svg',
   '/icons/icon-512.svg',
+  '/images/logo.svg',
+  '/images/favicon.svg',
 ];
 
 self.addEventListener('install', e => {

@@ -21,6 +21,12 @@
       "sizes": "512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
+    },
+    {
+      "src": "/images/favicon.svg",
+      "sizes": "48x48 72x72 96x96",
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
   ]
 }
