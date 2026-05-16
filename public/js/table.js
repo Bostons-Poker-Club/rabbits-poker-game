@@ -20,6 +20,11 @@ let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
 let straddleCountdown = null;
 
+// Hand history
+let lastHandHistory = [];
+let lastHandResult = null;
+let currentRunoutCards = null; // hole cards to keep visible during all-in runout
+
 // ─── Inbox state ────────────────────────────────────────────────────────────
 const TABLE_INBOX_READ_KEY = 'rp_inbox_read_table';
 let tableInboxMessages = [];
@@ -134,6 +139,8 @@ function connect() {
     gameState = state;
     renderTable(state);
     updateHeader(state);
+    // Re-apply revealed cards during all-in runout (game_state shows ? face-down)
+    if (currentRunoutCards) _revealAllSeatsCards(currentRunoutCards);
     // Keep header chip count in sync with table stack
     const me = state.players?.find(p => p.userId === user.id);
     if (me != null) {
@@ -193,15 +200,19 @@ function connect() {
     toast(`${secondsLeft} seconds left!`, 'error');
   });
 
-  socket.on('street_changed', ({ street, communityCards }) => {
-    console.log('[street_changed]', street, '|', communityCards?.map(c => c.rank + c.suit).join(' '));
+  socket.on('street_changed', ({ street, communityCards, allInRunout, allHoleCards }) => {
+    console.log('[street_changed]', street, '|', communityCards?.map(c => c.rank + c.suit).join(' '), allInRunout ? '(all-in runout)' : '');
     if (gameState) {
       gameState.currentStreet = street;
       gameState.communityCards = communityCards;
     }
     renderCommunityCards(communityCards);
     document.getElementById('hdr-street').textContent = street.toUpperCase();
-    chatMsg('system', `--- ${street.toUpperCase()} ---`);
+    chatMsg('system', `--- ${street.toUpperCase()}${allInRunout ? ' (All-In)' : ''} ---`);
+    if (allInRunout && allHoleCards) {
+      currentRunoutCards = allHoleCards;
+      _revealAllSeatsCards(allHoleCards);
+    }
   });
 
   socket.on('you:host_granted', ({ message }) => {
@@ -232,6 +243,11 @@ function connect() {
     stopShotClock();
     clearSeatTimer();
     prevBets = {};
+    currentRunoutCards = null; // clear runout overlay
+    lastHandHistory = result.history || [];
+    lastHandResult = result;
+    // Reveal all hole cards at showdown
+    if (result.allHoleCards) _revealAllSeatsCards(result.allHoleCards);
     if (window.Sound) {
       Sound.potSlide();
       const iWon = result.winners?.some(w => w.userId === user.id);
@@ -261,7 +277,12 @@ function connect() {
     }
 
     if (result.winners?.length) {
-      chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
+      if (result.isSplitPot) {
+        const names = result.winners.map(w => `${w.username} +$${fmt(w.amount)}`).join(', ');
+        chatMsg('system', `🤝 Split Pot: ${names}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
+      } else {
+        chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
+      }
     }
   });
 
@@ -839,21 +860,38 @@ function showHandResult(result) {
   const winners = result.winners || [];
   if (!winners.length) return;
 
-  const w = winners[0];
-  document.getElementById('hr-winner-name').textContent = w.username;
-  document.getElementById('hr-hand-name').textContent = result.folded ? 'Everyone folded' : (w.handName || '');
-  document.getElementById('hr-amount').textContent = `+$${fmt(w.amount)}`;
-  document.getElementById('hr-cards').innerHTML =
-    (w.holeCards || []).map(c => cardHtml(c, true)).join('');
+  const isSplit = result.isSplitPot && winners.some(w => w.isSplit);
+
+  if (isSplit) {
+    document.getElementById('hr-winner-name').textContent = '🤝 Split Pot!';
+    document.getElementById('hr-hand-name').textContent = winners[0].handName || 'Tied Hands';
+    document.getElementById('hr-amount').textContent = winners.map(w => `${esc(w.username)}: +$${fmt(w.amount)}`).join('  |  ');
+    document.getElementById('hr-cards').innerHTML = winners.map(w =>
+      `<div class="split-winner-cards"><span class="split-winner-name">${esc(w.username)}</span>${(w.holeCards || []).map(c => cardHtml(c, true)).join('')}</div>`
+    ).join('');
+  } else {
+    const w = winners[0];
+    document.getElementById('hr-winner-name').textContent = w.username;
+    document.getElementById('hr-hand-name').textContent = result.folded ? 'Everyone folded' : (w.handName || '');
+    document.getElementById('hr-amount').textContent = `+$${fmt(w.amount)}`;
+    document.getElementById('hr-cards').innerHTML = (w.holeCards || []).map(c => cardHtml(c, true)).join('');
+  }
+
+  // Side pot breakdown + rake line
   const rakeEl = document.getElementById('hr-rake');
-  if (rakeEl && result.rakeCollected) {
-    rakeEl.textContent = `Rake: $${fmt(result.rakeCollected)}`;
-  } else if (rakeEl) {
-    rakeEl.textContent = '';
+  if (rakeEl) {
+    let footerText = '';
+    if (result.potBreakdown?.length > 1) {
+      footerText = result.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ');
+    }
+    if (result.rakeCollected) {
+      footerText += (footerText ? '  •  ' : '') + `Rake: $${fmt(result.rakeCollected)}`;
+    }
+    rakeEl.textContent = footerText;
   }
 
   overlay.classList.remove('hidden');
-  setTimeout(() => overlay.classList.add('hidden'), 4000);
+  setTimeout(() => overlay.classList.add('hidden'), isSplit ? 6000 : 4000);
 }
 
 function hideHandResult() {
@@ -1763,6 +1801,100 @@ function animateChipToPot(seatNumber) {
 
 function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+// ─── Showdown / Runout helpers ─────────────────────────────────────────────
+
+// Show all hole cards on their seat boxes (all-in runout + showdown reveal)
+function _revealAllSeatsCards(allHoleCards) {
+  if (!allHoleCards) return;
+  for (const [userId, cards] of Object.entries(allHoleCards)) {
+    const seatBox = document.querySelector(`.seat-box[data-user-id="${userId}"]`);
+    if (!seatBox) continue;
+    let cardsEl = seatBox.querySelector('.seat-cards');
+    if (!cardsEl) {
+      cardsEl = document.createElement('div');
+      cardsEl.className = 'seat-cards';
+      seatBox.appendChild(cardsEl);
+    }
+    cardsEl.innerHTML = cards.map(c => cardHtml(c)).join('');
+  }
+}
+
+// ─── Hand History ──────────────────────────────────────────────────────────
+
+function openHandHistory() {
+  document.getElementById('hand-history-modal')?.remove();
+
+  if (!lastHandHistory?.length && !lastHandResult) {
+    toast('No hand history yet — play a hand first', 'error');
+    return;
+  }
+
+  const streets = ['preflop', 'flop', 'turn', 'river'];
+  const byStreet = {};
+  for (const entry of (lastHandHistory || [])) {
+    if (!byStreet[entry.street]) byStreet[entry.street] = [];
+    byStreet[entry.street].push(entry);
+  }
+
+  const actionLabel = (a) => {
+    switch (a.action) {
+      case 'post_sb': return `posts SB $${fmt(a.amount)}`;
+      case 'post_bb': return `posts BB $${fmt(a.amount)}`;
+      case 'fold':    return 'folds';
+      case 'check':   return 'checks';
+      case 'call':    return `calls $${fmt(a.amount || 0)}`;
+      case 'raise':   return `raises to $${fmt(a.amount || 0)}`;
+      case 'all_in':  return `goes ALL IN $${fmt(a.amount || 0)}`;
+      default:        return a.action;
+    }
+  };
+
+  let histHtml = '';
+  for (const street of streets) {
+    const actions = byStreet[street];
+    if (!actions?.length) continue;
+    histHtml += `<div class="hh-street-header">${street.toUpperCase()}</div>`;
+    for (const a of actions) {
+      histHtml += `<div class="hh-action"><span class="hh-player">${esc(a.username)}</span> ${actionLabel(a)}</div>`;
+    }
+  }
+
+  if (lastHandResult) {
+    const showdown = (lastHandResult.winners || []).filter(w => w.handName);
+    if (showdown.length) {
+      histHtml += '<div class="hh-street-header">SHOWDOWN</div>';
+      for (const w of lastHandResult.winners || []) {
+        const cardsHtml = (w.holeCards || []).map(c => cardHtml(c)).join('');
+        histHtml += `<div class="hh-winner"><span class="hh-player">${esc(w.username)}</span>${w.handName ? `<span class="hh-hand-name">${w.handName}</span>` : ''}${cardsHtml}<span class="hh-amount">+$${fmt(w.amount)}</span></div>`;
+      }
+    } else if (lastHandResult.folded) {
+      histHtml += '<div class="hh-street-header">RESULT</div><div class="hh-action">All others folded</div>';
+      const w = lastHandResult.winners?.[0];
+      if (w) histHtml += `<div class="hh-winner"><span class="hh-player">${esc(w.username)}</span><span class="hh-amount">+$${fmt(w.amount)}</span></div>`;
+    }
+    if (lastHandResult.potBreakdown?.length > 1) {
+      histHtml += `<div class="hh-pots">${lastHandResult.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ')}</div>`;
+    }
+    if (lastHandResult.rakeCollected) {
+      histHtml += `<div style="color:rgba(255,255,255,.4);font-size:.75rem;margin-top:4px">Rake: $${fmt(lastHandResult.rakeCollected)}</div>`;
+    }
+  }
+
+  const modal = document.createElement('div');
+  modal.id = 'hand-history-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9000;display:flex;align-items:center;justify-content:center;padding:16px';
+  modal.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:16px;padding:20px 22px;max-width:500px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.8)">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h3 style="color:var(--gold);margin:0">📋 Hand #${gameState?.handNumber || ''} History</h3>
+        <button onclick="document.getElementById('hand-history-modal').remove()" style="background:none;border:1px solid rgba(255,255,255,.2);color:var(--text);border-radius:6px;padding:3px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="overflow-y:auto;flex:1;font-size:.85rem">${histHtml || '<div style="color:var(--text-dim);text-align:center;padding:20px">No history for last hand</div>'}</div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
 
 // ─── Boot ─────────────────────────────────────────────────────────────────
 

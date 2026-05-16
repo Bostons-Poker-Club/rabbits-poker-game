@@ -54,6 +54,9 @@ class PokerGame {
     this.rakeCollected = 0;
     this.jackpotContribution = 0;
 
+    // Hand history (actions taken this hand)
+    this.handHistory = [];
+
     // Players who acted this street (for tracking betting complete)
     this.playersActedThisStreet = new Set();
 
@@ -150,6 +153,7 @@ class PokerGame {
     this.sidePots = [];
     this.rakeCollected = 0;
     this.jackpotContribution = 0;
+    this.handHistory = [];
     this.currentBet = 0;
     this.minRaise = this.bigBlind;
     this.lastAggressorSeat = null;
@@ -243,6 +247,7 @@ class PokerGame {
       sbPlayer.isAllIn = true;
       this.allInPlayers.add(sbPlayer.userId);
     }
+    this.handHistory.push({ street: 'preflop', userId: sbPlayer.userId, username: sbPlayer.username, action: 'post_sb', amount: sbAmount });
 
     // Post big blind
     const bbAmount = Math.min(this.bigBlind, bbPlayer.chips);
@@ -254,6 +259,7 @@ class PokerGame {
       bbPlayer.isAllIn = true;
       this.allInPlayers.add(bbPlayer.userId);
     }
+    this.handHistory.push({ street: 'preflop', userId: bbPlayer.userId, username: bbPlayer.username, action: 'post_bb', amount: bbAmount });
 
     this.currentBet = bbAmount;
     this.minRaise = bbAmount;
@@ -333,12 +339,14 @@ class PokerGame {
 
   _processFold(player) {
     player.hasFolded = true;
+    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: 'fold' });
   }
 
   _processCheck(player) {
     if (player.currentBet < this.currentBet) {
       throw new Error('Cannot check, must call or raise');
     }
+    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: 'check' });
   }
 
   _processCall(player) {
@@ -352,6 +360,7 @@ class PokerGame {
       player.isAllIn = true;
       this.allInPlayers.add(player.userId);
     }
+    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: player.isAllIn ? 'all_in' : 'call', amount: callAmount });
   }
 
   _processRaise(player, totalAmount) {
@@ -394,6 +403,7 @@ class PokerGame {
       player.isAllIn = true;
       this.allInPlayers.add(player.userId);
     }
+    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: player.isAllIn ? 'all_in' : 'raise', amount: player.currentBet });
   }
 
   _bettingComplete() {
@@ -458,17 +468,12 @@ class PokerGame {
       this.communityCards.push(...newCards);
     }
 
-    if (runItOut && currentStreetIndex < STREETS.length - 2) {
-      // Keep running out cards without action
-      return this.advanceStreet();
-    }
-
-    if (runItOut || nonAllIn.length <= 0) {
-      // Go straight to showdown if all remaining are all-in
+    if (runItOut) {
+      // All players are all-in — return this street for async staged runout with delays
       if (this.currentStreet === 'river') {
         return this.showdown();
       }
-      return this.advanceStreet();
+      return { action: 'all_in_runout', street: this.currentStreet, communityCards: this.communityCards };
     }
 
     // Set first to act (first active player left of dealer)
@@ -539,13 +544,27 @@ class PokerGame {
 
       const splitAmount = Math.floor(pot.amount / winners.length);
       const remainder = pot.amount - (splitAmount * winners.length);
+      const isSplit = winners.length > 1;
 
-      winners.forEach((w, i) => {
+      // Extra chip goes to player left of dealer among tied players
+      let extraChipUserId = winners[0].player.userId;
+      if (isSplit && remainder > 0) {
+        const allSeats = Array.from(this.seats.keys()).sort((a, b) => a - b);
+        const dealerIdx = allSeats.indexOf(this.dealerSeat);
+        const winnerIds = new Set(winners.map(w => w.player.userId));
+        for (let i = 1; i <= allSeats.length; i++) {
+          const uid = this.seats.get(allSeats[(dealerIdx + i) % allSeats.length]);
+          if (winnerIds.has(uid)) { extraChipUserId = uid; break; }
+        }
+      }
+
+      winners.forEach(w => {
         results.push({
           winner: w.player,
-          amount: splitAmount + (i === 0 ? remainder : 0),
+          amount: splitAmount + (w.player.userId === extraChipUserId ? remainder : 0),
           handResult: w.handResult,
-          isMainPot: pot.isMain
+          isMainPot: pot.isMain,
+          isSplit
         });
       });
     }
@@ -578,13 +597,29 @@ class PokerGame {
       this.onJackpotCheck(bestOverall.handResult.rank, bestOverall.winner.userId);
     }
 
+    // Pot breakdown for side-pot display (only when more than 1 pot)
+    const potBreakdown = pots.length > 1
+      ? pots.map((p, i) => ({ label: i === 0 ? 'Main Pot' : `Side Pot ${i}`, amount: p.amount }))
+      : null;
+
+    // Reveal all non-folded players' hole cards at showdown
+    const allHoleCards = {};
+    for (const player of this.players.values()) {
+      if (!player.hasFolded && player.holeCards.length) {
+        allHoleCards[player.userId] = player.holeCards;
+      }
+    }
+
     const handResult = {
       winners: results,
       communityCards: this.communityCards,
       rakeCollected: rakeAmount,
       jackpotContribution: jackpotContrib,
       handNumber: this.handNumber,
-      pot: totalPot
+      pot: totalPot,
+      potBreakdown,
+      allHoleCards,
+      history: [...this.handHistory]
     };
 
     if (this.onHandEnd) {

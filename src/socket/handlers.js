@@ -1579,6 +1579,16 @@ async function startNewHand(io, tableId, game) {
   }
 }
 
+function _getShowdownCards(game) {
+  const cards = {};
+  for (const player of game.players.values()) {
+    if (!player.hasFolded && player.holeCards.length) {
+      cards[player.userId] = player.holeCards;
+    }
+  }
+  return cards;
+}
+
 function handleActionResult(io, tableId, game, result, _depth = 0) {
   if (!result || _depth > 6) return;
 
@@ -1598,9 +1608,32 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
     }
   }
 
+  // ─── All-In Runout: deal streets with pauses for drama ────────────────────
+  if (result.action === 'all_in_runout') {
+    broadcastGameState(io, tableId, game);
+    io.to(tableId).emit('street_changed', {
+      street: result.street,
+      communityCards: result.communityCards,
+      allInRunout: true,
+      allHoleCards: _getShowdownCards(game)
+    });
+    setTimeout(() => {
+      try {
+        const nextResult = game.advanceStreet();
+        game.lastActionAt = Date.now();
+        broadcastGameState(io, tableId, game);
+        handleActionResult(io, tableId, game, nextResult, _depth + 1);
+      } catch (e) {
+        console.error('[all_in_runout] advance failed:', e.message);
+      }
+    }, 1500);
+    return;
+  }
+
   if (result.action === 'showdown' || result.action === 'hand_ended') {
     const handResult = result.result;
     const tblName = game.tableName || tableId;
+    const isSplitPot = handResult.winners.some(w => w.isSplit);
     io.to(tableId).emit('hand_ended', {
       winners: handResult.winners.map(w => ({
         userId: w.winner.userId,
@@ -1608,12 +1641,17 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
         amount: w.amount,
         handName: w.handResult?.name,
         holeCards: w.winner.holeCards,
-        isMainPot: w.isMainPot
+        isMainPot: w.isMainPot,
+        isSplit: w.isSplit || false
       })),
       communityCards: handResult.communityCards,
       rakeCollected: handResult.rakeCollected,
       pot: handResult.pot,
-      folded: handResult.folded || false
+      folded: handResult.folded || false,
+      potBreakdown: handResult.potBreakdown || null,
+      allHoleCards: handResult.allHoleCards || null,
+      history: handResult.history || [],
+      isSplitPot
     });
 
     // Log each winner's profit and send SMS

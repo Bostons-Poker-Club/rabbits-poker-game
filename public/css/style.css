@@ -1542,3 +1542,70 @@ input, select, textarea { font-family: inherit; }
   .seat-avatar { width: 30px; height: 30px; }
   .seat-initials { font-size: 0.75rem; }
 }
+
+/* ─── Split Pot Hand Result ──────────────────────────────────────────────── */
+.split-winner-cards {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 3px 6px;
+  padding: 3px 8px;
+  background: rgba(255,255,255,.07);
+  border-radius: 6px;
+}
+.split-winner-name {
+  font-size: .72rem;
+  color: var(--chip-green);
+  font-weight: 600;
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+/* ─── Hand History Modal ─────────────────────────────────────────────────── */
+.hh-street-header {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .08em;
+  margin: 10px 0 3px;
+  padding-bottom: 3px;
+  border-bottom: 1px solid rgba(255,255,255,.12);
+}
+.hh-action {
+  padding: 3px 2px;
+  font-size: .83rem;
+  color: var(--text);
+  border-bottom: 1px solid rgba(255,255,255,.04);
+}
+.hh-player {
+  color: var(--chip-green);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.hh-winner {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  padding: 4px 6px;
+  background: rgba(212,175,55,.1);
+  border-radius: 4px;
+  margin: 2px 0;
+  font-size: .82rem;
+}
+.hh-hand-name {
+  color: var(--gold);
+  font-size: .75rem;
+}
+.hh-amount {
+  color: var(--chip-green);
+  font-weight: 700;
+  margin-left: auto;
+}
+.hh-pots {
+  font-size: .72rem;
+  color: rgba(255,255,255,.45);
+  margin-top: 6px;
+  padding-top: 4px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
