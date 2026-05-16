@@ -767,6 +767,32 @@ function setupSocketHandlers(io) {
       broadcastPttAdminState(io, tId);
     });
 
+    // ─── Camera state ─────────────────────────────────────────────────────────
+
+    // Broadcast camera on/off to the rest of the table
+    socket.on('cam:state_change', ({ enabled }) => {
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      socket.to(tId).emit('cam:state_change', { userId, username, enabled: !!enabled });
+    });
+
+    // Admin: turn off a specific player's camera
+    socket.on('cam:admin_disable', ({ targetUserId }) => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('cam:disabled_by_admin', {});
+    });
+
+    // Admin: turn off all cameras at this table
+    socket.on('cam:admin_disable_all', () => {
+      if (!isAdmin) return;
+      const tId = socket.currentTableId;
+      if (!tId) return;
+      io.to(tId).emit('cam:disabled_by_admin', {});
+    });
+
     // ─── Host Actions ─────────────────────────────────────────────────────
 
     socket.on('host:add_chips', async ({ targetUserId, amount }) => {

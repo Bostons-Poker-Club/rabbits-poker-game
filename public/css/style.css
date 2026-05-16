@@ -1484,3 +1484,61 @@ input, select, textarea { font-family: inherit; }
     max-height: 80vh;
   }
 }
+
+/* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
+.seat-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid rgba(255,255,255,0.15);
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: border-color 0.2s;
+  cursor: pointer;
+  position: relative;
+}
+.seat-initials {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.7);
+  user-select: none;
+}
+.seat-cam-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+/* Hide initials when video is active */
+.seat-avatar.has-video .seat-initials { display: none; }
+
+/* Gold ring — player's turn */
+.seat-box.active-player .seat-avatar {
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(212,175,55,0.7);
+}
+/* Green pulse ring — speaking */
+.seat-box.ptt-speaking .seat-avatar {
+  border-color: #00e676;
+  box-shadow: 0 0 12px rgba(0,230,118,0.8);
+  animation: cam-speak-pulse 0.7s ease-in-out infinite alternate;
+}
+@keyframes cam-speak-pulse {
+  from { box-shadow: 0 0 6px rgba(0,230,118,0.5); }
+  to   { box-shadow: 0 0 18px rgba(0,230,118,0.9); }
+}
+
+/* Compact on small screens */
+@media (max-width: 480px) {
+  .seat-avatar { width: 36px; height: 36px; }
+  .seat-initials { font-size: 0.9rem; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  .seat-avatar { width: 30px; height: 30px; }
+  .seat-initials { font-size: 0.75rem; }
+}

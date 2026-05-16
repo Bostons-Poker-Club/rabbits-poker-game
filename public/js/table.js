@@ -38,6 +38,12 @@ let adminMuted = false;        // true when admin has muted this client
 let openMicMode = false;       // true when in continuous open-mic mode
 let openMicActive = false;     // true when currently transmitting in open-mic mode
 
+// ─── Camera state ─────────────────────────────────────────────────────────
+let camStream = null;            // local camera MediaStream
+let camEnabled = false;          // whether our camera is on
+const peerCamStreams = new Map(); // userId -> MediaStream (remote video)
+const peerCamEnabled = new Map(); // userId -> bool (remote cam state)
+
 const ICE_CFG = { iceServers: [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'turn:openrelay.metered.ca:80',                username: 'openrelayproject', credential: 'openrelayproject' },
@@ -110,6 +116,7 @@ function connect() {
       if (hhBtn) hhBtn.style.display = '';
     }
     _pttInit();
+    _showCamPrompt();
   });
 
   socket.on('game_state', (state) => {
@@ -426,6 +433,24 @@ function connect() {
     openMicMode = (mode === 'openmic');
     renderAdminPttPanel(players, mode);
   });
+
+  // ─── Camera socket events ─────────────────────────────────────────────────
+
+  socket.on('cam:state_change', ({ userId: uid, username: uname, enabled }) => {
+    peerCamEnabled.set(uid, enabled);
+    if (!enabled) {
+      // Peer turned off cam — clear their avatar video
+      const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
+      if (avatarEl) _clearAvatarVideo(avatarEl);
+    } else {
+      _updateSeatVideos();
+    }
+  });
+
+  socket.on('cam:disabled_by_admin', () => {
+    if (camEnabled) _camDisable();
+    toast('Your camera has been disabled by admin', 'error');
+  });
 }
 
 // ─── Render Table ─────────────────────────────────────────────────────────
@@ -593,6 +618,7 @@ function renderSeats(state) {
           <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}" data-user-id="${player.userId}">
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
+            <div class="seat-avatar" data-cam-uid="${player.userId}"><div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div></div>
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips" style="font-weight:700;color:var(--chip-green)">${player.chips > 0 ? `🪙 ${fmt(player.chips)}` : '<span style="color:var(--red)">🪙 0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
@@ -613,6 +639,7 @@ function renderSeats(state) {
   }
 
   container.innerHTML = html;
+  _updateSeatVideos();
 }
 
 function renderMyCards(state) {
@@ -1078,6 +1105,217 @@ function openTableInbox() {
   document.body.appendChild(div);
 }
 
+// ─── Camera ───────────────────────────────────────────────────────────────────
+
+function _getCamVideoSender(pc) {
+  for (const t of pc.getTransceivers()) {
+    if (t.receiver.track.kind === 'video') return t.sender;
+  }
+  return null;
+}
+
+async function _camEnable() {
+  try {
+    camStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+      audio: false
+    });
+    camEnabled = true;
+    const [videoTrack] = camStream.getVideoTracks();
+    // Push video track to all existing peer connections
+    for (const [peerId, pc] of pttPeers) {
+      const sender = _getCamVideoSender(pc);
+      if (sender) {
+        try { await sender.replaceTrack(videoTrack); } catch {}
+      }
+    }
+    _updateCamBtn();
+    _updateSeatVideos();
+    socket?.emit('cam:state_change', { enabled: true });
+  } catch (err) {
+    console.error('[CAM] getUserMedia error:', err.name, err.message);
+    if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+      toast('Camera permission denied — check browser settings', 'error');
+    } else {
+      toast('Camera error: ' + err.message, 'error');
+    }
+  }
+}
+
+function _camDisable() {
+  for (const [, pc] of pttPeers) {
+    const sender = _getCamVideoSender(pc);
+    if (sender) sender.replaceTrack(null).catch(() => {});
+  }
+  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  camEnabled = false;
+  _updateCamBtn();
+  _updateSeatVideos();
+  socket?.emit('cam:state_change', { enabled: false });
+}
+
+function toggleCamera() {
+  if (camEnabled) _camDisable();
+  else _camEnable();
+}
+
+function _updateCamBtn() {
+  const btn = document.getElementById('cam-toggle-btn');
+  if (!btn) return;
+  btn.textContent = camEnabled ? '📷' : '📷';
+  btn.style.opacity = camEnabled ? '1' : '0.5';
+  btn.title = camEnabled ? 'Camera on — click to turn off' : 'Camera off — click to enable';
+  btn.style.borderColor = camEnabled ? 'var(--chip-green)' : '';
+}
+
+function _updateSeatVideos() {
+  // Local player's seat
+  const myAvatar = document.querySelector(`.seat-avatar[data-cam-uid="${user.id}"]`);
+  if (myAvatar) {
+    if (camEnabled && camStream) _setAvatarVideo(myAvatar, camStream, true);
+    else _clearAvatarVideo(myAvatar);
+  }
+  // Remote players
+  for (const [uid, stream] of peerCamStreams) {
+    const enabled = peerCamEnabled.get(uid);
+    const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
+    if (!avatarEl) continue;
+    if (enabled) _setAvatarVideo(avatarEl, stream, false);
+    else _clearAvatarVideo(avatarEl);
+  }
+}
+
+function _setAvatarVideo(avatarEl, stream, muted) {
+  avatarEl.classList.add('has-video');
+  let vid = avatarEl.querySelector('video');
+  if (!vid) {
+    vid = document.createElement('video');
+    vid.className = 'seat-cam-video';
+    vid.autoplay = true;
+    vid.playsInline = true;
+    vid.muted = muted;
+    vid.onclick = () => _expandCamVideo(vid, avatarEl.dataset.camUid);
+    avatarEl.appendChild(vid);
+  }
+  if (vid.srcObject !== stream) vid.srcObject = stream;
+  vid.play().catch(() => {});
+}
+
+function _clearAvatarVideo(avatarEl) {
+  avatarEl.classList.remove('has-video');
+  const vid = avatarEl.querySelector('video');
+  if (vid) { vid.srcObject = null; vid.remove(); }
+}
+
+function _expandCamVideo(vid, userId) {
+  const existing = document.getElementById('cam-expand-overlay');
+  if (existing) { existing.remove(); return; }
+  const overlay = document.createElement('div');
+  overlay.id = 'cam-expand-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9990;display:flex;align-items:center;justify-content:center;cursor:pointer';
+  overlay.onclick = () => overlay.remove();
+  const bigVid = document.createElement('video');
+  bigVid.autoplay = true;
+  bigVid.playsInline = true;
+  bigVid.muted = vid.muted;
+  bigVid.srcObject = vid.srcObject;
+  bigVid.style.cssText = 'max-width:90vw;max-height:80vh;border-radius:16px;border:2px solid var(--gold);box-shadow:0 0 40px rgba(0,0,0,.8)';
+  overlay.appendChild(bigVid);
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'position:absolute;top:20px;right:24px;background:none;border:none;color:#fff;font-size:1.8rem;cursor:pointer;line-height:1';
+  closeBtn.onclick = (e) => { e.stopPropagation(); overlay.remove(); };
+  overlay.appendChild(closeBtn);
+  bigVid.play().catch(() => {});
+  document.body.appendChild(overlay);
+}
+
+function _showCamPrompt() {
+  if (camStream || sessionStorage.getItem('rp_cam_skip')) return;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'cam-prompt-modal';
+  modal.innerHTML = `
+    <div class="modal" style="max-width:380px;text-align:center;padding:28px 24px">
+      <div style="font-size:3rem;margin-bottom:10px">📸</div>
+      <h3 style="color:var(--gold);margin:0 0 8px">Enable Camera?</h3>
+      <p style="color:var(--text-dim);font-size:.88rem;margin:0 0 22px">Other players can see you during the game.<br>You can turn it off anytime.</p>
+      <div style="display:flex;gap:12px;justify-content:center">
+        <button class="btn btn-outline" onclick="_camPromptSkip()">Skip</button>
+        <button class="btn btn-gold" onclick="_camPromptEnable()">📷 Enable Camera</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function _camPromptSkip() {
+  sessionStorage.setItem('rp_cam_skip', '1');
+  document.getElementById('cam-prompt-modal')?.remove();
+}
+
+function _camPromptEnable() {
+  document.getElementById('cam-prompt-modal')?.remove();
+  _camEnable();
+}
+
+function openCamGrid() {
+  const existing = document.getElementById('cam-grid-modal');
+  if (existing) { existing.remove(); return; }
+  const u = getUser();
+  if (!u?.isAdmin) return;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'cam-grid-modal';
+  const streams = [];
+  // Add local cam
+  if (camEnabled && camStream) streams.push({ label: 'You', stream: camStream, muted: true, uid: user.id });
+  // Add remote cams
+  for (const [uid, stream] of peerCamStreams) {
+    if (peerCamEnabled.get(uid)) {
+      const p = gameState?.players?.find(pl => pl.userId === uid);
+      streams.push({ label: p?.username || uid, stream, muted: false, uid });
+    }
+  }
+  if (!streams.length) { toast('No active cameras'); return; }
+  const cells = streams.map(s => `
+    <div style="position:relative;background:#000;border-radius:10px;overflow:hidden">
+      <video id="cg-vid-${s.uid}" autoplay playsinline ${s.muted ? 'muted' : ''} style="width:100%;display:block"></video>
+      <div style="position:absolute;bottom:4px;left:6px;background:rgba(0,0,0,.6);color:#fff;font-size:.72rem;padding:2px 6px;border-radius:4px">${esc(s.label)}</div>
+      ${u?.isAdmin && s.uid !== user.id ? `<button onclick="adminDisableCam('${s.uid}')" style="position:absolute;top:4px;right:4px;background:rgba(200,0,0,.7);border:none;color:#fff;font-size:.65rem;padding:2px 6px;border-radius:4px;cursor:pointer">Disable</button>` : ''}
+    </div>`).join('');
+  modal.innerHTML = `
+    <div class="modal" style="max-width:720px;width:95vw;max-height:85vh;overflow-y:auto">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <h3 style="color:var(--gold);margin:0">📷 Camera Grid</h3>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm btn-outline" onclick="adminDisableAllCams()" style="font-size:.78rem">Disable All</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('cam-grid-modal')?.remove()" style="font-size:.78rem">✕ Close</button>
+        </div>
+      </div>
+      <div id="cam-grid-cells" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px">${cells}</div>
+    </div>`;
+  document.body.appendChild(modal);
+  // Attach streams AFTER adding to DOM
+  for (const s of streams) {
+    const v = document.getElementById(`cg-vid-${s.uid}`);
+    if (v) { v.srcObject = s.stream; v.play().catch(() => {}); }
+  }
+}
+
+function adminDisableCam(targetUserId) {
+  socket?.emit('cam:admin_disable', { targetUserId });
+  peerCamEnabled.set(targetUserId, false);
+  _updateSeatVideos();
+  document.getElementById('cam-grid-modal')?.remove();
+}
+
+function adminDisableAllCams() {
+  socket?.emit('cam:admin_disable_all');
+  for (const uid of peerCamEnabled.keys()) peerCamEnabled.set(uid, false);
+  _updateSeatVideos();
+  document.getElementById('cam-grid-modal')?.remove();
+}
+
 // ─── PTT Core Helpers ─────────────────────────────────────────────────────────
 
 // Build and wire a fresh RTCPeerConnection for peerId.
@@ -1099,12 +1337,18 @@ function _pttCreatePC(peerId, addTrackNow = true) {
   document.body.appendChild(audio);
   pttAudioEls.set(peerId, audio);
 
-  // Play incoming audio — use stream if provided, otherwise wrap the track
+  // Route incoming tracks — audio to the dedicated audio element, video to the seat avatar
   pc.ontrack = (e) => {
     const stream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
-    console.log(`[PTT] ontrack from ${peerId}: kind=${e.track.kind} muted=${e.track.muted}`);
-    audio.srcObject = stream;
-    audio.play().catch(err => console.warn('[PTT] autoplay blocked (will play on user gesture):', err.message));
+    if (e.track.kind === 'audio') {
+      console.log(`[PTT] audio track from ${peerId}`);
+      audio.srcObject = stream;
+      audio.play().catch(err => console.warn('[PTT] autoplay blocked:', err.message));
+    } else if (e.track.kind === 'video') {
+      console.log(`[CAM] video track from ${peerId}`);
+      peerCamStreams.set(peerId, stream);
+      _updateSeatVideos();
+    }
   };
 
   // Relay our ICE candidates to the peer
@@ -1136,6 +1380,12 @@ function _pttCreatePC(peerId, addTrackNow = true) {
       pc.addTransceiver('audio', { direction: 'recvonly' });
       console.warn(`[PTT] no mic for ${peerId} — recvonly transceiver`);
     }
+    // Always pre-negotiate video (sendrecv) so replaceTrack works later without renegotiation
+    const camVideoTrack = camStream ? camStream.getVideoTracks()[0] : null;
+    pc.addTransceiver(camVideoTrack || 'video', {
+      direction: 'sendrecv',
+      streams: camStream ? [camStream] : []
+    });
   }
 
   return pc;
@@ -1177,6 +1427,17 @@ async function _pttAnswer(fromUserId, sdp) {
         console.log(`[PTT] answer: set sendrecv track on transceiver for ${fromUserId}`);
       } else if (audioTrack) {
         pc.addTrack(audioTrack, micStream);
+      }
+    }
+    // Set up video transceiver on answerer side
+    const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+    if (videoTransceiver) {
+      if (camStream) {
+        const [videoTrack] = camStream.getVideoTracks();
+        if (videoTrack) {
+          await videoTransceiver.sender.replaceTrack(videoTrack);
+          videoTransceiver.direction = 'sendrecv';
+        }
       }
     }
     const answer = await pc.createAnswer();
@@ -1395,11 +1656,16 @@ function renderAdminPttPanel(players, mode) {
       const btnClass    = isMuted ? 'mic-toggle-btn unmute' : 'mic-toggle-btn mute';
       const btnLabel    = isMuted ? 'Unmute' : 'Mute';
       const btnAction   = isMuted ? `adminUnmutePlayer('${p.userId}')` : `adminMutePlayer('${p.userId}')`;
+      const hasCam = peerCamEnabled.get(p.userId);
+      const camBtnHtml = hasCam
+        ? `<button class="mic-toggle-btn mute" onclick="adminDisableCam('${p.userId}')">📷 Off</button>`
+        : '';
       rows += `
         <div class="mic-player-row">
           <span class="${iconClass}" style="${iconColor}">${iconEmoji}</span>
           <span class="mic-player-name">${p.username}</span>
           <button class="${btnClass}" onclick="${btnAction}">${btnLabel}</button>
+          ${camBtnHtml}
         </div>`;
     }
   } else {
@@ -1410,6 +1676,7 @@ function renderAdminPttPanel(players, mode) {
     <div class="mic-panel-actions">
       <button class="mic-btn mic-btn-mute-all"   onclick="adminMuteAll()">🔇 Mute All</button>
       <button class="mic-btn mic-btn-unmute-all" onclick="adminUnmuteAll()">🔊 Unmute All</button>
+      <button class="mic-btn"                    onclick="openCamGrid()" style="background:rgba(200,160,0,.15);border-color:var(--gold)">📷 Cameras</button>
       <button class="${modeToggleClass}" onclick="adminToggleMode()">${modeToggleLabel}</button>
     </div>
     ${rows}
