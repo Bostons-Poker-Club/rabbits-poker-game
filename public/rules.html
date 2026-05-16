@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RabbsRoom – House Rules</title>
+  <meta name="theme-color" content="#c8a84b">
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    body { max-width: 780px; margin: 0 auto; padding: 20px 16px 60px; }
+    .rules-header { text-align: center; padding: 28px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 28px; }
+    .rules-header h1 { color: var(--gold); font-size: 1.8rem; margin: 0 0 6px; }
+    .rules-header p  { color: var(--text-dim); margin: 0; font-size: .92rem; }
+    .rules-section { margin-bottom: 32px; }
+    .rules-section h2 { color: var(--gold); font-size: 1.15rem; font-weight: 700; margin: 0 0 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+    .rules-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+    .rules-list li { padding: 10px 14px; background: rgba(255,255,255,.04); border: 1px solid var(--border); border-radius: var(--radius); font-size: .88rem; line-height: 1.6; color: var(--text); }
+    .rules-list li strong { color: var(--gold); }
+    .rules-list li .badge { display: inline-block; background: rgba(212,175,55,.15); color: var(--gold); border-radius: 4px; font-size: .72rem; padding: 1px 6px; font-weight: 700; margin-right: 4px; vertical-align: middle; }
+    .rules-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+    .rules-nav a { font-size: .8rem; padding: 5px 12px; border: 1px solid var(--border); border-radius: 20px; color: var(--text-dim); text-decoration: none; transition: border-color .15s, color .15s; }
+    .rules-nav a:hover { border-color: var(--gold); color: var(--gold); }
+    .back-link { display: inline-block; margin-bottom: 20px; color: var(--gold); font-size: .88rem; text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .highlight-box { background: rgba(212,175,55,.08); border: 1px solid rgba(212,175,55,.3); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 16px; font-size: .88rem; line-height: 1.6; color: var(--text); }
+    .highlight-box strong { color: var(--gold); }
+    table.rules-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin-top: 8px; }
+    table.rules-table th { color: var(--text-dim); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; }
+    table.rules-table td { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,.05); color: var(--text); }
+    table.rules-table tr:last-child td { border-bottom: none; }
+    table.rules-table td:first-child { color: var(--gold); font-weight: 600; }
+  </style>
+</head>
+<body>
+
+<a class="back-link" href="/lobby.html">← Back to Lobby</a>
+
+<div class="rules-header">
+  <img src="/images/logo.svg" alt="" style="width:56px;height:auto;margin-bottom:10px">
+  <h1>House Rules</h1>
+  <p>Boston Poker Club — RabbsRoom</p>
+</div>
+
+<nav class="rules-nav">
+  <a href="#holdem">Texas Hold'em</a>
+  <a href="#plo">PLO</a>
+  <a href="#buyin">Buy-In & Cash-Out</a>
+  <a href="#jackpot">High Hand Jackpot</a>
+  <a href="#breaks">Breaks & Timeouts</a>
+  <a href="#conduct">Conduct</a>
+  <a href="#house">House Rules</a>
+</nav>
+
+<!-- ── Texas Hold'em ─────────────────────────────────────────── -->
+<div class="rules-section" id="holdem">
+  <h2>🃏 Texas Hold'em Rules</h2>
+  <div class="highlight-box">
+    Each player is dealt <strong>2 private hole cards</strong>. Five <strong>community cards</strong> are dealt face-up in three rounds (Flop, Turn, River). Make the best 5-card hand using any combination of your 2 hole cards and the 5 community cards.
+  </div>
+  <ul class="rules-list">
+    <li><span class="badge">BLINDS</span> The two players to the left of the dealer post the <strong>Small Blind</strong> and <strong>Big Blind</strong> before any cards are dealt.</li>
+    <li><span class="badge">DEAL</span> Each player receives 2 face-down hole cards. A round of betting begins with the player left of the Big Blind (pre-flop).</li>
+    <li><span class="badge">FLOP</span> Three community cards are dealt face-up. A betting round follows starting left of the dealer button.</li>
+    <li><span class="badge">TURN</span> A fourth community card is dealt. Another betting round follows.</li>
+    <li><span class="badge">RIVER</span> The fifth and final community card is dealt. A final betting round follows.</li>
+    <li><span class="badge">SHOWDOWN</span> If two or more players remain after the final bet, hole cards are revealed. The best 5-card hand wins the pot.</li>
+    <li><span class="badge">BETTING</span> Actions in order: Check (no bet open), Call (match current bet), Raise (increase bet), Fold (discard hand), All-In (bet all remaining chips).</li>
+    <li><span class="badge">SIDE POT</span> When a player goes All-In and others have more chips, a side pot is created. The all-in player can only win the main pot.</li>
+  </ul>
+
+  <h3 style="color:var(--text-dim);font-size:.9rem;margin:20px 0 10px">Hand Rankings (Highest → Lowest)</h3>
+  <table class="rules-table">
+    <thead><tr><th>#</th><th>Hand</th><th>Description</th><th>Example</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>Royal Flush</td><td>A-K-Q-J-10 of the same suit</td><td>A♠ K♠ Q♠ J♠ 10♠</td></tr>
+      <tr><td>2</td><td>Straight Flush</td><td>Five consecutive cards, same suit</td><td>9♥ 8♥ 7♥ 6♥ 5♥</td></tr>
+      <tr><td>3</td><td>Four of a Kind</td><td>Four cards of the same rank</td><td>A♠ A♥ A♦ A♣ K♠</td></tr>
+      <tr><td>4</td><td>Full House</td><td>Three of a kind + a pair</td><td>K♠ K♥ K♦ Q♠ Q♥</td></tr>
+      <tr><td>5</td><td>Flush</td><td>Five cards of the same suit</td><td>A♥ J♥ 8♥ 5♥ 2♥</td></tr>
+      <tr><td>6</td><td>Straight</td><td>Five consecutive cards, any suit</td><td>9♠ 8♥ 7♦ 6♣ 5♠</td></tr>
+      <tr><td>7</td><td>Three of a Kind</td><td>Three cards of the same rank</td><td>Q♠ Q♥ Q♦ A♣ K♠</td></tr>
+      <tr><td>8</td><td>Two Pair</td><td>Two different pairs</td><td>J♠ J♥ 9♦ 9♣ A♠</td></tr>
+      <tr><td>9</td><td>One Pair</td><td>Two cards of the same rank</td><td>A♠ A♥ K♦ Q♣ J♠</td></tr>
+      <tr><td>10</td><td>High Card</td><td>Highest card when no hand is made</td><td>A♠ K♥ Q♦ J♣ 9♠</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ── PLO ────────────────────────────────────────────────────── -->
+<div class="rules-section" id="plo">
+  <h2>🃏 Pot-Limit Omaha (PLO) Rules</h2>
+  <div class="highlight-box">
+    Each player is dealt <strong>4 hole cards</strong>. You <strong>must</strong> use exactly <strong>2 of your 4 hole cards</strong> and exactly <strong>3 of the 5 community cards</strong> to make your best hand.
+  </div>
+  <ul class="rules-list">
+    <li><span class="badge">KEY RULE</span> Unlike Hold'em, you <strong>must</strong> use exactly 2 hole cards — no more, no less. You cannot play the board.</li>
+    <li><span class="badge">POT LIMIT</span> The maximum bet at any time is the current size of the pot. Pre-flop, the max raise is based on the big blind amount.</li>
+    <li><span class="badge">BETTING</span> Structure is identical to Hold'em: Blinds → Flop → Turn → River → Showdown.</li>
+    <li><span class="badge">NUTS</span> With 4 hole cards there are 6 possible 2-card combinations. Always consider all 6 to find your best hand.</li>
+    <li><span class="badge">HAND RANKS</span> Same hand rankings as Texas Hold'em apply.</li>
+  </ul>
+</div>
+
+<!-- ── Buy-In & Cash-Out ──────────────────────────────────────── -->
+<div class="rules-section" id="buyin">
+  <h2>💰 Buy-In &amp; Cash-Out Rules</h2>
+  <ul class="rules-list">
+    <li><span class="badge">BUY-IN</span> Minimum buy-in is set per table. You may sit with any amount up to the table maximum. New players start with 0 chips — admin adds chips after identity verification.</li>
+    <li><span class="badge">REBUY</span> You may rebuy at any time when it is not your turn to act. Rebuys are processed by the admin/host.</li>
+    <li><span class="badge">ADD-ON</span> You may top up your stack between hands. Request chips from admin/host via the "Need Chips?" section in the lobby.</li>
+    <li><span class="badge">CASH-OUT</span> Use the <strong>Leave Table</strong> button at any time. Chips are returned to your account instantly. Contact admin to convert chips to cash.</li>
+    <li><span class="badge">PAYMENT</span> All chip-to-cash conversions are handled by admin. Payment methods are arranged privately. Always verify your balance before leaving.</li>
+    <li><span class="badge">SHORT STACK</span> A player with fewer chips than the big blind may go all-in. They may only win up to their all-in amount from each other player (side pots apply).</li>
+  </ul>
+</div>
+
+<!-- ── High Hand Jackpot ───────────────────────────────────────── -->
+<div class="rules-section" id="jackpot">
+  <h2>🏆 High Hand Jackpot Rules</h2>
+  <div class="highlight-box">
+    The <strong>High Hand Jackpot</strong> rewards the best hand made during the jackpot period. The jackpot resets periodically and accumulates rake contributions between resets.
+  </div>
+  <ul class="rules-list">
+    <li><span class="badge">ELIGIBILITY</span> Any hand using both hole cards and at least 3 community cards at showdown qualifies. The hand must reach showdown (no uncontested wins).</li>
+    <li><span class="badge">QUALIFYING HANDS</span> Typically Four of a Kind or better qualifies — the qualifying threshold is set by admin.</li>
+    <li><span class="badge">AWARD</span> The jackpot is awarded by the admin/host after verifying the qualifying hand. The winning player receives the full jackpot balance.</li>
+    <li><span class="badge">RESET</span> The jackpot resets on a scheduled timer (visible in the lobby). A portion of each pot's rake feeds the jackpot.</li>
+    <li><span class="badge">DISPUTES</span> All jackpot awards are final once confirmed by admin. Screenshots/hand history are reviewed for verification.</li>
+    <li><span class="badge">SUBMIT</span> Hosts and players with qualifying hands should use the 🏆 High Hand button at the table to submit for review.</li>
+  </ul>
+</div>
+
+<!-- ── Breaks & Timeouts ──────────────────────────────────────── -->
+<div class="rules-section" id="breaks">
+  <h2>☕ Breaks &amp; Timeout Rules</h2>
+  <ul class="rules-list">
+    <li><span class="badge">BREAK</span> Each player is entitled to a limited number of breaks per session. Use the <strong>☕ Break</strong> button at the table. Your seat is held while on break.</li>
+    <li><span class="badge">BREAK LIMIT</span> Break passes are limited (typically 3 per session). Once break passes are exhausted, you will be marked as sitting out.</li>
+    <li><span class="badge">SHOT CLOCK</span> When it's your turn to act, a timer runs. Failure to act before the timer expires results in an automatic fold (or check if no bet is open).</li>
+    <li><span class="badge">SITTING OUT</span> If you go sitting-out (away), your hand will be folded each round. Antes/blinds are still posted. Return promptly to avoid being removed from the table.</li>
+    <li><span class="badge">SESSION TIMEOUT</span> Players are automatically logged out after 2 hours of inactivity. Admins after 4 hours. A 5-minute warning is shown before logout.</li>
+    <li><span class="badge">DISCONNECT</span> If you disconnect, your hand plays out normally (auto-fold on your turn). Reconnecting within a reasonable time restores your seat.</li>
+  </ul>
+</div>
+
+<!-- ── Conduct ─────────────────────────────────────────────────── -->
+<div class="rules-section" id="conduct">
+  <h2>🤝 Player Conduct</h2>
+  <ul class="rules-list">
+    <li><span class="badge">RESPECT</span> All players must treat each other and staff with respect. Abusive language in chat is not tolerated.</li>
+    <li><span class="badge">COLLUSION</span> Soft-playing, chip dumping, or any form of collusion results in immediate removal and forfeiture of funds.</li>
+    <li><span class="badge">SLOW ROLL</span> Deliberately delaying the reveal of a winning hand at showdown is considered poor etiquette.</li>
+    <li><span class="badge">ONE PLAYER</span> One player per account. Sharing accounts or playing multiple accounts simultaneously is prohibited.</li>
+    <li><span class="badge">CHAT</span> Keep table chat game-related. No politics, harassment, or spam. Admin can and will mute or remove players.</li>
+    <li><span class="badge">DECISIONS FINAL</span> Once an action is submitted (fold, call, raise) it is final and binding. Misclicks are not reversed.</li>
+  </ul>
+</div>
+
+<!-- ── House Rules ────────────────────────────────────────────── -->
+<div class="rules-section" id="house">
+  <h2>🏠 Boston Poker Club House Rules</h2>
+  <ul class="rules-list">
+    <li><span class="badge">PRIVATE CLUB</span> RabbsRoom is a private members-only poker club. Membership is by invitation or approved application only.</li>
+    <li><span class="badge">IDENTITY</span> All players must register with their legal name as on government ID. Identity may be verified by admin before chip access is granted.</li>
+    <li><span class="badge">RAKE</span> A rake is collected from each pot. The rake percentage is displayed on each table. Rake funds operating costs and the High Hand Jackpot.</li>
+    <li><span class="badge">HOST FEE</span> Hosts pay a monthly platform fee. Suspended hosts lose table hosting privileges until fee is paid.</li>
+    <li><span class="badge">DISPUTES</span> All disputes are handled by admin. Admin decisions are final. Contact: <strong>bostonspokerclub.amitureflops@gmail.com</strong></li>
+    <li><span class="badge">CHANGES</span> Rules may be updated at any time. Players are notified via the broadcast system. Continued play constitutes acceptance.</li>
+    <li><span class="badge">WAITING LIST</span> When a table is full, join the waiting list. You will be notified via SMS and an in-app popup when a seat becomes available.</li>
+  </ul>
+</div>
+
+<div style="text-align:center;margin-top:40px;padding-top:20px;border-top:1px solid var(--border)">
+  <a class="back-link" href="/lobby.html">← Back to Lobby</a>
+  <p style="color:var(--text-dim);font-size:.78rem;margin-top:12px">Questions? Contact admin at bostonspokerclub.amitureflops@gmail.com</p>
+</div>
+
+</body>
+</html>

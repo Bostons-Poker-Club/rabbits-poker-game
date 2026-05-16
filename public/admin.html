@@ -382,6 +382,15 @@
         <tbody id="tables-body"></tbody>
       </table>
     </div>
+
+    <!-- Waiting Lists -->
+    <div style="margin-top:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="color:var(--gold);margin:0;font-size:.95rem">🪑 Table Waiting Lists</h3>
+        <button class="btn btn-sm btn-outline" onclick="loadWaitlists()">Refresh</button>
+      </div>
+      <div id="waitlists-body" style="color:var(--text-dim);font-size:.85rem">No active waiting lists.</div>
+    </div>
   </div>
 
   <!-- Messages -->
@@ -695,6 +704,7 @@
       <button id="pd-tab-profile" onclick="pdSwitchTab('profile')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-size:.85rem;font-weight:700;cursor:pointer">Profile</button>
       <button id="pd-tab-logs" onclick="pdSwitchTab('logs')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">Logs</button>
       <button id="pd-tab-login" onclick="pdSwitchTab('login')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">🔐 Login</button>
+      <button id="pd-tab-notes" onclick="pdSwitchTab('notes')" style="flex:1;padding:8px 0;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-size:.85rem;font-weight:600;cursor:pointer">📝 Notes <span id="pd-notes-badge" style="display:none;background:var(--gold);color:#111;font-size:.65rem;font-weight:900;padding:1px 5px;border-radius:10px;margin-left:3px">0</span></button>
     </div>
     <div id="pd-panel-profile">
       <div class="player-detail-grid" id="pd-grid"></div>
@@ -707,6 +717,16 @@
     </div>
     <div id="pd-panel-login" style="display:none">
       <div id="pd-login-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:6px">
+        <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Loading…</div>
+      </div>
+    </div>
+    <div id="pd-panel-notes" style="display:none">
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <textarea id="pd-note-input" placeholder="Add a private note…" maxlength="500" rows="2"
+          style="flex:1;padding:8px 10px;background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);resize:none;font-family:inherit;font-size:.83rem"></textarea>
+        <button class="btn btn-gold" onclick="addPlayerNote()" style="align-self:flex-end;padding:8px 14px">Add</button>
+      </div>
+      <div id="pd-notes-list" style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:8px">
         <div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">Loading…</div>
       </div>
     </div>

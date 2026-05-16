@@ -109,6 +109,7 @@ if (typeof io !== 'undefined') {
 
 async function loadAll() {
   await Promise.all([loadPlayers(), loadPendingPlayers(), loadTables(), loadTournaments(), loadJackpot(), loadRake(), loadSessionRake(), loadNotifications(), loadRail(), loadTableRequests(), loadMessages(), loadHosts(), loadBuyInRequests(), loadHostApplications(), loadMonthlyFees(), loadRakeSplits(), loadPlayerReplies(), loadSessionReports(), loadFailedLogins()]);
+  _loadNoteCounts();
 }
 
 async function loadPendingPlayers() {
@@ -809,6 +810,7 @@ function showPanel(name) {
   if (name === 'reports')  loadSessionReports();
   if (name === 'finance')  loadFinancialDashboard();
   if (name === 'alerts')   loadFailedLogins();
+  if (name === 'tables')   setTimeout(loadWaitlists, 400);
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -820,6 +822,7 @@ async function loadPlayers() {
     document.getElementById('stat-players').textContent = allPlayers.length;
     populateRecipientSelector();
     populatePromoteSelector();
+    _loadNoteCounts();
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -832,7 +835,7 @@ function renderPlayers(list) {
                                    '<span style="color:var(--text-dim)">Player</span>';
     const selfTag = isSelf ? '<span style="font-size:.65rem;background:rgba(255,200,0,.15);color:var(--gold);padding:1px 5px;border-radius:4px;margin-left:4px">YOU</span>' : '';
     return `
-    <tr style="cursor:pointer" onclick="viewPlayer('${p.id}')">
+    <tr style="cursor:pointer" onclick="viewPlayer('${p.id}')" data-player-id="${p.id}">
       <td><strong>${esc(p.username)}</strong>${selfTag}${p.full_name ? `<div style="font-size:.75rem;color:var(--text-dim)">${esc(p.full_name)}</div>` : ''}</td>
       <td style="color:var(--chip-green)">${esc(p.nickname || '–')}</td>
       <td style="color:var(--text-dim);font-size:.85rem">${esc(p.phone || '–')}</td>
@@ -1007,16 +1010,17 @@ async function viewPlayer(id) {
       }
     }
 
-    // Always start on Profile tab and pre-load logs + login history in background
+    // Always start on Profile tab and pre-load all tabs in background
     pdSwitchTab('profile');
     openModal('player-detail-modal');
     _loadPlayerLogs(id);
     _loadPlayerLoginHistory(id);
+    _loadPlayerNotes(id);
   } catch (e) { toast(e.message, 'error'); }
 }
 
 function pdSwitchTab(tab) {
-  ['profile', 'logs', 'login'].forEach(t => {
+  ['profile', 'logs', 'login', 'notes'].forEach(t => {
     const panel = document.getElementById(`pd-panel-${t}`);
     const btn   = document.getElementById(`pd-tab-${t}`);
     if (!panel || !btn) return;
@@ -2469,6 +2473,134 @@ async function sendWeeklySummary() {
     await apiFetch('/api/admin/send-weekly-summary', { method: 'POST' });
     toast('Weekly summary emailed', 'success');
   } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── Player Notes ──────────────────────────────────────────────────────────────
+
+async function _loadPlayerNotes(playerId) {
+  const listEl  = document.getElementById('pd-notes-list');
+  const badge   = document.getElementById('pd-notes-badge');
+  const tabBtn  = document.getElementById('pd-tab-notes');
+  if (!listEl) return;
+  try {
+    const notes = await apiFetch(`/api/admin/players/${playerId}/notes`);
+    // Update badge
+    if (badge) {
+      badge.textContent = notes.length;
+      badge.style.display = notes.length ? 'inline' : 'none';
+    }
+    if (tabBtn) {
+      tabBtn.textContent = `📝 Notes${notes.length ? '' : ''}`;
+      if (notes.length) {
+        tabBtn.innerHTML = `📝 Notes <span style="background:var(--gold);color:#111;font-size:.65rem;font-weight:900;padding:1px 5px;border-radius:10px;margin-left:3px">${notes.length}</span>`;
+      }
+    }
+    if (!notes.length) {
+      listEl.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;text-align:center;padding:20px">No notes yet.</div>';
+      return;
+    }
+    listEl.innerHTML = notes.map(n => `
+      <div style="background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;position:relative">
+        <div style="font-size:.88rem;color:var(--text);line-height:1.5;margin-bottom:6px">${esc(n.note)}</div>
+        <div style="font-size:.72rem;color:var(--text-dim);display:flex;justify-content:space-between;align-items:center">
+          <span>— ${esc(n.author_username)} · ${new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+          <button onclick="deletePlayerNote('${n.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.78rem;padding:0">🗑 Delete</button>
+        </div>
+      </div>`).join('');
+  } catch (e) {
+    if (listEl) listEl.innerHTML = `<div style="color:var(--red);font-size:.85rem;text-align:center;padding:20px">${esc(e.message)}</div>`;
+  }
+}
+
+async function addPlayerNote() {
+  if (!_currentPdPlayerId) return;
+  const input = document.getElementById('pd-note-input');
+  const note  = input?.value.trim();
+  if (!note) return;
+  try {
+    await apiFetch(`/api/admin/players/${_currentPdPlayerId}/notes`, { method: 'POST', body: { note } });
+    input.value = '';
+    await _loadPlayerNotes(_currentPdPlayerId);
+    toast('Note added', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deletePlayerNote(noteId) {
+  if (!_currentPdPlayerId || !confirm('Delete this note?')) return;
+  try {
+    await apiFetch(`/api/admin/players/${_currentPdPlayerId}/notes/${noteId}`, { method: 'DELETE' });
+    await _loadPlayerNotes(_currentPdPlayerId);
+    toast('Note deleted');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// Load note counts for the player list and apply badges
+async function _loadNoteCounts() {
+  try {
+    const counts = await apiFetch('/api/admin/players/note-counts');
+    document.querySelectorAll('[data-player-id]').forEach(row => {
+      const id = row.dataset.playerId;
+      const n  = counts[id] || 0;
+      let badge = row.querySelector('.note-count-badge');
+      if (n > 0) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'note-count-badge';
+          badge.style.cssText = 'background:rgba(212,175,55,.2);color:var(--gold);font-size:.65rem;font-weight:700;padding:1px 5px;border-radius:10px;margin-left:4px';
+          const nameCell = row.querySelector('td:first-child');
+          if (nameCell) nameCell.appendChild(badge);
+        }
+        badge.textContent = `📝 ${n}`;
+      }
+    });
+  } catch {}
+}
+
+// ── Waitlist management ───────────────────────────────────────────────────────
+
+let _waitlistData = {}; // tableId -> [entries]
+
+function loadWaitlists() {
+  if (!adminSocket) return;
+  // Request waitlist data for each known active table
+  allTables.forEach(t => adminSocket.emit('waitlist:admin_view', { tableId: t.id }));
+  adminSocket.on('waitlist:admin_data', ({ tableId, list }) => {
+    _waitlistData[tableId] = list;
+    _renderWaitlists();
+  });
+}
+
+function _renderWaitlists() {
+  const el = document.getElementById('waitlists-body');
+  if (!el) return;
+  const entries = Object.entries(_waitlistData).filter(([, list]) => list.length > 0);
+  if (!entries.length) { el.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem">No active waiting lists.</div>'; return; }
+  el.innerHTML = entries.map(([tableId, list]) => {
+    const t = allTables.find(t => t.id === tableId);
+    const name = t?.name || tableId;
+    const rows = list.map(e => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+        <span style="font-size:.85rem">#${e.position} <strong>${esc(e.username)}</strong> <span style="color:var(--text-dim);font-size:.75rem">${_waitSince(e.joinedAt)}</span></span>
+        <button class="btn btn-sm btn-outline" style="font-size:.72rem;padding:2px 8px;color:var(--red);border-color:var(--red)" onclick="adminRemoveWaitlist('${tableId}','${e.userId}')">Remove</button>
+      </div>`).join('');
+    return `<div style="margin-bottom:16px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:var(--radius);padding:12px">
+      <div style="font-weight:700;color:var(--gold);font-size:.88rem;margin-bottom:8px">📋 ${esc(name)} — ${list.length} waiting</div>
+      ${rows}
+    </div>`;
+  }).join('');
+}
+
+function _waitSince(ts) {
+  const mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m ago`;
+}
+
+function adminRemoveWaitlist(tableId, userId) {
+  if (!adminSocket) return;
+  adminSocket.emit('waitlist:admin_remove', { tableId, userId });
+  setTimeout(loadWaitlists, 300);
 }
 
 // ── 2FA admin controls ────────────────────────────────────────────────────────

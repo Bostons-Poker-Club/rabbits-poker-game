@@ -43,6 +43,9 @@ let adminMuted = false;        // true when admin has muted this client
 let openMicMode = false;       // true when in continuous open-mic mode
 let openMicActive = false;     // true when currently transmitting in open-mic mode
 
+// ─── Waitlist state ───────────────────────────────────────────────────────
+let _waitlistState = {}; // { active, position, total, seatAvailable }
+
 // ─── Camera state ─────────────────────────────────────────────────────────
 let camStream = null;            // local camera MediaStream
 let camEnabled = false;          // whether our camera is on
@@ -445,6 +448,41 @@ function connect() {
 
   socket.on('error', ({ message }) => {
     toast(message, 'error');
+    if (message === 'No open seats') {
+      _showWaitlistOffer();
+    }
+  });
+
+  // ─── Waitlist ────────────────────────────────────────────────────────────
+
+  socket.on('waitlist:joined', ({ position, total }) => {
+    _waitlistState = { position, total, active: true };
+    _updateWaitlistBanner();
+  });
+
+  socket.on('waitlist:position', ({ position, total }) => {
+    if (!_waitlistState?.active) return;
+    _waitlistState = { position, total, active: true };
+    _updateWaitlistBanner();
+  });
+
+  socket.on('waitlist:seat_available', ({ tableName, message: msg }) => {
+    _waitlistState.seatAvailable = true;
+    const banner = document.getElementById('waitlist-banner');
+    const msgEl  = document.getElementById('waitlist-banner-msg');
+    const joinBtn = document.getElementById('waitlist-join-btn');
+    if (banner) banner.style.display = '';
+    if (msgEl)  msgEl.textContent = msg || `A seat opened at ${tableName}!`;
+    if (joinBtn) joinBtn.style.display = '';
+    if (window.Sound) Sound.notification();
+    toast('A seat opened — you\'re next on the waiting list!', 'success');
+  });
+
+  socket.on('waitlist:left',    () => { _waitlistState = {}; _updateWaitlistBanner(); });
+  socket.on('waitlist:removed', ({ reason }) => {
+    _waitlistState = {};
+    _updateWaitlistBanner();
+    toast(reason || 'Removed from waitlist', 'error');
   });
 
   socket.on('disconnect', () => {
@@ -1876,6 +1914,98 @@ function clearSeatTimer() {
 }
 
 // ─── Chip Animation ───────────────────────────────────────────────────────
+
+// ─── Hand Rankings ────────────────────────────────────────────────────────
+
+function openHandRankings() {
+  if (document.getElementById('hand-rankings-modal')) return;
+  const RANKS = [
+    { name: 'Royal Flush',     desc: 'A-K-Q-J-10 of the same suit',       cards: [{rank:'A',suit:'♠'},{rank:'K',suit:'♠'},{rank:'Q',suit:'♠'},{rank:'J',suit:'♠'},{rank:'10',suit:'♠'}] },
+    { name: 'Straight Flush',  desc: 'Five consecutive, same suit',        cards: [{rank:'9',suit:'♥'},{rank:'8',suit:'♥'},{rank:'7',suit:'♥'},{rank:'6',suit:'♥'},{rank:'5',suit:'♥'}] },
+    { name: 'Four of a Kind',  desc: 'Four cards of the same rank',        cards: [{rank:'A',suit:'♠'},{rank:'A',suit:'♥'},{rank:'A',suit:'♦'},{rank:'A',suit:'♣'},{rank:'K',suit:'♠'}] },
+    { name: 'Full House',      desc: 'Three of a kind + a pair',           cards: [{rank:'K',suit:'♠'},{rank:'K',suit:'♥'},{rank:'K',suit:'♦'},{rank:'Q',suit:'♠'},{rank:'Q',suit:'♥'}] },
+    { name: 'Flush',           desc: 'Five cards of the same suit',        cards: [{rank:'A',suit:'♥'},{rank:'J',suit:'♥'},{rank:'8',suit:'♥'},{rank:'5',suit:'♥'},{rank:'2',suit:'♥'}] },
+    { name: 'Straight',        desc: 'Five consecutive cards, any suit',   cards: [{rank:'9',suit:'♠'},{rank:'8',suit:'♥'},{rank:'7',suit:'♦'},{rank:'6',suit:'♣'},{rank:'5',suit:'♠'}] },
+    { name: 'Three of a Kind', desc: 'Three cards of the same rank',       cards: [{rank:'Q',suit:'♠'},{rank:'Q',suit:'♥'},{rank:'Q',suit:'♦'},{rank:'A',suit:'♣'},{rank:'K',suit:'♠'}] },
+    { name: 'Two Pair',        desc: 'Two different pairs',                cards: [{rank:'J',suit:'♠'},{rank:'J',suit:'♥'},{rank:'9',suit:'♦'},{rank:'9',suit:'♣'},{rank:'A',suit:'♠'}] },
+    { name: 'One Pair',        desc: 'Two cards of the same rank',         cards: [{rank:'A',suit:'♠'},{rank:'A',suit:'♥'},{rank:'K',suit:'♦'},{rank:'Q',suit:'♣'},{rank:'J',suit:'♠'}] },
+    { name: 'High Card',       desc: 'Highest card wins',                  cards: [{rank:'A',suit:'♠'},{rank:'K',suit:'♥'},{rank:'Q',suit:'♦'},{rank:'J',suit:'♣'},{rank:'9',suit:'♠'}] },
+  ];
+
+  const rows = RANKS.map((r, i) => `
+    <div class="hr-row">
+      <div class="hr-meta">
+        <span class="hr-num">${i + 1}</span>
+        <div>
+          <div class="hr-name">${r.name}</div>
+          <div class="hr-desc">${r.desc}</div>
+        </div>
+      </div>
+      <div class="hr-cards">${r.cards.map(c => cardHtml(c)).join('')}</div>
+    </div>`).join('');
+
+  const modal = document.createElement('div');
+  modal.id = 'hand-rankings-modal';
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal hr-modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
+      <h2 style="color:var(--gold);margin:0 0 16px;font-size:1.1rem;display:flex;align-items:center;gap:8px">🃏 Hand Rankings</h2>
+      <div class="hr-list">${rows}</div>
+      <div class="modal-footer" style="margin-top:16px">
+        <button class="btn btn-outline" onclick="document.getElementById('hand-rankings-modal').remove()">Close</button>
+      </div>
+    </div>`;
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+}
+
+// ─── Waitlist helpers ─────────────────────────────────────────────────────
+
+function _showWaitlistOffer() {
+  const existing = document.getElementById('waitlist-offer');
+  if (existing) return;
+  const div = document.createElement('div');
+  div.id = 'waitlist-offer';
+  div.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9010;background:#0a1a12;border:2px solid var(--gold);border-radius:14px;padding:24px 28px;text-align:center;box-shadow:0 12px 40px rgba(0,0,0,.8);max-width:340px;width:92%';
+  div.innerHTML = `
+    <div style="font-size:2rem;margin-bottom:8px">🪑</div>
+    <h3 style="color:var(--gold);margin:0 0 8px;font-size:1.05rem">Table is Full</h3>
+    <p style="color:var(--text-dim);font-size:.86rem;margin:0 0 18px">Join the waiting list and you'll be notified when a seat opens.</p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button class="btn btn-outline" onclick="document.getElementById('waitlist-offer')?.remove()">No thanks</button>
+      <button class="btn btn-gold" onclick="waitlistJoin()">📋 Join Waitlist</button>
+    </div>`;
+  document.body.appendChild(div);
+}
+
+function waitlistJoin() {
+  document.getElementById('waitlist-offer')?.remove();
+  socket?.emit('waitlist:join', { tableId });
+}
+
+function waitlistLeave() {
+  socket?.emit('waitlist:leave', { tableId });
+  document.getElementById('waitlist-banner').style.display = 'none';
+  _waitlistState = {};
+}
+
+function waitlistJoinNow() {
+  document.getElementById('waitlist-banner').style.display = 'none';
+  _waitlistState = {};
+  // Re-emit join_table — seat should now be open
+  socket?.emit('join_table', { tableId, buyInChips: buyIn });
+}
+
+function _updateWaitlistBanner() {
+  const banner = document.getElementById('waitlist-banner');
+  const msgEl  = document.getElementById('waitlist-banner-msg');
+  const joinBtn = document.getElementById('waitlist-join-btn');
+  if (!banner) return;
+  if (!_waitlistState?.active) { banner.style.display = 'none'; return; }
+  banner.style.display = '';
+  if (msgEl) msgEl.textContent = `You are #${_waitlistState.position} of ${_waitlistState.total} on the waiting list.`;
+  if (joinBtn) joinBtn.style.display = _waitlistState.seatAvailable ? '' : 'none';
+}
 
 function animateChipToPot(seatNumber, amount = 0) {
   const seatEl = document.querySelector(`.seat[data-seat="${seatNumber}"]`);

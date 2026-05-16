@@ -808,6 +808,17 @@ router.get('/admin/pending-players', authMiddleware, adminMiddleware, async (req
   res.json(data || []);
 });
 
+router.get('/admin/players/note-counts', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin.from('player_notes').select('player_id');
+  if (error) {
+    if (/does not exist|relation/.test(error.message)) return res.json({});
+    return res.status(500).json({ error: error.message });
+  }
+  const counts = {};
+  for (const row of (data || [])) counts[row.player_id] = (counts[row.player_id] || 0) + 1;
+  res.json(counts);
+});
+
 router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) => {
   // Try with extended profile columns; fall back to base columns if migration not yet applied
   let { data, error } = await supabaseAdmin
@@ -2018,6 +2029,42 @@ router.get('/admin/login-audit', authMiddleware, adminMiddleware, async (req, re
     res.status(500).json({ error: e.message });
   }
 });
+
+// ─── Player Notes ─────────────────────────────────────────────────────────────
+
+router.get('/admin/players/:id/notes', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('player_notes')
+    .select('id, note, author_username, created_at')
+    .eq('player_id', req.params.id)
+    .order('created_at', { ascending: false });
+  if (error) {
+    if (/does not exist|relation/.test(error.message)) return res.json([]);
+    return res.status(500).json({ error: error.message });
+  }
+  res.json(data || []);
+});
+
+router.post('/admin/players/:id/notes', authMiddleware, adminMiddleware, async (req, res) => {
+  const { note } = req.body;
+  if (!note?.trim()) return res.status(400).json({ error: 'Note text is required' });
+  const { data, error } = await supabaseAdmin.from('player_notes').insert({
+    player_id: req.params.id,
+    author_id: req.user.id,
+    author_username: req.user.username,
+    note: note.trim().slice(0, 500)
+  }).select('id, note, author_username, created_at').single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.delete('/admin/players/:id/notes/:noteId', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin.from('player_notes')
+    .delete().eq('id', req.params.noteId).eq('player_id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 
 router.get('/admin/players/:id/login-history', authMiddleware, adminMiddleware, async (req, res) => {
   try {

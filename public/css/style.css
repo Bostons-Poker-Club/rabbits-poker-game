@@ -1178,6 +1178,30 @@ input, select, textarea { font-family: inherit; }
 ::-webkit-scrollbar-thumb { background: rgba(212,175,55,0.3); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(212,175,55,0.5); }
 
+/* ─── Hand Rankings Modal ────────────────────────────────────────────────── */
+.hr-modal { padding: 20px 18px !important; }
+.hr-list { display: flex; flex-direction: column; gap: 8px; }
+.hr-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,.04);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.hr-meta { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.hr-num  { color: var(--text-dim); font-size: .7rem; font-weight: 700; min-width: 16px; text-align: right; }
+.hr-name { color: var(--gold); font-size: .82rem; font-weight: 700; white-space: nowrap; }
+.hr-desc { color: var(--text-dim); font-size: .72rem; margin-top: 1px; }
+.hr-cards { display: flex; gap: 2px; flex-shrink: 0; }
+.hr-cards .card { width: 26px; height: 38px; font-size: 0.55rem; border-radius: 4px; }
+@media (max-width: 520px) {
+  .hr-row { flex-direction: column; align-items: flex-start; }
+  .hr-cards { align-self: flex-start; }
+}
+
 /* ─── Seat Timer Badge ───────────────────────────────────────────────────── */
 .seat-timer {
   position: absolute;

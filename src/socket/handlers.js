@@ -64,6 +64,9 @@ let adminNotifSeq = 0;
 // Rail waiting queue: { id, userId, username, nickname, phone, chips, requestedAt }
 const railQueue = [];
 
+// Per-table waiting lists: tableId -> [{ userId, username, phone, socketId, joinedAt }]
+const tableWaitlists = new Map();
+
 // Host table requests: { id, hostId, hostName, gameType, sb, bb, maxPlayers, rake, requestedAt, status }
 const tableRequests = [];
 let tableRequestSeq = 0;
@@ -592,6 +595,81 @@ function setupSocketHandlers(io) {
 
     socket.on('leave_table', async ({ tableId }) => {
       await leaveTable(socket, io, tableId || socket.currentTableId, userId);
+    });
+
+    // ─── Table Waiting List ───────────────────────────────────────────────────
+
+    socket.on('waitlist:join', async ({ tableId }) => {
+      if (!tableId) return;
+      if (!tableWaitlists.has(tableId)) tableWaitlists.set(tableId, []);
+      const list = tableWaitlists.get(tableId);
+
+      // Already in list?
+      if (list.some(e => e.userId === userId)) {
+        const pos = list.findIndex(e => e.userId === userId) + 1;
+        return socket.emit('waitlist:position', { tableId, position: pos, total: list.length });
+      }
+
+      // Also fetch phone for SMS notifications
+      const { data: dbUser } = await supabaseAdmin.from('users').select('phone').eq('id', userId).single();
+      list.push({ userId, username, phone: dbUser?.phone || null, socketId: socket.id, joinedAt: Date.now() });
+      socket.join(`${tableId}:waitlist`);
+
+      const pos = list.length;
+      socket.emit('waitlist:joined', { tableId, position: pos, total: list.length });
+
+      // Notify admins
+      _broadcastWaitlistUpdate(io, tableId);
+    });
+
+    socket.on('waitlist:leave', ({ tableId }) => {
+      const tId = tableId || socket.currentTableId;
+      if (!tId) return;
+      const list = tableWaitlists.get(tId) || [];
+      const idx = list.findIndex(e => e.userId === userId);
+      if (idx !== -1) {
+        list.splice(idx, 1);
+        socket.leave(`${tId}:waitlist`);
+        socket.emit('waitlist:left', { tableId: tId });
+        _broadcastWaitlistUpdate(io, tId);
+        // Re-broadcast positions to remaining waiters
+        list.forEach((entry, i) => {
+          io.to(entry.socketId).emit('waitlist:position', { tableId: tId, position: i + 1, total: list.length });
+        });
+      }
+    });
+
+    socket.on('waitlist:get', ({ tableId }) => {
+      const tId = tableId || socket.currentTableId;
+      if (!tId) return;
+      const list = tableWaitlists.get(tId) || [];
+      const pos = list.findIndex(e => e.userId === userId) + 1;
+      socket.emit('waitlist:position', { tableId: tId, position: pos > 0 ? pos : null, total: list.length });
+    });
+
+    // Admin: view or manage a table's waitlist
+    socket.on('waitlist:admin_view', ({ tableId }) => {
+      if (!isAdmin) return;
+      const list = (tableWaitlists.get(tableId) || []).map((e, i) => ({
+        position: i + 1, userId: e.userId, username: e.username,
+        joinedAt: e.joinedAt
+      }));
+      socket.emit('waitlist:admin_data', { tableId, list });
+    });
+
+    socket.on('waitlist:admin_remove', ({ tableId, userId: removeId }) => {
+      if (!isAdmin) return;
+      const list = tableWaitlists.get(tableId) || [];
+      const idx = list.findIndex(e => e.userId === removeId);
+      if (idx !== -1) {
+        const removed = list.splice(idx, 1)[0];
+        io.to(removed.socketId).emit('waitlist:removed', { tableId, reason: 'Removed by admin' });
+        io.sockets.sockets.get(removed.socketId)?.leave(`${tableId}:waitlist`);
+        list.forEach((entry, i) => {
+          io.to(entry.socketId).emit('waitlist:position', { tableId, position: i + 1, total: list.length });
+        });
+        _broadcastWaitlistUpdate(io, tableId);
+      }
     });
 
     socket.on('player_action', ({ tableId, action, amount }) => {
@@ -2198,6 +2276,40 @@ async function leaveTable(socket, io, tableId, userId) {
       data: { tableId, tableName }
     });
   }
+
+  // Notify next person on the waiting list
+  _notifyWaitlist(io, tableId);
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus };
+function _notifyWaitlist(io, tableId) {
+  const list = tableWaitlists.get(tableId);
+  if (!list || list.length === 0) return;
+  const next = list[0];
+  const game = activeGames.get(tableId);
+  const tableName = game?.tableName || tableId;
+  // Socket notification
+  io.to(next.socketId).emit('waitlist:seat_available', {
+    tableId,
+    tableName,
+    message: `A seat just opened at ${tableName}! Join now before it's taken.`
+  });
+  // SMS
+  if (next.phone) {
+    sendPlayerSMS({
+      phone: next.phone,
+      text: `RabbsRoom: A seat opened at ${tableName}! Open the app to join now.`
+    }).catch(() => {});
+  }
+}
+
+function _broadcastWaitlistUpdate(io, tableId) {
+  const list = (tableWaitlists.get(tableId) || []).map((e, i) => ({
+    position: i + 1, userId: e.userId, username: e.username, joinedAt: e.joinedAt
+  }));
+  // Broadcast to admins
+  for (const sid of (getAdminSockets ? getAdminSockets() : [])) {
+    io.to(sid).emit('waitlist:admin_data', { tableId, list });
+  }
+}
+
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists };

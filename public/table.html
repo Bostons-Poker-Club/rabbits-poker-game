@@ -150,6 +150,7 @@
     <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px" id="mic-test-btn">🎚 Mic</button>
     <button id="sound-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleSoundThemePanel()" title="Sound settings" style="font-size:.75rem;padding:4px 8px">🔊</button>
     <button id="cam-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleCamera()" title="Camera off — click to enable" style="font-size:.75rem;padding:4px 8px;opacity:.5">📷</button>
+    <button class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
     <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
@@ -186,6 +187,15 @@
       <button class="btn btn-outline" onclick="stayAtTable()">Stay</button>
       <button class="btn btn-gold" onclick="cashOutAndLeave()">Cash Out &amp; Leave</button>
     </div>
+  </div>
+</div>
+
+<!-- Waitlist notification banner -->
+<div id="waitlist-banner" style="display:none;position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9000;background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:14px 20px;box-shadow:0 8px 32px rgba(0,0,0,.7);max-width:360px;width:92%;text-align:center">
+  <div id="waitlist-banner-msg" style="color:var(--text);font-size:.9rem;margin-bottom:12px">You are on the waiting list.</div>
+  <div style="display:flex;gap:8px;justify-content:center">
+    <button class="btn btn-gold" onclick="waitlistJoinNow()" id="waitlist-join-btn" style="display:none">🪑 Take a Seat!</button>
+    <button class="btn btn-outline" onclick="waitlistLeave()" style="font-size:.8rem">Leave Waitlist</button>
   </div>
 </div>
 
