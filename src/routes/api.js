@@ -3,13 +3,42 @@
 const express    = require('express');
 const bcrypt     = require('bcryptjs');
 const jwt        = require('jsonwebtoken');
+const crypto     = require('crypto');
 const rateLimit  = require('express-rate-limit');
 const { supabaseAdmin } = require('../db/supabase');
 const appEvents  = require('../events');
 const { logTransaction } = require('../transactions');
+const { send2FACode } = require('../mail');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+// ─── 2FA in-memory store ───────────────────────────────────────────────────────
+// Keyed by userId; entries expire after 5 minutes and are pruned on lookup.
+const pending2FA = new Map(); // userId -> { code, expiresAt, attempts, username, email, phone }
+
+function _gen2FACode() {
+  return String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+function _genBackupCodes() {
+  return Array.from({ length: 8 }, () => {
+    const raw = crypto.randomBytes(5).toString('hex').toUpperCase();
+    return `${raw.slice(0,4)}-${raw.slice(4,8)}`;
+  });
+}
+
+async function _hashBackupCodes(codes) {
+  return Promise.all(codes.map(c => bcrypt.hash(c, 10).then(hash => ({ hash, used: false }))));
+}
+
+// Purge expired pending entries (called on each verify attempt)
+function _prunePending2FA() {
+  const now = Date.now();
+  for (const [uid, entry] of pending2FA) {
+    if (entry.expiresAt < now) pending2FA.delete(uid);
+  }
+}
 
 // ─── Login rate limiter ────────────────────────────────────────────────────────
 // Counts only failed attempts (skipSuccessfulRequests). Blocks after 5 failures.
@@ -159,7 +188,7 @@ router.post('/auth/register', async (req, res) => {
 });
 
 router.post('/auth/login', loginLimiter, async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password, deviceId } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required' });
 
   const ip        = req.ip || req.connection?.remoteAddress || 'unknown';
@@ -187,12 +216,61 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
       await _audit(user.id, false, 'account_banned');
       return res.status(403).json({ error: 'Your account has been suspended. Contact admin at bostonspokerclub.amitureflops@gmail.com' });
     }
+
+    // Check 2FA lockout
+    if (user.two_fa_locked_until && new Date(user.two_fa_locked_until) > new Date()) {
+      const unlockMins = Math.ceil((new Date(user.two_fa_locked_until) - Date.now()) / 60000);
+      await _audit(user.id, false, '2fa_locked');
+      return res.status(403).json({ error: `Account locked due to too many failed verification attempts. Try again in ${unlockMins} minute${unlockMins !== 1 ? 's' : ''}.` });
+    }
+
     const valid = await bcrypt.compare(password, user.password_hash);
     console.log(`[login] db bcrypt valid=${valid}`);
     if (!valid) {
       await _audit(user.id, false, 'wrong_password');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    // Determine if 2FA is required (admin or host, with 2FA not disabled)
+    const needs2FA = (user.is_admin || user.is_host) && user.two_fa_enabled !== false;
+
+    if (needs2FA) {
+      // Check trusted device
+      const devices = Array.isArray(user.two_fa_trusted_devices) ? user.two_fa_trusted_devices : [];
+      const now = Date.now();
+      const trusted = deviceId && devices.some(d => d.id === deviceId && new Date(d.expiresAt).getTime() > now);
+
+      if (!trusted) {
+        // Ensure backup codes exist (lazy generation on first 2FA challenge)
+        if (!Array.isArray(user.two_fa_backup_codes) || user.two_fa_backup_codes.length === 0) {
+          const raw = _genBackupCodes();
+          const hashed = await _hashBackupCodes(raw);
+          await supabaseAdmin.from('users').update({ two_fa_backup_codes: hashed }).eq('id', user.id);
+          // We don't expose raw codes here — admin downloads them later
+        }
+
+        const code = _gen2FACode();
+        pending2FA.set(user.id, {
+          code, expiresAt: Date.now() + 5 * 60 * 1000,
+          attempts: 0, username: user.username, email: user.email, phone: user.phone
+        });
+
+        // Send code (fire-and-forget)
+        send2FACode({ to: user.email, phone: user.phone, username: user.username, code }).catch(console.warn);
+
+        // Issue short-lived pending token
+        const pendingToken = jwt.sign({ id: user.id, type: 'pending_2fa' }, JWT_SECRET, { expiresIn: '5m' });
+        await _audit(user.id, false, '2fa_required');
+        const backupCodesLeft = (user.two_fa_backup_codes || []).filter(c => !c.used).length;
+        return res.json({
+          requires2fa: true,
+          pendingToken,
+          hint: `Code sent to ${user.email ? user.email.replace(/(.{2}).+(@.+)/, '$1…$2') : ''}${user.phone ? ' and phone' : ''}`,
+          backupCodesLeft
+        });
+      }
+    }
+
     await _audit(user.id, true, null);
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
     return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin } });
@@ -213,6 +291,121 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
 
   await _audit(null, false, 'user_not_found');
   return res.status(401).json({ error: 'Invalid credentials' });
+});
+
+// ─── 2FA Verify ────────────────────────────────────────────────────────────────
+router.post('/auth/2fa/verify', async (req, res) => {
+  const { pendingToken, code, rememberDevice, deviceId } = req.body;
+  if (!pendingToken || !code) return res.status(400).json({ error: 'Missing token or code' });
+
+  let payload;
+  try {
+    payload = jwt.verify(pendingToken, JWT_SECRET);
+  } catch {
+    return res.status(401).json({ error: 'Verification session expired. Please log in again.' });
+  }
+  if (payload.type !== 'pending_2fa') return res.status(401).json({ error: 'Invalid token type' });
+
+  const userId = payload.id;
+  _prunePending2FA();
+
+  const pending = pending2FA.get(userId);
+
+  // Fetch user for lockout check, backup codes, and final token issuance
+  const { data: user } = await supabaseAdmin.from('users').select('*').eq('id', userId).single();
+  if (!user) return res.status(401).json({ error: 'User not found' });
+
+  // Check lockout (may have been set by a previous attempt)
+  if (user.two_fa_locked_until && new Date(user.two_fa_locked_until) > new Date()) {
+    const mins = Math.ceil((new Date(user.two_fa_locked_until) - Date.now()) / 60000);
+    return res.status(403).json({ error: `Account locked. Try again in ${mins} minute${mins !== 1 ? 's' : ''}.` });
+  }
+
+  const inputCode = String(code).trim().replace(/\s/g, '');
+
+  // ── Try backup code first ─────────────────────────────────────────────────
+  if (inputCode.includes('-') || inputCode.length === 8) {
+    const backupCodes = Array.isArray(user.two_fa_backup_codes) ? user.two_fa_backup_codes : [];
+    let matched = -1;
+    for (let i = 0; i < backupCodes.length; i++) {
+      if (backupCodes[i].used) continue;
+      const ok = await bcrypt.compare(inputCode.toUpperCase(), backupCodes[i].hash);
+      if (ok) { matched = i; break; }
+    }
+    if (matched === -1) {
+      return res.status(401).json({ error: 'Invalid backup code.' });
+    }
+    // Mark backup code as used
+    backupCodes[matched].used = true;
+    await supabaseAdmin.from('users').update({ two_fa_backup_codes: backupCodes }).eq('id', userId);
+    pending2FA.delete(userId);
+    const remaining = backupCodes.filter(c => !c.used).length;
+    const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin }, backupCodesLeft: remaining });
+  }
+
+  // ── Try TOTP code ─────────────────────────────────────────────────────────
+  if (!pending || pending.expiresAt < Date.now()) {
+    pending2FA.delete(userId);
+    return res.status(401).json({ error: 'Code has expired. Please log in again.' });
+  }
+
+  if (inputCode !== pending.code) {
+    pending.attempts += 1;
+    if (pending.attempts >= 3) {
+      pending2FA.delete(userId);
+      const lockUntil = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await supabaseAdmin.from('users').update({ two_fa_locked_until: lockUntil }).eq('id', userId);
+      return res.status(403).json({ error: 'Too many incorrect attempts. Account locked for 15 minutes.' });
+    }
+    return res.status(401).json({ error: `Invalid code. ${3 - pending.attempts} attempt${3 - pending.attempts !== 1 ? 's' : ''} remaining.` });
+  }
+
+  // ── Code correct — complete login ─────────────────────────────────────────
+  pending2FA.delete(userId);
+
+  const updates = { two_fa_locked_until: null };
+
+  if (rememberDevice && deviceId) {
+    const devices = Array.isArray(user.two_fa_trusted_devices) ? user.two_fa_trusted_devices : [];
+    // Remove expired devices and any existing entry for this deviceId
+    const now = Date.now();
+    const cleaned = devices.filter(d => new Date(d.expiresAt).getTime() > now && d.id !== deviceId);
+    cleaned.push({ id: deviceId, expiresAt: new Date(now + 30 * 24 * 60 * 60 * 1000).toISOString() });
+    updates.two_fa_trusted_devices = cleaned;
+  }
+
+  await supabaseAdmin.from('users').update(updates).eq('id', userId);
+  await supabaseAdmin.from('login_audit').insert({
+    user_id: userId, username: user.username,
+    ip_address: req.ip || 'unknown', user_agent: String(req.headers['user-agent'] || '').slice(0, 400),
+    success: true, failure_reason: null
+  }).catch(() => {});
+
+  const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+  const backupCodesLeft = (user.two_fa_backup_codes || []).filter(c => !c.used).length;
+  return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin }, backupCodesLeft });
+});
+
+// ─── 2FA Resend Code ───────────────────────────────────────────────────────────
+router.post('/auth/2fa/resend', async (req, res) => {
+  const { pendingToken } = req.body;
+  if (!pendingToken) return res.status(400).json({ error: 'Missing token' });
+  let payload;
+  try { payload = jwt.verify(pendingToken, JWT_SECRET); } catch { return res.status(401).json({ error: 'Session expired. Please log in again.' }); }
+  if (payload.type !== 'pending_2fa') return res.status(401).json({ error: 'Invalid token' });
+
+  const userId = payload.id;
+  const existing = pending2FA.get(userId);
+  if (!existing) return res.status(400).json({ error: 'No pending verification. Please log in again.' });
+
+  const code = _gen2FACode();
+  existing.code = code;
+  existing.expiresAt = Date.now() + 5 * 60 * 1000;
+  existing.attempts = 0;
+
+  send2FACode({ to: existing.email, phone: existing.phone, username: existing.username, code }).catch(console.warn);
+  res.json({ ok: true, hint: `Code resent to ${existing.email ? existing.email.replace(/(.{2}).+(@.+)/, '$1…$2') : 'your phone'}` });
 });
 
 // ─── Health / Diagnostics ───────────────────────────────────────────────────
@@ -619,7 +812,7 @@ router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) =
   // Try with extended profile columns; fall back to base columns if migration not yet applied
   let { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip, two_fa_enabled, two_fa_locked_until')
     .order('created_at', { ascending: false });
 
   if (error && (error.message?.includes('column') || error.message?.includes('does not exist'))) {
@@ -636,7 +829,7 @@ router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) =
 router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
   let { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, address, city, state, zip, two_fa_enabled, two_fa_locked_until')
     .eq('id', req.params.id)
     .single();
 
@@ -940,6 +1133,63 @@ router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (
   const appEvents = require('../events');
   appEvents.emit('admin:change', { userId: req.params.id, isAdmin: !!makeAdmin });
   res.json({ success: true, is_admin: !!makeAdmin });
+});
+
+// ─── 2FA Admin Management ──────────────────────────────────────────────────────
+
+router.post('/admin/players/:id/2fa/disable', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ two_fa_enabled: false, two_fa_locked_until: null, two_fa_trusted_devices: [] })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+router.post('/admin/players/:id/2fa/enable', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ two_fa_enabled: true, two_fa_locked_until: null })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+router.post('/admin/players/:id/2fa/unlock', authMiddleware, adminMiddleware, async (req, res) => {
+  const { error } = await supabaseAdmin
+    .from('users')
+    .update({ two_fa_locked_until: null })
+    .eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+router.get('/admin/players/:id/backup-codes', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data: user, error } = await supabaseAdmin
+    .from('users')
+    .select('username, two_fa_backup_codes')
+    .eq('id', req.params.id)
+    .single();
+  if (error || !user) return res.status(404).json({ error: 'User not found' });
+  const codes = (user.two_fa_backup_codes || []);
+  res.json({ username: user.username, total: codes.length, remaining: codes.filter(c => !c.used).length });
+});
+
+router.post('/admin/players/:id/backup-codes/regenerate', authMiddleware, adminMiddleware, async (req, res) => {
+  const rawCodes = _genBackupCodes();
+  const hashed   = await _hashBackupCodes(rawCodes);
+  const { error } = await supabaseAdmin.from('users').update({ two_fa_backup_codes: hashed }).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ codes: rawCodes }); // Return plaintext once for download
+});
+
+router.get('/admin/players/:id/backup-codes/download', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data: user } = await supabaseAdmin.from('users').select('username, two_fa_backup_codes').eq('id', req.params.id).single();
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  // Only expose remaining count; plaintext codes are only available at generation time
+  const codes = (user.two_fa_backup_codes || []);
+  const remaining = codes.filter(c => !c.used).length;
+  res.json({ username: user.username, remaining, note: 'Plaintext backup codes are only available immediately after regeneration.' });
 });
 
 router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => {

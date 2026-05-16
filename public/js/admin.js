@@ -7,6 +7,7 @@ if (!user.isAdmin) { window.location.href = '/lobby.html'; }
 let allPlayers = [];
 let allTables = [];
 let allTournaments = [];
+let _currentPdPlayerId = null;
 let currentByTable = []; // session rake by table for overview column
 
 // ─── Init ─────────────────────────────────────────────────────────────────
@@ -969,6 +970,41 @@ async function viewPlayer(id) {
       };
     } else if (pdAdminBtn) {
       pdAdminBtn.style.display = 'none';
+    }
+
+    // 2FA controls (admin/host accounts only)
+    _currentPdPlayerId = id;
+    const is2FAAccount = p.is_admin || p.is_host;
+    const pd2faBtn = document.getElementById('pd-2fa-btn');
+    const pd2faUnlockBtn = document.getElementById('pd-2fa-unlock-btn');
+    const pdBackupBtn = document.getElementById('pd-backup-btn');
+    if (pd2faBtn) {
+      if (is2FAAccount) {
+        pd2faBtn.style.display = '';
+        const enabled = p.two_fa_enabled !== false;
+        pd2faBtn.textContent = enabled ? '🔒 Disable 2FA' : '🔓 Enable 2FA';
+        pd2faBtn.className = `btn ${enabled ? 'btn-red' : 'btn-green'}`;
+      } else {
+        pd2faBtn.style.display = 'none';
+      }
+    }
+    if (pd2faUnlockBtn) {
+      const isLocked = p.two_fa_locked_until && new Date(p.two_fa_locked_until) > new Date();
+      pd2faUnlockBtn.style.display = (is2FAAccount && isLocked) ? '' : 'none';
+    }
+    if (pdBackupBtn) {
+      pdBackupBtn.style.display = is2FAAccount ? '' : 'none';
+    }
+
+    // Add 2FA status row to profile grid
+    if (is2FAAccount) {
+      const enabled = p.two_fa_enabled !== false;
+      const isLocked = p.two_fa_locked_until && new Date(p.two_fa_locked_until) > new Date();
+      const statusText = isLocked ? '🔴 Locked' : enabled ? '🟢 Enabled' : '⚪ Disabled';
+      const gridEl = document.getElementById('pd-grid');
+      if (gridEl) {
+        gridEl.innerHTML += `<div class="pd-row"><span class="pd-label">2FA</span><span class="pd-value">${statusText}</span></div>`;
+      }
     }
 
     // Always start on Profile tab and pre-load logs + login history in background
@@ -2432,6 +2468,52 @@ async function sendWeeklySummary() {
   try {
     await apiFetch('/api/admin/send-weekly-summary', { method: 'POST' });
     toast('Weekly summary emailed', 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ── 2FA admin controls ────────────────────────────────────────────────────────
+
+async function toggle2FA() {
+  if (!_currentPdPlayerId) return;
+  try {
+    const p = allPlayers.find(x => x.id === _currentPdPlayerId);
+    const enabled = p ? p.two_fa_enabled !== false : true;
+    const action = enabled ? 'disable' : 'enable';
+    if (!confirm(`${enabled ? 'Disable' : 'Enable'} 2FA for this account?`)) return;
+    await apiFetch(`/api/admin/players/${_currentPdPlayerId}/2fa/${action}`, { method: 'POST' });
+    toast(`2FA ${action}d`, 'success');
+    closeModal('player-detail-modal');
+    await loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function unlock2FA() {
+  if (!_currentPdPlayerId) return;
+  try {
+    await apiFetch(`/api/admin/players/${_currentPdPlayerId}/2fa/unlock`, { method: 'POST' });
+    toast('2FA lockout cleared', 'success');
+    closeModal('player-detail-modal');
+    await loadPlayers();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function downloadBackupCodes() {
+  if (!_currentPdPlayerId) return;
+  const p = allPlayers.find(x => x.id === _currentPdPlayerId);
+  const name = p ? p.username : _currentPdPlayerId;
+  if (!confirm(`Regenerate backup codes for ${name}? This will invalidate all existing codes.`)) return;
+  try {
+    const data = await apiFetch(`/api/admin/players/${_currentPdPlayerId}/backup-codes/regenerate`, { method: 'POST' });
+    const codes = data.codes || [];
+    const text = `RabbsRoom Backup Codes — ${name}\nGenerated: ${new Date().toLocaleString()}\n\nStore these in a safe place. Each code can only be used once.\n\n${codes.join('\n')}\n`;
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `rabbs-backup-codes-${name}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast(`${codes.length} new backup codes generated and downloaded`, 'success');
   } catch (e) { toast(e.message, 'error'); }
 }
 

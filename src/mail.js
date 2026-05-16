@@ -422,4 +422,22 @@ async function sendWeeklySummaryEmail({ from, to, sessions, totalRake, hostCuts,
   }
 }
 
-module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail, sendFeeReminderEmail, sendFeeReminderSMS, sendWeeklySummaryEmail };
+async function send2FACode({ to, phone, username, code }) {
+  const subject = `🔐 Your RabbsRoom login code: ${code}`;
+  const text    = `Hi ${username},\n\nYour verification code is: ${code}\n\nThis code expires in 5 minutes. Do not share it with anyone.\n\n— Boston Poker Club`;
+  const html    = `
+    <div style="font-family:sans-serif;max-width:420px;margin:0 auto">
+      <h2 style="color:#c8a84b">🔐 Login Verification</h2>
+      <p>Hi <strong>${username}</strong>,</p>
+      <p>Your verification code is:</p>
+      <div style="font-size:2.4rem;font-weight:700;letter-spacing:.18em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:16px 24px;text-align:center;margin:16px 0">${code}</div>
+      <p style="color:#666;font-size:.88rem">This code expires in <strong>5 minutes</strong>. Do not share it.</p>
+      <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
+    </div>`;
+  await Promise.allSettled([
+    to ? sendPlayerEmail({ to, subject, text, html }) : Promise.resolve(),
+    phone ? sendPlayerSMS({ phone, text: `RabbsRoom login code: ${code} (expires 5 min)` }) : Promise.resolve()
+  ]);
+}
+
+module.exports = { sendTableRequestEmail, sendBroadcastEmail, sendAdminEmail, sendPlayerEmail, sendPlayerSMS, sendHostApprovalEmail, sendSessionReportEmail, sendHostSessionEmail, sendFeeReminderEmail, sendFeeReminderSMS, sendWeeklySummaryEmail, send2FACode };
