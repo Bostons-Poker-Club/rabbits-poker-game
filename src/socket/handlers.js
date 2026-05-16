@@ -587,6 +587,12 @@ function setupSocketHandlers(io) {
         game.lastActionAt = Date.now();
         broadcastGameState(io, tId, game);
         handleActionResult(io, tId, game, result);
+        // Notify other players at the table so they can play a sound
+        const actingPlayer = game.getPlayer(userId);
+        socket.to(tId).emit('player_acted', {
+          action, amount: amount || 0, username,
+          isAllIn: actingPlayer?.isAllIn || false
+        });
       } catch (err) {
         console.warn(`[action] error for ${username}: ${err.message}`);
         socket.emit('error', { message: err.message });

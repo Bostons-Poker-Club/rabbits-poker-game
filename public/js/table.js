@@ -79,6 +79,9 @@ const SEAT_POSITIONS = {
   checkOrientation();
 })();
 
+// Initialise sound engine (reads mute preference from localStorage)
+if (window.Sound) Sound.init();
+
 // ─── Connect ──────────────────────────────────────────────────────────────
 
 function connect() {
@@ -139,6 +142,7 @@ function connect() {
 
   socket.on('hand_started', ({ handNumber, dealerSeat }) => {
     console.log('[hand_started] hand:', handNumber, 'dealer seat:', dealerSeat);
+    if (window.Sound) Sound.newHand();
     chatMsg('system', `Hand #${handNumber} started`);
     hideHandResult();
     const myCards = document.getElementById('my-hole-cards');
@@ -147,13 +151,29 @@ function connect() {
 
   socket.on('cards_dealt', ({ holeCards }) => {
     console.log('[cards_dealt]', holeCards?.map(c => c.rank + c.suit).join(' ') || 'none');
+    if (window.Sound) Sound.cardDeal();
     renderMyHoleCards(holeCards);
   });
 
   socket.on('action_required', ({ seatNumber, userId: actingUserId, callAmount, pot }) => {
     console.log('[action_required] seat:', seatNumber, 'userId:', actingUserId, 'callAmt:', callAmount);
     const isMe = actingUserId === user.id;
-    if (isMe) toast('Your turn!');
+    if (isMe) {
+      toast('Your turn!');
+      if (window.Sound) Sound.notification();
+    }
+  });
+
+  socket.on('player_acted', ({ action, amount, username: actorName, isAllIn }) => {
+    if (!window.Sound) return;
+    if (isAllIn) { Sound.allIn(); return; }
+    switch (action) {
+      case 'fold':  Sound.fold();          break;
+      case 'check': Sound.check();         break;
+      case 'call':  Sound.call();          break;
+      case 'raise': Sound.raise(amount);   break;
+      default:      Sound.chipBet(amount); break;
+    }
   });
 
   socket.on('shot_clock_start', ({ userId, seconds, seatNumber }) => {
@@ -205,6 +225,11 @@ function connect() {
     stopShotClock();
     clearSeatTimer();
     prevBets = {};
+    if (window.Sound) {
+      Sound.potSlide();
+      const iWon = result.winners?.some(w => w.userId === user.id);
+      if (iWon) setTimeout(() => Sound.win(), 450);
+    }
 
     // Flash rake deduction in pot display before showing winner overlay
     if (result.rakeCollected > 0) {
@@ -671,6 +696,15 @@ function act(action) {
       return toast(`Minimum raise is $${fmt(currentMinRaise)}`, 'error');
     }
   }
+  // Immediate local sound — others hear it via player_acted broadcast
+  if (window.Sound) {
+    const isAllIn = action === 'raise' && currentMaxRaise > 0 && amount >= currentMaxRaise;
+    if (isAllIn)          Sound.allIn();
+    else if (action === 'fold')  Sound.fold();
+    else if (action === 'check') Sound.check();
+    else if (action === 'call')  Sound.call();
+    else if (action === 'raise') Sound.raise(amount);
+  }
   socket.emit('player_action', { tableId, action, amount });
 }
 
@@ -748,12 +782,18 @@ function startShotClock(seconds) {
   shotClockEnd = Date.now() + seconds * 1000;
 
   if (shotClockInterval) clearInterval(shotClockInterval);
+  let lastTickSecond = -1;
   shotClockInterval = setInterval(() => {
     const remaining = Math.max(0, shotClockEnd - Date.now()) / 1000;
     const pct = remaining / seconds;
     fill.style.strokeDashoffset = circumference * (1 - pct);
-    num.textContent = Math.ceil(remaining);
+    const ceiled = Math.ceil(remaining);
+    num.textContent = ceiled;
     if (remaining <= 10) fill.classList.add('warning');
+    if (remaining <= 5 && ceiled !== lastTickSecond && ceiled > 0) {
+      lastTickSecond = ceiled;
+      if (window.Sound) Sound.timerTick();
+    }
     if (remaining <= 0) stopShotClock();
   }, 100);
 }
