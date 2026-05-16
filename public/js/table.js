@@ -400,7 +400,12 @@ function renderHostControls(state) {
   if (!src) return;
 
   const allPlayers = src.players || [];
-  if (!allPlayers.length) { panel.style.display = 'none'; return; }
+  if (!allPlayers.length) {
+    panel.style.display = 'none';
+    const micPanel = document.getElementById('mic-controls-panel');
+    if (micPanel) micPanel.style.display = 'none';
+    return;
+  }
   panel.style.display = '';
 
   const others = allPlayers.filter(p => p.userId !== user.id);
@@ -429,8 +434,8 @@ function renderHostControls(state) {
       }
     </div>`;
 
-  // Admin PTT controls
-  if (u?.isAdmin) renderAdminPttPanel();
+  // Admin Mic Controls (dedicated panel, top-left)
+  if (u?.isAdmin) renderAdminPttPanel(allPlayers);
 }
 
 function hostAddChips(targetUserId, username) {
@@ -1305,44 +1310,54 @@ function renderAdminPttPanel(players, mode) {
   const u = getUser();
   if (!u?.isAdmin) return;
 
-  // Ensure container exists inside host-controls panel
-  let panel = document.getElementById('admin-ptt-panel');
-  if (!panel) {
-    const hostPanel = document.getElementById('host-controls');
-    if (!hostPanel) return;
-    panel = document.createElement('div');
-    panel.id = 'admin-ptt-panel';
-    hostPanel.appendChild(panel);
-  }
+  const panel = document.getElementById('mic-controls-panel');
+  const inner = document.getElementById('mic-controls-inner');
+  if (!panel || !inner) return;
 
-  const isOpenMic = mode ? mode === 'openmic' : openMicMode;
-  let html = `
-    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">
-      <div style="color:var(--gold);font-size:.7rem;font-weight:700;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">🎙 Audio Controls</div>
-      <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px">
-        <button onclick="adminMuteAll()" style="font-size:.65rem;padding:3px 8px;background:rgba(180,20,20,.8);border:1px solid #e74c3c;color:#fff;border-radius:4px;cursor:pointer">🔇 Mute All</button>
-        <button onclick="adminUnmuteAll()" style="font-size:.65rem;padding:3px 8px;background:rgba(20,100,40,.8);border:1px solid var(--chip-green);color:#fff;border-radius:4px;cursor:pointer">🔊 Unmute All</button>
-        <button onclick="adminToggleMode()" style="font-size:.65rem;padding:3px 8px;background:rgba(50,80,140,.8);border:1px solid #6a9fd8;color:#fff;border-radius:4px;cursor:pointer">${isOpenMic ? '🎙 PTT Mode' : '📢 Open Mic'}</button>
-      </div>`;
+  const isOpenMic = mode !== undefined ? mode === 'openmic' : openMicMode;
 
+  const modeLabel = isOpenMic
+    ? '<span class="mic-mode-badge open">📢 Open Mic — Active</span>'
+    : '<span class="mic-mode-badge ptt">🎙 PTT Mode</span>';
+
+  const modeToggleLabel = isOpenMic ? '↩ Switch to PTT' : '📢 Open Mic';
+  const modeToggleClass = isOpenMic ? 'mic-btn mic-btn-mode-ptt' : 'mic-btn mic-btn-mode-open';
+
+  let rows = '';
   if (players && players.length) {
     for (const p of players) {
-      const micIcon  = p.mutedByAdmin ? '🔇' : (p.micStatus === 'speaking' ? '🔴' : '🎙');
-      const micColor = p.mutedByAdmin ? 'rgba(255,80,80,.9)' : (p.micStatus === 'speaking' ? '#e74c3c' : 'var(--chip-green)');
-      html += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:.75rem">
-        <span style="color:${micColor}">${micIcon}</span>
-        <span style="flex:1;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.username}</span>
-        ${p.mutedByAdmin
-          ? `<button onclick="adminUnmutePlayer('${p.userId}')" style="font-size:.6rem;padding:2px 6px;background:rgba(20,100,40,.7);border:1px solid var(--chip-green);color:#fff;border-radius:3px;cursor:pointer">Unmute</button>`
-          : `<button onclick="adminMutePlayer('${p.userId}')" style="font-size:.6rem;padding:2px 6px;background:rgba(180,20,20,.7);border:1px solid #e74c3c;color:#fff;border-radius:3px;cursor:pointer">Mute</button>`}
-      </div>`;
+      const isSpeaking  = !p.mutedByAdmin && p.micStatus === 'speaking';
+      const isMuted     = p.mutedByAdmin;
+      const iconEmoji   = isMuted ? '🔇' : (isSpeaking ? '🔴' : '🎙');
+      const iconClass   = isSpeaking ? 'mic-status-icon speaking' : 'mic-status-icon';
+      const iconColor   = isMuted ? 'color:#e74c3c' : (isSpeaking ? 'color:#e74c3c' : 'color:var(--chip-green)');
+      const btnClass    = isMuted ? 'mic-toggle-btn unmute' : 'mic-toggle-btn mute';
+      const btnLabel    = isMuted ? 'Unmute' : 'Mute';
+      const btnAction   = isMuted ? `adminUnmutePlayer('${p.userId}')` : `adminMutePlayer('${p.userId}')`;
+      rows += `
+        <div class="mic-player-row">
+          <span class="${iconClass}" style="${iconColor}">${iconEmoji}</span>
+          <span class="mic-player-name">${p.username}</span>
+          <button class="${btnClass}" onclick="${btnAction}">${btnLabel}</button>
+        </div>`;
     }
   } else {
-    html += `<div style="color:var(--text-dim);font-size:.72rem">No players seated</div>`;
+    rows = '<div style="color:var(--text-dim);font-size:.8rem;padding:4px 0">No players seated</div>';
   }
 
-  html += `</div>`;
-  panel.innerHTML = html;
+  inner.innerHTML = `
+    <div class="mic-panel-header">
+      <span class="mic-panel-title">🎙 Mic Controls</span>
+    </div>
+    <div class="mic-panel-actions">
+      <button class="mic-btn mic-btn-mute-all"   onclick="adminMuteAll()">🔇 Mute All</button>
+      <button class="mic-btn mic-btn-unmute-all" onclick="adminUnmuteAll()">🔊 Unmute All</button>
+      <button class="${modeToggleClass}" onclick="adminToggleMode()">${modeToggleLabel}</button>
+    </div>
+    ${rows}
+    <div class="mic-mode-bar">Current mode: ${modeLabel}</div>`;
+
+  panel.style.display = '';
 }
 
 function adminMuteAll()   { socket?.emit('ptt:admin_mute_all'); }
