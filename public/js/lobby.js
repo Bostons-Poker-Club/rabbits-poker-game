@@ -487,21 +487,33 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 // ─── Buy-In Request ────────────────────────────────────────────────────────
 
 function openBuyInModal() {
-  const ctx = document.getElementById('bi-table-context');
-  if (ctx) ctx.style.display = 'none';
+  const hint = document.getElementById('bi-min-hint');
+  if (hint) hint.textContent = '';
   openModal('buyin-request-modal');
 }
 
+// Step 1: show "chips required" info modal before the form
 function _openBuyInFromTable(minBuyIn, currentChips) {
-  const ctx = document.getElementById('bi-table-context');
-  if (ctx) {
-    const need = minBuyIn - Math.max(currentChips, 0);
-    ctx.innerHTML = currentChips <= 0
-      ? `You have <strong style="color:var(--red)">0 chips</strong>. Request a buy-in below and Roger will add chips right away.`
-      : `You need <strong style="color:var(--gold)">$${fmtChips(need)}</strong> more chips to join this table &mdash; min buy-in is <strong>$${fmtChips(minBuyIn)}</strong>, you have <strong>$${fmtChips(currentChips)}</strong>.`;
-    ctx.style.display = '';
+  const msg = document.getElementById('insufficient-msg');
+  if (msg) {
+    msg.innerHTML = currentChips <= 0
+      ? `You have <strong style="color:var(--red)">0 chips</strong>. You need chips to join this table.<br>
+         <strong>Minimum buy-in is $${fmtChips(minBuyIn)}.</strong><br>
+         <span style="color:var(--text-dim);font-size:.88rem">Send payment via CashApp or Venmo, then click Request Buy-In and admin will add your chips right away.</span>`
+      : `You need chips to join this table. <strong>Minimum buy-in is $${fmtChips(minBuyIn)}</strong><br>
+         <span style="color:var(--text-dim);font-size:.88rem">You currently have $${fmtChips(currentChips)} — you need $${fmtChips(minBuyIn - Math.max(currentChips, 0))} more.</span>`;
   }
-  document.getElementById('bi-amount').value = minBuyIn;
+  window._pendingBuyInMin = minBuyIn;
+  openModal('insufficient-chips-modal');
+}
+
+// Step 2: transition from the info modal to the actual form
+function openBuyInFormFromInsufficient() {
+  closeModal('insufficient-chips-modal');
+  const min = window._pendingBuyInMin || 200;
+  document.getElementById('bi-amount').value = min;
+  const hint = document.getElementById('bi-min-hint');
+  if (hint) hint.textContent = `Minimum for this table: $${fmtChips(min)}`;
   openModal('buyin-request-modal');
 }
 
@@ -513,11 +525,10 @@ async function submitBuyInRequest() {
   try {
     await apiFetch('/api/buyin-request', { method: 'POST', body: { amount, paymentMethod, notes } });
     closeModal('buyin-request-modal');
-    showToast('✅ Request sent! Roger will add your chips shortly.');
+    showToast('✅ Request sent! Admin will add your chips shortly.');
     document.getElementById('bi-amount').value = '200';
     document.getElementById('bi-notes').value = '';
-    const ctx = document.getElementById('bi-table-context');
-    if (ctx) ctx.style.display = 'none';
+    window._pendingBuyInMin = null;
   } catch (e) {
     showToast(e.message || 'Failed to send request', 'error');
   }

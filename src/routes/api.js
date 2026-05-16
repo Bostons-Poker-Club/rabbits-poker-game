@@ -1212,6 +1212,15 @@ router.post('/admin/buyin-requests/:id/deny', authMiddleware, adminMiddleware, a
   res.json({ ok: true });
 });
 
+// Admin: mark buy-in request as paid / unpaid
+router.post('/admin/buyin-requests/:id/paid', authMiddleware, adminMiddleware, (req, res) => {
+  const id = parseInt(req.params.id);
+  const request = buyInRequests.find(r => r.id === id);
+  if (!request) return res.status(404).json({ error: 'Request not found' });
+  request.paid = Boolean(req.body.paid);
+  res.json({ ok: true });
+});
+
 // Admin: get transaction history for a player
 router.get('/admin/players/:id/transactions', authMiddleware, adminMiddleware, async (req, res) => {
   const { data, error } = await supabaseAdmin

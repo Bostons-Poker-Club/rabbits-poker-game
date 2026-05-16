@@ -90,10 +90,11 @@
 
   <!-- Pending Buy-Ins -->
   <div class="admin-panel" id="panel-buyins">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
       <h2 style="color:var(--gold)">💰 Pending Buy-In Requests</h2>
       <button class="btn btn-sm btn-outline" onclick="loadBuyInRequests()">↻ Refresh</button>
     </div>
+    <p style="color:var(--text-dim);font-size:.8rem;margin-bottom:16px">New requests trigger a sound alert. Check <strong>Payment received</strong> once you've confirmed the payment, then click <strong>Add Chips</strong>.</p>
     <div id="buyin-list">
       <div style="text-align:center;padding:24px;color:var(--text-dim)">No pending buy-in requests</div>
     </div>

@@ -1650,6 +1650,32 @@ async function loadBuyInRequests() {
   } catch {}
 }
 
+function buyInCardHTML(r, isNew) {
+  const nameColor = isNew ? 'var(--chip-green)' : 'var(--text)';
+  const prefix = isNew ? '🆕 ' : '';
+  return `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="flex:1;min-width:180px">
+        <div style="font-weight:700;font-size:1rem;color:${nameColor}">${prefix}${esc(r.username)}${r.nickname ? ` <span style="color:var(--text-dim);font-weight:400;font-size:.88rem">(${esc(r.nickname)})</span>` : ''}</div>
+        ${r.phone ? `<div style="color:var(--text-dim);font-size:.8rem;margin-top:2px">📱 ${esc(r.phone)}</div>` : ''}
+        <div style="color:var(--chip-green);font-size:1.25rem;font-weight:700;margin:4px 0">$${fmt(r.amount)} chips</div>
+        <div style="color:var(--text-dim);font-size:.82rem">💳 ${esc(r.paymentMethod)}${r.notes ? ' <span style="opacity:.7">— ' + esc(r.notes) + '</span>' : ''}</div>
+        <div style="color:var(--text-dim);font-size:.72rem;margin-top:3px">${new Date(r.requestedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn btn-gold btn-sm" onclick="approveBuyIn(${r.id}, '${esc(r.username)}', ${r.amount})">✓ Add $${fmt(r.amount)} Chips</button>
+          <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="denyBuyIn(${r.id})">✗ Deny</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:6px;font-size:.82rem;color:var(--text-dim);cursor:pointer;user-select:none">
+          <input type="checkbox" id="bi-paid-${r.id}" ${r.paid ? 'checked' : ''} onchange="markBuyInPaid(${r.id}, this.checked)"
+            style="width:15px;height:15px;accent-color:var(--chip-green);cursor:pointer">
+          Payment received
+        </label>
+      </div>
+    </div>`;
+}
+
 function renderBuyInRequests(requests) {
   const el = document.getElementById('buyin-list');
   if (!el) return;
@@ -1658,18 +1684,8 @@ function renderBuyInRequests(requests) {
     return;
   }
   el.innerHTML = requests.map(r => `
-    <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
-      <div>
-        <div style="font-weight:700;font-size:1rem;color:var(--text)">${esc(r.username)}${r.nickname ? ` <span style="color:var(--text-dim);font-weight:400;font-size:.88rem">(${esc(r.nickname)})</span>` : ''}</div>
-        ${r.phone ? `<div style="color:var(--text-dim);font-size:.8rem">📱 ${esc(r.phone)}</div>` : ''}
-        <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
-        <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
-        <div style="color:var(--text-dim);font-size:.75rem">${new Date(r.requestedAt).toLocaleTimeString()}</div>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-gold btn-sm" onclick="approveBuyIn(${r.id}, '${esc(r.username)}', ${r.amount})">✓ Add $${fmt(r.amount)} Chips</button>
-        <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="denyBuyIn(${r.id})">✗ Deny</button>
-      </div>
+    <div id="bi-${r.id}" style="background:${r.paid ? 'rgba(0,200,80,.06)' : 'rgba(255,255,255,.04)'};border:1px solid ${r.paid ? 'rgba(0,200,80,.35)' : 'var(--border)'};border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;transition:border-color .2s,background .2s">
+      ${buyInCardHTML(r, false)}
     </div>`).join('');
 }
 
@@ -1680,19 +1696,20 @@ function prependBuyInRow(r) {
   if (empty) empty.remove();
   const div = document.createElement('div');
   div.id = `bi-${r.id}`;
-  div.style.cssText = 'background:rgba(0,200,80,.08);border:1px solid rgba(0,200,80,.3);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px';
-  div.innerHTML = `
-    <div>
-      <div style="font-weight:700;font-size:1rem;color:var(--chip-green)">🆕 ${esc(r.username)}${r.nickname ? ` <span style="color:var(--text-dim);font-weight:400;font-size:.88rem">(${esc(r.nickname)})</span>` : ''}</div>
-      ${r.phone ? `<div style="color:var(--text-dim);font-size:.8rem">📱 ${esc(r.phone)}</div>` : ''}
-      <div style="color:var(--chip-green);font-size:1.2rem;font-weight:700">$${fmt(r.amount)} chips</div>
-      <div style="color:var(--text-dim);font-size:.82rem;margin-top:2px">💳 ${esc(r.paymentMethod)}${r.notes ? ' — ' + esc(r.notes) : ''}</div>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-gold btn-sm" onclick="approveBuyIn(${r.id}, '${esc(r.username)}', ${r.amount})">✓ Add $${fmt(r.amount)} Chips</button>
-      <button class="btn btn-outline btn-sm" style="color:var(--red);border-color:var(--red)" onclick="denyBuyIn(${r.id})">✗ Deny</button>
-    </div>`;
+  div.style.cssText = 'background:rgba(0,200,80,.08);border:1px solid rgba(0,200,80,.35);border-radius:var(--radius);padding:16px 18px;margin-bottom:12px;transition:border-color .2s,background .2s';
+  div.innerHTML = buyInCardHTML(r, true);
   el.prepend(div);
+}
+
+async function markBuyInPaid(id, paid) {
+  try {
+    await apiFetch(`/api/admin/buyin-requests/${id}/paid`, { method: 'POST', body: { paid } });
+    const el = document.getElementById(`bi-${id}`);
+    if (el) {
+      el.style.background = paid ? 'rgba(0,200,80,.06)' : 'rgba(255,255,255,.04)';
+      el.style.borderColor = paid ? 'rgba(0,200,80,.35)' : 'var(--border)';
+    }
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 async function approveBuyIn(id, username, amount) {
