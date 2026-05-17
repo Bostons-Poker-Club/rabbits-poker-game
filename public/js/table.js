@@ -1415,6 +1415,7 @@ function _getCamVideoSender(pc) {
 }
 
 async function _camEnable() {
+  console.log('[CAM] enabling camera...');
   try {
     camStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
@@ -1422,11 +1423,17 @@ async function _camEnable() {
     });
     camEnabled = true;
     const [videoTrack] = camStream.getVideoTracks();
+    console.log('[CAM] got video track:', videoTrack?.label, 'readyState:', videoTrack?.readyState);
     // Push video track to all existing peer connections
     for (const [peerId, pc] of pttPeers) {
       const sender = _getCamVideoSender(pc);
       if (sender) {
-        try { await sender.replaceTrack(videoTrack); } catch {}
+        try {
+          await sender.replaceTrack(videoTrack);
+          console.log(`[CAM] replaceTrack sent to ${peerId}`);
+        } catch (err) {
+          console.warn(`[CAM] replaceTrack failed for ${peerId}:`, err.message);
+        }
       }
     }
     _updateCamBtn();
@@ -1478,14 +1485,17 @@ function _updateSeatVideos() {
   // Remote players
   for (const [uid, stream] of peerCamStreams) {
     const enabled = peerCamEnabled.get(uid);
+    const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
     const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
     if (!avatarEl) continue;
-    if (enabled) _setAvatarVideo(avatarEl, stream, false);
+    if (enabled || hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
     else _clearAvatarVideo(avatarEl);
   }
 }
 
 function _setAvatarVideo(avatarEl, stream, muted) {
+  const uid = avatarEl.dataset.camUid;
+  console.log(`[CAM] _setAvatarVideo uid=${uid} muted=${muted} tracks=${stream?.getVideoTracks().length}`);
   avatarEl.classList.add('has-video');
   let vid = avatarEl.querySelector('video');
   if (!vid) {
@@ -1494,11 +1504,15 @@ function _setAvatarVideo(avatarEl, stream, muted) {
     vid.autoplay = true;
     vid.playsInline = true;
     vid.muted = muted;
+    vid.onplaying = () => console.log(`[CAM] video playing for uid=${uid}`);
     vid.onclick = () => _expandCamVideo(vid, avatarEl.dataset.camUid);
     avatarEl.appendChild(vid);
   }
-  if (vid.srcObject !== stream) vid.srcObject = stream;
-  vid.play().catch(() => {});
+  if (vid.srcObject !== stream) {
+    vid.srcObject = stream;
+    console.log(`[CAM] set srcObject for uid=${uid}`);
+  }
+  vid.play().catch(err => console.warn(`[CAM] play() failed for uid=${uid}:`, err.message));
 }
 
 function _clearAvatarVideo(avatarEl) {
@@ -1647,9 +1661,15 @@ function _pttCreatePC(peerId, addTrackNow = true) {
       audio.srcObject = stream;
       audio.play().catch(err => console.warn('[PTT] autoplay blocked:', err.message));
     } else if (e.track.kind === 'video') {
-      console.log(`[CAM] video track from ${peerId}`);
+      console.log(`[CAM] video track from ${peerId}, readyState=${e.track.readyState}`);
       peerCamStreams.set(peerId, stream);
+      peerCamEnabled.set(peerId, true);
       _updateSeatVideos();
+      e.track.onunmute = () => {
+        console.log(`[CAM] video track unmuted (live) from ${peerId}`);
+        peerCamEnabled.set(peerId, true);
+        _updateSeatVideos();
+      };
     }
   };
 
