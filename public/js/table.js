@@ -820,6 +820,16 @@ function renderCommunityCards(cards) {
     Array(placeholders).fill('<div class="card placeholder"></div>').join('');
 }
 
+function _seatAvatarHtml(player) {
+  if (player.avatarUrl) {
+    return `<img class="seat-avatar-photo" src="${esc(player.avatarUrl)}" alt="${esc(player.username)}" loading="lazy">`;
+  }
+  if (player.isAdmin || player.isHost) {
+    return `<img class="seat-rabbit-logo" src="/images/logo.svg" alt="host">`;
+  }
+  return `<div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div>`;
+}
+
 function renderSeats(state) {
   const container = document.getElementById('seats-container');
   const oval = document.getElementById('poker-oval');
@@ -857,7 +867,7 @@ function renderSeats(state) {
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             ${isStraddler ? `<div class="straddle-badge">STR $${fmt(state.bigBlind * 2)}</div>` : ''}
-            <div class="seat-avatar" data-cam-uid="${player.userId}"><div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div></div>
+            <div class="seat-avatar" data-cam-uid="${player.userId}">${_seatAvatarHtml(player)}</div>
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username.length > 10 ? player.username.slice(0,10) + '…' : player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
@@ -1496,7 +1506,6 @@ function _updateSeatVideos() {
 function _setAvatarVideo(avatarEl, stream, muted) {
   const uid = avatarEl.dataset.camUid;
   console.log(`[CAM] _setAvatarVideo uid=${uid} muted=${muted} tracks=${stream?.getVideoTracks().length}`);
-  avatarEl.classList.add('has-video');
   let vid = avatarEl.querySelector('video');
   if (!vid) {
     vid = document.createElement('video');
@@ -1512,13 +1521,18 @@ function _setAvatarVideo(avatarEl, stream, muted) {
     vid.srcObject = stream;
     console.log(`[CAM] set srcObject for uid=${uid}`);
   }
+  // Add class after paint so CSS opacity transition fires (avatar fades out, video fades in)
+  requestAnimationFrame(() => avatarEl.classList.add('has-video'));
   vid.play().catch(err => console.warn(`[CAM] play() failed for uid=${uid}:`, err.message));
 }
 
 function _clearAvatarVideo(avatarEl) {
-  avatarEl.classList.remove('has-video');
+  avatarEl.classList.remove('has-video'); // triggers CSS fade-out of video, fade-in of avatar
   const vid = avatarEl.querySelector('video');
-  if (vid) { vid.srcObject = null; vid.remove(); }
+  if (!vid) return;
+  const cleanup = () => { if (vid.parentNode) { vid.srcObject = null; vid.remove(); } };
+  vid.addEventListener('transitionend', cleanup, { once: true });
+  setTimeout(cleanup, 500); // fallback if transitionend doesn't fire
 }
 
 function _expandCamVideo(vid, userId) {

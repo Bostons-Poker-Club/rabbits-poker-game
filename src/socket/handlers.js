@@ -41,6 +41,7 @@ const activeGames = new Map();       // tableId -> PokerGame
 const activeTournaments = new Map(); // tournamentId -> Tournament
 const socketUsers = new Map();       // socketId -> { userId, username, isAdmin }
 const userSockets = new Map();       // userId -> socketId
+const playerProfiles = new Map();    // userId -> { avatarUrl, isAdmin, isHost }
 
 // Per-table jackpot state
 // tableJackpots: Map<tableId, { tableName, amount, highHandRank, highHandUserId, highHandUsername, highHandDescription, timerStart }>
@@ -434,7 +435,7 @@ function setupSocketHandlers(io) {
 
         const { data: dbUser } = await supabaseAdmin
           .from('users')
-          .select('chips, is_banned, phone, email')
+          .select('chips, is_banned, phone, email, avatar_url, is_host')
           .eq('id', userId)
           .single();
 
@@ -556,6 +557,7 @@ function setupSocketHandlers(io) {
         if (!finalSeat) return socket.emit('error', { message: 'No open seats' });
 
         game.addPlayer(userId, username, chips, finalSeat);
+        playerProfiles.set(userId, { avatarUrl: dbUser?.avatar_url || null, isAdmin, isHost: dbUser?.is_host || false });
 
         // Increment sessions_played on first join to any table this session
         // Use a per-socket flag to avoid double-counting
@@ -1666,8 +1668,16 @@ function setupSocketHandlers(io) {
 
 // ─── Game State Broadcast Helpers ──────────────────────────────────────────────
 
+function enrichPlayers(players) {
+  return players.map(p => {
+    const prof = playerProfiles.get(p.userId) || {};
+    return { ...p, avatarUrl: prof.avatarUrl || null, isAdmin: prof.isAdmin || false, isHost: prof.isHost || false };
+  });
+}
+
 function broadcastGameState(io, tableId, game) {
   const publicState = game.getPublicState();
+  publicState.players = enrichPlayers(publicState.players);
   io.to(tableId).emit('game_state', publicState);
 
   // Send personalized state with hole cards to each player
@@ -1675,6 +1685,7 @@ function broadcastGameState(io, tableId, game) {
     const sid = userSockets.get(player.userId);
     if (sid) {
       const personalState = game.getPlayerState(player.userId);
+      personalState.players = enrichPlayers(personalState.players);
       io.to(sid).emit('my_state', personalState);
     }
   }
@@ -1682,6 +1693,7 @@ function broadcastGameState(io, tableId, game) {
 
 function sendPersonalizedState(io, socket, game, userId) {
   const state = game.getPlayerState(userId);
+  state.players = enrichPlayers(state.players);
   socket.emit('my_state', state);
 }
 
