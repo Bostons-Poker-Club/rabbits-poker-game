@@ -21,6 +21,7 @@ const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
 const { sendStartupTestEmail } = require('./src/mail');
+const maintenance = require('./src/maintenance');
 
 const app = express();
 const server = http.createServer(app);
@@ -62,8 +63,12 @@ if (process.env.NODE_ENV === 'production') {
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Health check endpoint for Railway / uptime monitors
+// Health check endpoint for Railway / uptime monitors — always 200 so Railway
+// confirms the new deployment is alive before routing traffic to it.
 app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
+
+// Public maintenance state — clients poll this to show/hide the banner
+app.get('/api/maintenance', (req, res) => res.json(maintenance.getState()));
 
 // Service worker must never be cached by the browser itself
 app.get('/sw.js', (req, res) => {
@@ -75,6 +80,7 @@ app.get('/sw.js', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.set('io', io);
+app.set('maintenance', maintenance);
 app.use('/api', apiRoutes);
 
 // Catch-all: serve index.html for SPA-style routing

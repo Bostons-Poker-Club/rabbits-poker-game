@@ -19,7 +19,7 @@ loadAll();
 let adminSocket = null;
 if (typeof io !== 'undefined') {
   adminSocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
-  adminSocket.on('connect', () => { adminSocket.emit('lobby:join'); adminSocket.emit('admin:get_overview'); });
+  adminSocket.on('connect', () => { adminSocket.emit('lobby:join'); adminSocket.emit('admin:get_overview'); _loadMaintenanceState(); });
 
   adminSocket.on('admin:new_player', ({ username }) => {
     toast(`🔔 New registration: ${username}`, 'success');
@@ -1847,6 +1847,45 @@ function handleJackpotExpired(data) {
 }
 
 // ─── Admin Chip Refill ────────────────────────────────────────────────────
+
+// ─── Maintenance Banner Toggle ────────────────────────────────────────────────
+
+let _maintBannerActive = false;
+
+async function toggleMaintenanceBanner() {
+  try {
+    const newState = !_maintBannerActive;
+    const r = await apiFetch('/api/admin/maintenance', {
+      method: 'POST',
+      body: JSON.stringify({ active: newState })
+    });
+    _maintBannerActive = r.active;
+    _updateMaintBtn();
+    toast(_maintBannerActive ? 'Maintenance banner enabled' : 'Maintenance banner disabled');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function _updateMaintBtn() {
+  const btn = document.getElementById('maint-banner-btn');
+  if (!btn) return;
+  if (_maintBannerActive) {
+    btn.textContent = '✅ Disable Maintenance Banner';
+    btn.style.borderColor = 'var(--chip-green)';
+    btn.style.color = 'var(--chip-green)';
+  } else {
+    btn.textContent = '🔧 Enable Maintenance Banner';
+    btn.style.borderColor = 'var(--gold)';
+    btn.style.color = 'var(--gold)';
+  }
+}
+
+async function _loadMaintenanceState() {
+  try {
+    const r = await apiFetch('/api/admin/maintenance');
+    _maintBannerActive = r.active;
+    _updateMaintBtn();
+  } catch {}
+}
 
 async function refillAdminChips() {
   try {

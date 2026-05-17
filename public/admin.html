@@ -76,9 +76,12 @@
       </div>
     </div>
 
-    <div style="margin-bottom:20px">
+    <div style="margin-bottom:20px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
       <button class="btn btn-outline" onclick="refillAdminChips()" style="gap:8px">
         💰 Refill My Chips (100,000)
+      </button>
+      <button id="maint-banner-btn" class="btn btn-outline" onclick="toggleMaintenanceBanner()" style="gap:8px;border-color:var(--gold);color:var(--gold)">
+        🔧 Enable Maintenance Banner
       </button>
     </div>
 
@@ -965,5 +968,6 @@
 <script src="/js/auth.js"></script>
 <script src="/js/admin.js"></script>
 <script src="/js/pwa.js"></script>
+<script src="/js/maintenance-banner.js"></script>
 </body>
 </html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Boston Poker Club — Under Maintenance</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: radial-gradient(ellipse at center, #1a4a2e 0%, #0a1f12 100%);
+      color: #f0ead6;
+      font-family: 'Georgia', serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .logo {
+      width: 120px;
+      height: auto;
+      margin-bottom: 28px;
+      filter: drop-shadow(0 0 20px rgba(212,175,55,0.4));
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      color: #d4af37;
+      letter-spacing: .04em;
+      margin-bottom: 10px;
+    }
+
+    .subtitle {
+      font-size: 1rem;
+      color: #d4af37;
+      margin-bottom: 28px;
+      opacity: 0.8;
+    }
+
+    .message-box {
+      background: rgba(0,0,0,0.45);
+      border: 2px solid rgba(212,175,55,0.35);
+      border-radius: 16px;
+      padding: 28px 36px;
+      max-width: 480px;
+      width: 100%;
+      margin-bottom: 36px;
+    }
+
+    .message-box p {
+      font-size: 1rem;
+      line-height: 1.7;
+      color: #e8ddc0;
+      margin-bottom: 10px;
+    }
+
+    .message-box p:last-child { margin-bottom: 0; }
+
+    /* Animated card suits */
+    .suits {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-bottom: 32px;
+      font-size: 2rem;
+    }
+
+    .suit {
+      animation: bounce 1.4s ease-in-out infinite;
+    }
+    .suit:nth-child(1) { animation-delay: 0s;    color: #d4af37; }
+    .suit:nth-child(2) { animation-delay: 0.2s;  color: #e05555; }
+    .suit:nth-child(3) { animation-delay: 0.4s;  color: #d4af37; }
+    .suit:nth-child(4) { animation-delay: 0.6s;  color: #e05555; }
+
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0);    opacity: 1; }
+      40%           { transform: translateY(-12px); opacity: 0.7; }
+    }
+
+    .refresh-note {
+      font-size: .78rem;
+      color: #7a9a80;
+    }
+
+    #countdown {
+      color: #d4af37;
+      font-weight: bold;
+    }
+
+    .contact {
+      margin-top: 20px;
+      font-size: .82rem;
+      color: #7a9a80;
+    }
+
+    .contact a { color: #d4af37; text-decoration: none; }
+    .contact a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+  <img src="/images/logo.svg" alt="Boston Poker Club" class="logo">
+
+  <h1>Boston Poker Club</h1>
+  <p class="subtitle">RabbsRoom</p>
+
+  <div class="suits">
+    <span class="suit">♠</span>
+    <span class="suit">♥</span>
+    <span class="suit">♣</span>
+    <span class="suit">♦</span>
+  </div>
+
+  <div class="message-box">
+    <p>Boston Poker Club is currently under maintenance.</p>
+    <p>We'll be back shortly — thank you for your patience!</p>
+  </div>
+
+  <p class="refresh-note">Checking again in <span id="countdown">30</span>s…</p>
+
+  <div class="contact">
+    Questions? <a href="mailto:bostonspokerclub.amitureflops@gmail.com">bostonspokerclub.amitureflops@gmail.com</a>
+  </div>
+
+  <script>
+    var remaining = 30;
+    var el = document.getElementById('countdown');
+
+    var timer = setInterval(function() {
+      remaining--;
+      if (el) el.textContent = remaining;
+      if (remaining <= 0) {
+        clearInterval(timer);
+        // Check if the server is back before doing a full reload
+        fetch('/health')
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.ok) {
+              window.location.href = '/';
+            } else {
+              remaining = 30;
+              timer = setInterval(arguments.callee, 1000);
+            }
+          })
+          .catch(function() {
+            // Still down — reload the maintenance page itself after 5 more seconds
+            setTimeout(function() { window.location.reload(); }, 5000);
+          });
+      }
+    }, 1000);
+  </script>
+</body>
+</html>

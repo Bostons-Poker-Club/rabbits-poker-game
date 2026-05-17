@@ -1050,6 +1050,24 @@ router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (r
   res.json({ success: true, is_host: !!isHost });
 });
 
+router.get('/admin/maintenance', authMiddleware, adminMiddleware, (req, res) => {
+  const maint = req.app.get('maintenance');
+  res.json(maint ? maint.getState() : { active: false, message: '' });
+});
+
+router.post('/admin/maintenance', authMiddleware, adminMiddleware, (req, res) => {
+  const maint = req.app.get('maintenance');
+  if (!maint) return res.status(500).json({ error: 'Maintenance module not available' });
+  const { active, message } = req.body;
+  maint.setState(active, message);
+  const state = maint.getState();
+  // Push real-time update to all connected clients
+  const io = req.app.get('io');
+  if (io) io.emit('maintenance:update', state);
+  console.log(`[maintenance] Banner ${state.active ? 'ENABLED' : 'DISABLED'} by ${req.user.username}`);
+  res.json({ ok: true, ...state });
+});
+
 router.post('/admin/refill-chips', authMiddleware, adminMiddleware, async (req, res) => {
   const { error } = await supabaseAdmin
     .from('users')
