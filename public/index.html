@@ -28,21 +28,25 @@
     </div>
 
     <!-- Login Form -->
-    <form id="form-login" onsubmit="event.preventDefault(); doLogin()">
+    <div id="form-login">
       <div class="form-group">
         <label>Username</label>
-        <input type="text" id="login-username" placeholder="Enter username" autocomplete="username" inputmode="text">
+        <input type="text" id="login-username" placeholder="Enter username"
+          autocomplete="username" inputmode="text"
+          onkeydown="if(event.key==='Enter') doLogin()">
       </div>
       <div class="form-group">
         <label>Password</label>
         <div class="pw-wrap">
-          <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password">
+          <input type="password" id="login-password" placeholder="Enter password"
+            autocomplete="current-password"
+            onkeydown="if(event.key==='Enter') doLogin()">
           <button type="button" class="pw-toggle" onclick="togglePw(this,'login-password')" aria-label="Show password">👁</button>
         </div>
       </div>
-      <button type="submit" class="btn btn-gold btn-full" id="btn-login">Sign In</button>
-      <div id="login-error" class="error-msg"></div>
-    </form>
+      <button type="button" class="btn btn-gold btn-full" id="btn-login" onclick="doLogin()">Sign In</button>
+      <div id="login-error" class="error-msg" style="display:none"></div>
+    </div>
 
     <div id="host-apply-link" style="text-align:center;margin-top:10px;font-size:.82rem;color:var(--text-dim)">
       Interested in hosting tables?
@@ -86,7 +90,7 @@
     </div>
 
     <!-- Register Form -->
-    <form id="form-register" style="display:none" onsubmit="event.preventDefault(); doRegister()">
+    <div id="form-register" style="display:none">
       <div class="auth-name-row" style="display:flex;gap:10px">
         <div class="form-group" style="flex:1">
           <label>First Name <span style="color:var(--gold)">*</span><br><span style="color:var(--text-dim);font-size:.7rem;font-weight:400">as on government ID</span></label>
@@ -116,17 +120,19 @@
       <div class="form-group">
         <label>Password <span style="color:var(--gold)">*</span></label>
         <div class="pw-wrap">
-          <input type="password" id="reg-password" placeholder="Min 6 characters" autocomplete="new-password">
+          <input type="password" id="reg-password" placeholder="Min 6 characters"
+            autocomplete="new-password"
+            onkeydown="if(event.key==='Enter') doRegister()">
           <button type="button" class="pw-toggle" onclick="togglePw(this,'reg-password')" aria-label="Show password">👁</button>
         </div>
       </div>
-      <button type="submit" class="btn btn-gold btn-full" id="btn-register">Create Account</button>
+      <button type="button" class="btn btn-gold btn-full" id="btn-register" onclick="doRegister()">Create Account</button>
       <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:12px">
         You start with 0 chips — admin will add chips after verifying your identity.
       </p>
-      <div id="reg-error" class="error-msg"></div>
+      <div id="reg-error" class="error-msg" style="display:none"></div>
       <div id="reg-success" class="success-msg"></div>
-    </form>
+    </div>
   </div>
 </div>
 
@@ -161,22 +167,43 @@
   // ── 2FA state ─────────────────────────────────────────────────────────────
   let _pendingToken = null;
 
+  function _showErr(elId, msg) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+    el.style.color = '';
+  }
+
   async function doLogin() {
+    console.log('[doLogin] called');
     const btn = document.getElementById('btn-login');
-    const errEl = document.getElementById('login-error');
-    if (btn.disabled) return;
+    if (!btn) { console.error('[doLogin] btn-login not found'); return; }
+    if (btn.disabled) { console.log('[doLogin] already in flight, skipping'); return; }
+
+    _showErr('login-error', '');
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    console.log('[doLogin] username:', username, '| password length:', password.length);
+
+    if (!username || !password) {
+      _showErr('login-error', 'Username and password are required.');
+      return;
+    }
+
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span> Signing In…';
-    errEl.textContent = '';
+
     try {
-      const username = document.getElementById('login-username').value.trim();
-      const password = document.getElementById('login-password').value;
+      console.log('[doLogin] sending POST /api/auth/login …');
       const data = await apiFetch('/api/auth/login', {
         method: 'POST',
         body: { username, password, deviceId: _deviceId }
       });
+      console.log('[doLogin] response ok:', data);
 
       if (data.requires2fa) {
+        console.log('[doLogin] 2FA required, showing 2FA screen');
         btn.disabled = false;
         btn.innerHTML = 'Sign In';
         _pendingToken = data.pendingToken;
@@ -191,54 +218,59 @@
         return;
       }
 
+      console.log('[doLogin] login success, redirecting to lobby');
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
     } catch (e) {
-      errEl.textContent = e.message;
+      console.error('[doLogin] error:', e);
+      _showErr('login-error', e.message || 'Login failed — please try again.');
       btn.disabled = false;
       btn.innerHTML = 'Sign In';
     }
   }
 
   async function doVerify2FA(useBackup = false) {
+    console.log('[doVerify2FA] called, useBackup:', useBackup);
     const btn = document.getElementById('btn-verify-2fa');
-    const errEl = document.getElementById('tfa-error');
-    if (btn && btn.disabled) return;
+    if (btn && btn.disabled) { console.log('[doVerify2FA] already in flight'); return; }
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Verifying…'; }
-    errEl.textContent = '';
+    _showErr('tfa-error', '');
     const rawCode = useBackup
       ? (document.getElementById('tfa-backup-code').value.trim().toUpperCase())
       : (document.getElementById('tfa-code').value.replace(/\s/g, ''));
     if (!rawCode) {
-      errEl.textContent = 'Please enter a code.';
+      _showErr('tfa-error', 'Please enter a code.');
       if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
       return;
     }
     const rememberDevice = document.getElementById('tfa-remember').checked;
     try {
+      console.log('[doVerify2FA] sending verification …');
       const data = await apiFetch('/api/auth/2fa/verify', {
         method: 'POST',
         body: { pendingToken: _pendingToken, code: rawCode, rememberDevice, deviceId: _deviceId }
       });
+      console.log('[doVerify2FA] success, redirecting');
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
     } catch (e) {
-      errEl.textContent = e.message;
+      console.error('[doVerify2FA] error:', e);
+      _showErr('tfa-error', e.message || 'Verification failed — please try again.');
       if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
     }
   }
 
   async function doResend2FA() {
-    const errEl = document.getElementById('tfa-error');
-    errEl.textContent = '';
+    _showErr('tfa-error', '');
     try {
       const data = await apiFetch('/api/auth/2fa/resend', { method: 'POST', body: { pendingToken: _pendingToken } });
-      errEl.style.color = 'var(--chip-green)';
-      errEl.textContent = data.hint || 'Code resent.';
-      setTimeout(() => { errEl.textContent = ''; errEl.style.color = ''; }, 4000);
+      const el = document.getElementById('tfa-error');
+      el.style.color = 'var(--chip-green)';
+      el.textContent = data.hint || 'Code resent.';
+      el.style.display = 'block';
+      setTimeout(() => { el.textContent = ''; el.style.display = 'none'; el.style.color = ''; }, 4000);
     } catch (e) {
-      errEl.style.color = '';
-      errEl.textContent = e.message;
+      _showErr('tfa-error', e.message || 'Failed to resend code.');
     }
   }
 
@@ -264,12 +296,13 @@
   }
 
   async function doRegister() {
+    console.log('[doRegister] called');
     const btn = document.getElementById('btn-register');
-    const errEl = document.getElementById('reg-error');
-    const okEl  = document.getElementById('reg-success');
-    if (btn.disabled) return;
-    errEl.textContent = '';
-    okEl.textContent  = '';
+    if (!btn) { console.error('[doRegister] btn-register not found'); return; }
+    if (btn.disabled) { console.log('[doRegister] already in flight'); return; }
+    _showErr('reg-error', '');
+    document.getElementById('reg-success').textContent = '';
+
     const firstName = document.getElementById('reg-firstname').value.trim();
     const lastName  = document.getElementById('reg-lastname').value.trim();
     const nickname  = document.getElementById('reg-nickname').value.trim();
@@ -277,23 +310,28 @@
     const email     = document.getElementById('reg-email').value.trim();
     const phone     = document.getElementById('reg-phone').value.trim();
     const password  = document.getElementById('reg-password').value;
-    if (!firstName) { errEl.textContent = 'Legal First Name is required'; return; }
-    if (!lastName)  { errEl.textContent = 'Legal Last Name is required'; return; }
-    if (!nickname)  { errEl.textContent = 'Nickname is required'; return; }
-    if (!username)  { errEl.textContent = 'Username is required'; return; }
-    if (!email)     { errEl.textContent = 'Email is required'; return; }
-    if (!phone)     { errEl.textContent = 'Phone number is required for SMS alerts'; return; }
-    if (!password)  { errEl.textContent = 'Password is required'; return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address'; return; }
-    if (phone.replace(/\D/g, '').length !== 10) { errEl.textContent = 'Please enter a valid 10-digit US phone number'; return; }
+
+    if (!firstName) { _showErr('reg-error', 'Legal First Name is required'); return; }
+    if (!lastName)  { _showErr('reg-error', 'Legal Last Name is required'); return; }
+    if (!nickname)  { _showErr('reg-error', 'Nickname is required'); return; }
+    if (!username)  { _showErr('reg-error', 'Username is required'); return; }
+    if (!email)     { _showErr('reg-error', 'Email is required'); return; }
+    if (!phone)     { _showErr('reg-error', 'Phone number is required for SMS alerts'); return; }
+    if (!password)  { _showErr('reg-error', 'Password is required'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { _showErr('reg-error', 'Please enter a valid email address'); return; }
+    if (phone.replace(/\D/g, '').length !== 10) { _showErr('reg-error', 'Please enter a valid 10-digit US phone number'); return; }
+
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span> Creating Account…';
     const full_name = `${firstName} ${lastName}`;
     try {
+      console.log('[doRegister] sending registration …');
       await register(username, email, password, nickname, phone, full_name);
+      console.log('[doRegister] success, redirecting');
       window.location.href = '/lobby.html';
     } catch (e) {
-      errEl.textContent = e.message;
+      console.error('[doRegister] error:', e);
+      _showErr('reg-error', e.message || 'Registration failed — please try again.');
       btn.disabled = false;
       btn.innerHTML = 'Create Account';
     }
