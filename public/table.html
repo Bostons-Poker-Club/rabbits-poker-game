@@ -82,8 +82,13 @@
 
     <!-- Host Controls Panel -->
     <div id="host-controls" style="display:none;position:absolute;top:8px;right:8px;background:rgba(10,25,15,.95);border:1px solid var(--chip-green);border-radius:8px;padding:10px 14px;min-width:180px;z-index:50">
-      <div style="color:var(--chip-green);font-size:.75rem;font-weight:700;margin-bottom:8px">🎰 HOST CONTROLS</div>
-      <div id="host-player-list" style="font-size:.8rem"></div>
+      <div class="host-panel-header">
+        <span class="host-panel-title">🎰 Host</span>
+        <button class="host-collapse-btn" onclick="toggleHostPanel()" title="Minimize">−</button>
+      </div>
+      <div id="host-controls-inner">
+        <div id="host-player-list" style="font-size:.8rem"></div>
+      </div>
     </div>
 
     <!-- Mic Controls Panel (admin only, separate from host controls) -->

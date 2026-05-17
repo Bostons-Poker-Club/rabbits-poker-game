@@ -1425,6 +1425,56 @@ input, select, textarea { font-family: inherit; }
 }
 
 /* ─── Mic Panel: Collapse Button + Collapsed State ──────────────────────── */
+/* ─── Host Controls Panel (collapsible) ──────────────────────────────────── */
+
+.host-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(46,204,113,.25);
+}
+
+.host-panel-title {
+  color: var(--chip-green);
+  font-size: .75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.host-collapse-btn {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2);
+  color: var(--text);
+  font-size: .9rem;
+  font-weight: 700;
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: 1;
+  font-family: monospace;
+}
+.host-collapse-btn:hover { background: rgba(255,255,255,.18); }
+
+#host-controls.collapsed {
+  min-width: 0 !important;
+  padding: 6px 10px !important;
+}
+#host-controls.collapsed #host-controls-inner { display: none; }
+#host-controls.collapsed .host-panel-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
 .mic-collapse-btn {
   background: rgba(255,255,255,.08);
   border: 1px solid rgba(255,255,255,.2);

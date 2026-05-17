@@ -691,6 +691,17 @@ function renderHostControls(state) {
   }
   panel.style.display = '';
 
+  // Initialise collapse state once when panel first appears
+  if (!panel.dataset.initialized) {
+    panel.dataset.initialized = '1';
+    const saved = localStorage.getItem('rp_host_panel_collapsed');
+    const defaultCollapsed = window.innerWidth <= 768;
+    const shouldCollapse = saved !== null ? saved === '1' : defaultCollapsed;
+    panel.classList.toggle('collapsed', shouldCollapse);
+    const btn = panel.querySelector('.host-collapse-btn');
+    if (btn) btn.textContent = shouldCollapse ? '+' : '−';
+  }
+
   const others = allPlayers.filter(p => p.userId !== user.id);
 
   const src2 = src;
@@ -1982,6 +1993,15 @@ function renderAdminPttPanel(players, mode) {
   panel.classList.toggle('collapsed', shouldCollapse);
   const collapseBtn = panel.querySelector('.mic-collapse-btn');
   if (collapseBtn) collapseBtn.textContent = shouldCollapse ? '+' : '−';
+}
+
+function toggleHostPanel() {
+  const panel = document.getElementById('host-controls');
+  if (!panel) return;
+  const collapsed = panel.classList.toggle('collapsed');
+  localStorage.setItem('rp_host_panel_collapsed', collapsed ? '1' : '0');
+  const btn = panel.querySelector('.host-collapse-btn');
+  if (btn) btn.textContent = collapsed ? '+' : '−';
 }
 
 function toggleMicPanel() {
