@@ -22,10 +22,11 @@ async function runDailyFeeCheck() {
   console.log(`[fees] Daily check — ${todayStr} (day ${day})`);
 
   // Mark overdue where next_due_date < today (not already paid)
-  await supabaseAdmin.from('monthly_fees')
-    .update({ is_overdue: true, updated_at: new Date().toISOString() })
-    .lt('next_due_date', todayStr)
-    .catch(e => console.warn('[fees] Overdue update error:', e.message));
+  try {
+    await supabaseAdmin.from('monthly_fees')
+      .update({ is_overdue: true, updated_at: new Date().toISOString() })
+      .lt('next_due_date', todayStr);
+  } catch (e) { console.warn('[fees] Overdue update error:', e.message); }
 
   if (day === 25) await _sendFeeReminders('25th');
   if (day === 1)  await _sendFeeReminders('1st');
@@ -70,10 +71,11 @@ async function _sendFeeReminders(type) {
       try { await mail.sendFeeReminderSMS({ phone: user.phone, text: message }); } catch {}
     }
 
-    await supabaseAdmin.from('monthly_fees')
-      .update({ [col]: new Date().toISOString() })
-      .eq('user_id', fee.user_id)
-      .catch(() => {});
+    try {
+      await supabaseAdmin.from('monthly_fees')
+        .update({ [col]: new Date().toISOString() })
+        .eq('user_id', fee.user_id);
+    } catch (e) { console.warn('[fees] Reminder timestamp update error:', e.message); }
 
     sent++;
   }
@@ -93,15 +95,17 @@ async function suspendOverdueAccounts() {
   }
 
   for (const fee of overdue) {
-    await supabaseAdmin.from('users')
-      .update({ fee_suspended: true })
-      .eq('id', fee.user_id)
-      .catch(() => {});
+    try {
+      await supabaseAdmin.from('users')
+        .update({ fee_suspended: true })
+        .eq('id', fee.user_id);
+    } catch (e) { console.warn('[fees] User suspend error:', e.message); }
 
-    await supabaseAdmin.from('monthly_fees')
-      .update({ fee_suspended: true, suspended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-      .eq('user_id', fee.user_id)
-      .catch(() => {});
+    try {
+      await supabaseAdmin.from('monthly_fees')
+        .update({ fee_suspended: true, suspended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .eq('user_id', fee.user_id);
+    } catch (e) { console.warn('[fees] Fee suspend error:', e.message); }
 
     feeSuspendedUsers.add(fee.user_id);
     console.log(`[fees] Suspended ${fee.username} (unpaid $${fee.fee_amount})`);

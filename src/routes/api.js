@@ -194,14 +194,16 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
   const userAgent = String(req.headers['user-agent'] || '').slice(0, 400);
 
   async function _audit(userId, success, reason) {
-    await supabaseAdmin.from('login_audit').insert({
-      user_id: userId || null,
-      username: String(username).slice(0, 50),
-      ip_address: ip,
-      user_agent: userAgent,
-      success,
-      failure_reason: reason || null
-    }).catch(() => {});
+    try {
+      await supabaseAdmin.from('login_audit').insert({
+        user_id: userId || null,
+        username: String(username).slice(0, 50),
+        ip_address: ip,
+        user_agent: userAgent,
+        success,
+        failure_reason: reason || null
+      });
+    } catch {}
   }
 
   // Try Supabase first
@@ -375,11 +377,13 @@ router.post('/auth/2fa/verify', async (req, res) => {
   }
 
   await supabaseAdmin.from('users').update(updates).eq('id', userId);
-  await supabaseAdmin.from('login_audit').insert({
-    user_id: userId, username: user.username,
-    ip_address: req.ip || 'unknown', user_agent: String(req.headers['user-agent'] || '').slice(0, 400),
-    success: true, failure_reason: null
-  }).catch(() => {});
+  try {
+    await supabaseAdmin.from('login_audit').insert({
+      user_id: userId, username: user.username,
+      ip_address: req.ip || 'unknown', user_agent: String(req.headers['user-agent'] || '').slice(0, 400),
+      success: true, failure_reason: null
+    });
+  } catch {}
 
   const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
   const backupCodesLeft = (user.two_fa_backup_codes || []).filter(c => !c.used).length;
@@ -1013,10 +1017,10 @@ router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (r
   const { isHost } = req.body;
   if (isHost) {
     hostSet.add(req.params.id);
-    await supabaseAdmin.from('users').update({ is_host: true, host_type: 'host' }).eq('id', req.params.id).catch(() => {});
+    try { await supabaseAdmin.from('users').update({ is_host: true, host_type: 'host' }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
   } else {
     hostSet.delete(req.params.id);
-    await supabaseAdmin.from('users').update({ is_host: false, host_type: null }).eq('id', req.params.id).catch(() => {});
+    try { await supabaseAdmin.from('users').update({ is_host: false, host_type: null }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
   }
   appEvents.emit('host:change', { userId: req.params.id, isHost: !!isHost });
   res.json({ success: true, is_host: !!isHost });
@@ -1696,14 +1700,16 @@ router.post('/admin/host-applications/:id/approve', authMiddleware, adminMiddlew
   const nextDue = new Date();
   nextDue.setDate(1);
   nextDue.setMonth(nextDue.getMonth() + 1);
-  await supabaseAdmin.from('monthly_fees').insert({
-    user_id: newUser.id,
-    username: newUser.username,
-    role_type: 'host',
-    fee_amount: 20,
-    next_due_date: nextDue.toISOString().slice(0, 10),
-    is_overdue: false
-  }).catch(() => {});
+  try {
+    await supabaseAdmin.from('monthly_fees').insert({
+      user_id: newUser.id,
+      username: newUser.username,
+      role_type: 'host',
+      fee_amount: 20,
+      next_due_date: nextDue.toISOString().slice(0, 10),
+      is_overdue: false
+    });
+  } catch (e) { console.warn('[fees] insert host fee record error:', e.message); }
 
   try {
     const { sendHostApprovalEmail } = require('../mail');
@@ -1760,32 +1766,36 @@ router.post('/admin/create-admin', authMiddleware, adminMiddleware, async (req, 
   }
 
   // Store application record for audit trail
-  await supabaseAdmin.from('host_applications').insert({
-    full_name: String(full_name).slice(0, 120),
-    phone: String(phone).slice(0, 20),
-    email: String(email).slice(0, 255),
-    address: String(address).slice(0, 500),
-    government_id_data: String(government_id_data),
-    government_id_filename: government_id_filename ? String(government_id_filename).slice(0, 255) : null,
-    monthly_fee_agreed: !!monthly_fee_agreed,
-    rake_agreed: !!rake_agreed,
-    status: 'approved',
-    user_id: newUser.id,
-    reviewed_at: new Date().toISOString(),
-    reviewed_by: req.user.id
-  }).catch(() => {});
+  try {
+    await supabaseAdmin.from('host_applications').insert({
+      full_name: String(full_name).slice(0, 120),
+      phone: String(phone).slice(0, 20),
+      email: String(email).slice(0, 255),
+      address: String(address).slice(0, 500),
+      government_id_data: String(government_id_data),
+      government_id_filename: government_id_filename ? String(government_id_filename).slice(0, 255) : null,
+      monthly_fee_agreed: !!monthly_fee_agreed,
+      rake_agreed: !!rake_agreed,
+      status: 'approved',
+      user_id: newUser.id,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: req.user.id
+    });
+  } catch (e) { console.warn('[admin-create] host_applications insert error:', e.message); }
 
   const nextDue = new Date();
   nextDue.setDate(1);
   nextDue.setMonth(nextDue.getMonth() + 1);
-  await supabaseAdmin.from('monthly_fees').insert({
-    user_id: newUser.id,
-    username: newUser.username,
-    role_type: 'admin',
-    fee_amount: 40,
-    next_due_date: nextDue.toISOString().slice(0, 10),
-    is_overdue: false
-  }).catch(() => {});
+  try {
+    await supabaseAdmin.from('monthly_fees').insert({
+      user_id: newUser.id,
+      username: newUser.username,
+      role_type: 'admin',
+      fee_amount: 40,
+      next_due_date: nextDue.toISOString().slice(0, 10),
+      is_overdue: false
+    });
+  } catch (e) { console.warn('[fees] insert admin fee record error:', e.message); }
 
   res.json({ ok: true, userId: newUser.id, username: newUser.username });
 });
@@ -1794,10 +1804,11 @@ router.post('/admin/create-admin', authMiddleware, adminMiddleware, async (req, 
 
 router.get('/admin/monthly-fees', authMiddleware, adminMiddleware, async (req, res) => {
   const today = new Date().toISOString().slice(0, 10);
-  await supabaseAdmin.from('monthly_fees')
-    .update({ is_overdue: true, updated_at: new Date().toISOString() })
-    .lt('next_due_date', today)
-    .catch(() => {});
+  try {
+    await supabaseAdmin.from('monthly_fees')
+      .update({ is_overdue: true, updated_at: new Date().toISOString() })
+      .lt('next_due_date', today);
+  } catch (e) { console.warn('[fees] overdue update error:', e.message); }
 
   const { data, error } = await supabaseAdmin.from('monthly_fees')
     .select('*')
@@ -1808,8 +1819,8 @@ router.get('/admin/monthly-fees', authMiddleware, adminMiddleware, async (req, r
   // Enrich with nickname from users table
   if (data?.length) {
     const userIds = [...new Set(data.map(r => r.user_id))];
-    const { data: users } = await supabaseAdmin.from('users')
-      .select('id, nickname, phone').in('id', userIds).catch(() => ({ data: [] }));
+    let _usersRes; try { _usersRes = await supabaseAdmin.from('users').select('id, nickname, phone').in('id', userIds); } catch { _usersRes = { data: [] }; }
+    const { data: users } = _usersRes;
     const userMap = {};
     (users || []).forEach(u => { userMap[u.id] = u; });
     data.forEach(r => { r.nickname = userMap[r.user_id]?.nickname || null; r.phone = userMap[r.user_id]?.phone || null; });
@@ -1855,7 +1866,7 @@ router.post('/admin/monthly-fees/:userId/mark-paid', authMiddleware, adminMiddle
   if (error) return res.status(500).json({ error: error.message });
 
   // Restore user access if suspended
-  await supabaseAdmin.from('users').update({ fee_suspended: false }).eq('id', userId).catch(() => {});
+  try { await supabaseAdmin.from('users').update({ fee_suspended: false }).eq('id', userId); } catch (e) { console.warn('[fees] unsuspend error:', e.message); }
 
   // Remove from in-memory suspended set
   try { const { feeSuspendedUsers } = require('../fees'); feeSuspendedUsers.delete(userId); } catch {}
@@ -1863,15 +1874,17 @@ router.post('/admin/monthly-fees/:userId/mark-paid', authMiddleware, adminMiddle
   // Record payment in history table
   if (fee) {
     const forMonth = new Date(); forMonth.setDate(1);
-    await supabaseAdmin.from('monthly_fee_payments').insert({
-      user_id: userId,
-      username: fee.username,
-      role_type: fee.role_type,
-      amount: fee.fee_amount,
-      for_month: forMonth.toISOString().slice(0, 10),
-      payment_method: payment_method || null,
-      notes: notes || null
-    }).catch(() => {});
+    try {
+      await supabaseAdmin.from('monthly_fee_payments').insert({
+        user_id: userId,
+        username: fee.username,
+        role_type: fee.role_type,
+        amount: fee.fee_amount,
+        for_month: forMonth.toISOString().slice(0, 10),
+        payment_method: payment_method || null,
+        notes: notes || null
+      });
+    } catch (e) { console.warn('[fees] payment history insert error:', e.message); }
   }
 
   res.json({ ok: true });
@@ -2154,15 +2167,15 @@ router.get('/admin/financial-summary', authMiddleware, adminMiddleware, async (r
     const topTables = Object.values(tableMap).sort((a, b) => b.total - a.total).slice(0, 10);
 
     // Fee income
-    const { data: feeRows } = await supabaseAdmin.from('monthly_fee_payments')
-      .select('amount, created_at').catch(() => ({ data: [] }));
+    let _feeRowsRes; try { _feeRowsRes = await supabaseAdmin.from('monthly_fee_payments').select('amount, created_at'); } catch { _feeRowsRes = { data: [] }; }
+    const { data: feeRows } = _feeRowsRes;
     const allFees    = feeRows || [];
     const feeAll     = sum(allFees, 'amount');
     const feeMonth   = allFees.filter(f => f.created_at >= monthStart.toISOString()).reduce((s, f) => s + (f.amount || 0), 0);
 
     // Top players by buy-in volume
-    const { data: txData } = await supabaseAdmin.from('transactions')
-      .select('username, amount').eq('type', 'buy_in').catch(() => ({ data: [] }));
+    let _txDataRes; try { _txDataRes = await supabaseAdmin.from('transactions').select('username, amount').eq('type', 'buy_in'); } catch { _txDataRes = { data: [] }; }
+    const { data: txData } = _txDataRes;
     const playerMap = {};
     (txData || []).forEach(t => { playerMap[t.username] = (playerMap[t.username] || 0) + (t.amount || 0); });
     const topPlayers = Object.entries(playerMap)
@@ -2213,8 +2226,8 @@ router.get('/admin/export/players.csv', authMiddleware, adminMiddleware, async (
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
 
-  const { data: txData } = await supabaseAdmin.from('transactions')
-    .select('user_id, type, amount').catch(() => ({ data: [] }));
+  let _txDataRes2; try { _txDataRes2 = await supabaseAdmin.from('transactions').select('user_id, type, amount'); } catch { _txDataRes2 = { data: [] }; }
+  const { data: txData } = _txDataRes2;
   const buyIns = {}, cashOuts = {};
   (txData || []).forEach(t => {
     if (t.type === 'buy_in')   buyIns[t.user_id]   = (buyIns[t.user_id]   || 0) + (t.amount || 0);
@@ -2315,8 +2328,8 @@ router.post('/admin/send-weekly-summary', authMiddleware, adminMiddleware, async
     const hostCuts       = allR.reduce((s, r) => s + (r.host_amount  || 0), 0);
     const houseRake      = allR.reduce((s, r) => s + (r.house_amount || 0), 0);
 
-    const { data: feeData } = await supabaseAdmin.from('monthly_fee_payments')
-      .select('amount, username').gte('created_at', weekAgo.toISOString()).catch(() => ({ data: [] }));
+    let _feeDataRes; try { _feeDataRes = await supabaseAdmin.from('monthly_fee_payments').select('amount, username').gte('created_at', weekAgo.toISOString()); } catch { _feeDataRes = { data: [] }; }
+    const { data: feeData } = _feeDataRes;
     const feesCollected = (feeData || []).reduce((s, f) => s + (f.amount || 0), 0);
 
     const tableMap = {};
@@ -2362,8 +2375,7 @@ router.get('/me/profile', authMiddleware, async (req, res) => {
     .eq('user_id', userId)
     .eq('type', 'win')
     .order('created_at', { ascending: false })
-    .limit(100)
-    .catch(() => ({ data: [] }));
+    .limit(100);
 
   const wins = txns || [];
   const handsWon = wins.length;
