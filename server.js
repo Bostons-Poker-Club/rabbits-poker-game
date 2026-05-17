@@ -35,8 +35,9 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
-      scriptSrc:   ["'self'", "'unsafe-inline'"],   // inline scripts used throughout app
-      styleSrc:    ["'self'", "'unsafe-inline'"],   // inline styles used throughout app
+      scriptSrc:     ["'self'", "'unsafe-inline'"],   // inline scripts used throughout app
+      scriptSrcAttr: ["'unsafe-inline'"],            // inline event handlers (onclick, etc.)
+      styleSrc:      ["'self'", "'unsafe-inline'"],  // inline styles used throughout app
       imgSrc:      ["'self'", 'data:', 'blob:'],
       connectSrc:  ["'self'", 'wss:', 'ws:'],       // socket.io websocket
       mediaSrc:    ["'self'"],
