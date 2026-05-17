@@ -27,33 +27,47 @@
       <button class="auth-tab" id="tab-register" onclick="showTab('register')">Register</button>
     </div>
 
-    <!-- Login Form -->
+    <!-- ═══ LOGIN PANEL ═══ -->
     <div id="form-login">
+
       <div class="form-group">
         <label>Username</label>
-        <input type="text" id="login-username" placeholder="Enter username"
+        <input type="text" id="login-user" placeholder="Enter username"
           autocomplete="username" inputmode="text"
-          onkeydown="if(event.key==='Enter') doLogin()">
+          style="width:100%;padding:14px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:16px;outline:none;box-sizing:border-box">
       </div>
+
       <div class="form-group">
         <label>Password</label>
-        <div class="pw-wrap">
-          <input type="password" id="login-password" placeholder="Enter password"
+        <div style="display:flex;align-items:stretch">
+          <input type="password" id="login-pass" placeholder="Enter password"
             autocomplete="current-password"
-            onkeydown="if(event.key==='Enter') doLogin()">
-          <button type="button" class="pw-toggle" onclick="togglePw(this,'login-password')" aria-label="Show password">👁</button>
+            style="flex:1;padding:14px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);color:var(--text);font-size:16px;outline:none;min-height:48px">
+          <button type="button"
+            onclick="toggleLoginPw()"
+            style="min-width:52px;min-height:48px;padding:0;background:rgba(255,255,255,.08);border:1px solid var(--border);border-left:none;border-radius:0 var(--radius) var(--radius) 0;cursor:pointer;font-size:1.3rem;touch-action:manipulation;color:var(--text-dim)"
+            id="btn-eye-login">👁</button>
         </div>
       </div>
-      <button type="button" class="btn btn-gold btn-full" id="btn-login" onclick="doLogin()">Sign In</button>
-      <div id="login-error" class="error-msg" style="display:none"></div>
+
+      <button type="button" id="btn-login" onclick="doLogin()"
+        style="width:100%;padding:14px;background:linear-gradient(135deg,#d4af37,#a08020);color:#1a1a1a;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:4px;display:flex;align-items:center;justify-content:center;gap:8px">
+        Sign In
+      </button>
+
+      <div id="login-error"
+        style="display:none;color:#e74c3c;font-size:.9rem;margin-top:12px;text-align:center;padding:8px 12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:8px">
+      </div>
+
     </div>
+    <!-- ═══ END LOGIN PANEL ═══ -->
 
     <div id="host-apply-link" style="text-align:center;margin-top:10px;font-size:.82rem;color:var(--text-dim)">
       Interested in hosting tables?
       <a href="/host-apply.html" style="color:var(--gold);font-weight:600">Apply to be a Host →</a>
     </div>
 
-    <!-- 2FA Verification Screen -->
+    <!-- ═══ 2FA PANEL ═══ -->
     <div id="form-2fa" style="display:none">
       <div style="text-align:center;margin-bottom:18px">
         <div style="font-size:2.2rem;margin-bottom:8px">🔐</div>
@@ -70,26 +84,26 @@
         <input type="checkbox" id="tfa-remember" style="width:16px;height:16px;accent-color:var(--gold)">
         Remember this device for 30 days
       </label>
-      <button class="btn btn-gold btn-full" id="btn-verify-2fa" onclick="doVerify2FA()">Verify →</button>
+      <button type="button" class="btn btn-gold btn-full" id="btn-verify-2fa" onclick="doVerify2FA()">Verify →</button>
       <div id="tfa-error" class="error-msg"></div>
       <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:.8rem">
-        <button onclick="doResend2FA()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.8rem;padding:0">↺ Resend code</button>
-        <button onclick="showBackupCodeForm()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.8rem;padding:0">Use backup code</button>
+        <button type="button" onclick="doResend2FA()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.8rem;padding:0;touch-action:manipulation">↺ Resend code</button>
+        <button type="button" onclick="showBackupCodeForm()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.8rem;padding:0;touch-action:manipulation">Use backup code</button>
       </div>
-      <!-- Backup code input (hidden by default) -->
       <div id="backup-code-form" style="display:none;margin-top:14px;border-top:1px solid var(--border);padding-top:14px">
         <div class="form-group">
           <label style="font-size:.82rem;color:var(--text-dim)">Backup Code (format: XXXX-XXXX)</label>
           <input type="text" id="tfa-backup-code" placeholder="A3F7-B2K9" maxlength="9"
             style="text-align:center;font-size:1.1rem;letter-spacing:.1em;text-transform:uppercase">
         </div>
-        <button class="btn btn-outline btn-full" onclick="doVerify2FA(true)">Use Backup Code</button>
+        <button type="button" class="btn btn-outline btn-full" onclick="doVerify2FA(true)">Use Backup Code</button>
         <div id="tfa-backup-warning" style="display:none;background:rgba(255,160,0,.12);border:1px solid rgba(255,160,0,.4);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:.82rem;color:#f0a000"></div>
       </div>
-      <button onclick="cancelTwoFactor()" style="display:block;width:100%;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.8rem;margin-top:10px;padding:4px 0">← Back to login</button>
+      <button type="button" onclick="cancelTwoFactor()" style="display:block;width:100%;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.8rem;margin-top:10px;padding:4px 0;touch-action:manipulation">← Back to login</button>
     </div>
+    <!-- ═══ END 2FA PANEL ═══ -->
 
-    <!-- Register Form -->
+    <!-- ═══ REGISTER PANEL ═══ -->
     <div id="form-register" style="display:none">
       <div class="auth-name-row" style="display:flex;gap:10px">
         <div class="form-group" style="flex:1">
@@ -119,20 +133,27 @@
       </div>
       <div class="form-group">
         <label>Password <span style="color:var(--gold)">*</span></label>
-        <div class="pw-wrap">
-          <input type="password" id="reg-password" placeholder="Min 6 characters"
+        <div style="display:flex;align-items:stretch">
+          <input type="password" id="reg-pass" placeholder="Min 6 characters"
             autocomplete="new-password"
-            onkeydown="if(event.key==='Enter') doRegister()">
-          <button type="button" class="pw-toggle" onclick="togglePw(this,'reg-password')" aria-label="Show password">👁</button>
+            style="flex:1;padding:14px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-right:none;border-radius:var(--radius) 0 0 var(--radius);color:var(--text);font-size:16px;outline:none;min-height:48px">
+          <button type="button"
+            onclick="toggleRegPw()"
+            style="min-width:52px;min-height:48px;padding:0;background:rgba(255,255,255,.08);border:1px solid var(--border);border-left:none;border-radius:0 var(--radius) var(--radius) 0;cursor:pointer;font-size:1.3rem;touch-action:manipulation;color:var(--text-dim)"
+            id="btn-eye-reg">👁</button>
         </div>
       </div>
-      <button type="button" class="btn btn-gold btn-full" id="btn-register" onclick="doRegister()">Create Account</button>
+      <button type="button" class="btn btn-gold btn-full" id="btn-register" onclick="doRegister()" style="margin-top:4px">Create Account</button>
       <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:12px">
         You start with 0 chips — admin will add chips after verifying your identity.
       </p>
-      <div id="reg-error" class="error-msg" style="display:none"></div>
+      <div id="reg-error"
+        style="display:none;color:#e74c3c;font-size:.9rem;margin-top:10px;text-align:center;padding:8px 12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:8px">
+      </div>
       <div id="reg-success" class="success-msg"></div>
     </div>
+    <!-- ═══ END REGISTER PANEL ═══ -->
+
   </div>
 </div>
 
@@ -143,51 +164,83 @@
 
   // Show timeout message if redirected from session expiry
   (function () {
-    const p = new URLSearchParams(window.location.search);
+    var p = new URLSearchParams(window.location.search);
     if (p.get('reason') === 'timeout') {
-      const el = document.getElementById('login-error');
-      if (el) { el.textContent = 'You were logged out due to inactivity.'; el.style.display = 'block'; }
+      showLoginErr('You were logged out due to inactivity.');
     }
   })();
 
-  function showTab(tab) {
-    document.getElementById('tab-login').classList.toggle('active', tab === 'login');
-    document.getElementById('tab-register').classList.toggle('active', tab === 'register');
-    document.getElementById('form-login').style.display = tab === 'login' ? '' : 'none';
-    document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
-  }
-
   // ── Device fingerprint ──────────────────────────────────────────────────────
-  let _deviceId = localStorage.getItem('rp_device_id');
+  var _deviceId = localStorage.getItem('rp_device_id');
   if (!_deviceId) {
     _deviceId = 'dev-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
     localStorage.setItem('rp_device_id', _deviceId);
   }
 
-  // ── 2FA state ─────────────────────────────────────────────────────────────
-  let _pendingToken = null;
+  // ── 2FA state ──────────────────────────────────────────────────────────────
+  var _pendingToken = null;
 
-  function _showErr(elId, msg) {
-    const el = document.getElementById(elId);
+  // ── Tab switching ──────────────────────────────────────────────────────────
+  function showTab(tab) {
+    document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+    document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+    document.getElementById('form-login').style.display    = tab === 'login'    ? '' : 'none';
+    document.getElementById('form-register').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('host-apply-link').style.display = tab === 'login'  ? '' : 'none';
+  }
+
+  // ── Error display helpers ──────────────────────────────────────────────────
+  function showLoginErr(msg) {
+    var el = document.getElementById('login-error');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+  function showRegErr(msg) {
+    var el = document.getElementById('reg-error');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+  function show2faErr(msg) {
+    var el = document.getElementById('tfa-error');
     if (!el) return;
     el.textContent = msg;
     el.style.display = msg ? 'block' : 'none';
     el.style.color = '';
   }
 
-  async function doLogin() {
-    console.log('[doLogin] called');
-    const btn = document.getElementById('btn-login');
-    if (!btn) { console.error('[doLogin] btn-login not found'); return; }
-    if (btn.disabled) { console.log('[doLogin] already in flight, skipping'); return; }
+  // ── Password eye toggles ───────────────────────────────────────────────────
+  function toggleLoginPw() {
+    var inp = document.getElementById('login-pass');
+    var btn = document.getElementById('btn-eye-login');
+    inp.type = (inp.type === 'password') ? 'text' : 'password';
+    btn.textContent = (inp.type === 'password') ? '👁' : '🙈';
+  }
 
-    _showErr('login-error', '');
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
-    console.log('[doLogin] username:', username, '| password length:', password.length);
+  function toggleRegPw() {
+    var inp = document.getElementById('reg-pass');
+    var btn = document.getElementById('btn-eye-reg');
+    inp.type = (inp.type === 'password') ? 'text' : 'password';
+    btn.textContent = (inp.type === 'password') ? '👁' : '🙈';
+  }
+
+  // ── LOGIN ──────────────────────────────────────────────────────────────────
+  async function doLogin() {
+    alert('login clicked');
+
+    var btn = document.getElementById('btn-login');
+    if (!btn) { alert('ERROR: btn-login not found'); return; }
+    if (btn.disabled) return;
+
+    var username = document.getElementById('login-user').value.trim();
+    var password = document.getElementById('login-pass').value;
+
+    console.log('[doLogin] user=' + username + ' pwlen=' + password.length);
+    showLoginErr('');
 
     if (!username || !password) {
-      _showErr('login-error', 'Username and password are required.');
+      showLoginErr('Username and password are required.');
       return;
     }
 
@@ -195,82 +248,103 @@
     btn.innerHTML = '<span class="btn-spinner"></span> Signing In…';
 
     try {
-      console.log('[doLogin] sending POST /api/auth/login …');
-      const data = await apiFetch('/api/auth/login', {
+      console.log('[doLogin] fetching /api/auth/login');
+      var res = await fetch('/api/auth/login', {
         method: 'POST',
-        body: { username, password, deviceId: _deviceId }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: username, password: password, deviceId: _deviceId })
       });
-      console.log('[doLogin] response ok:', data);
+      console.log('[doLogin] status=' + res.status);
+
+      var data = await res.json();
+      console.log('[doLogin] data keys=' + Object.keys(data).join(','));
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Login failed (' + res.status + ')');
+      }
 
       if (data.requires2fa) {
-        console.log('[doLogin] 2FA required, showing 2FA screen');
+        console.log('[doLogin] 2FA required');
         btn.disabled = false;
         btn.innerHTML = 'Sign In';
         _pendingToken = data.pendingToken;
         document.getElementById('tfa-hint').textContent = data.hint || 'Enter the 6-digit code sent to your phone and email.';
-        document.getElementById('form-login').style.display  = 'none';
-        document.getElementById('host-apply-link').style.display = 'none';
-        document.getElementById('form-2fa').style.display   = '';
+        document.getElementById('form-login').style.display       = 'none';
+        document.getElementById('host-apply-link').style.display  = 'none';
+        document.getElementById('form-2fa').style.display         = '';
         document.getElementById('tfa-code').focus();
         if (data.backupCodesLeft !== undefined && data.backupCodesLeft < 3 && data.backupCodesLeft > 0) {
-          showBackupWarning(`Only ${data.backupCodesLeft} backup code${data.backupCodesLeft !== 1 ? 's' : ''} remaining. Ask admin to regenerate.`);
+          showBackupWarning('Only ' + data.backupCodesLeft + ' backup code' + (data.backupCodesLeft !== 1 ? 's' : '') + ' remaining. Ask admin to regenerate.');
         }
         return;
       }
 
-      console.log('[doLogin] login success, redirecting to lobby');
+      console.log('[doLogin] success, saving auth and redirecting');
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
+
     } catch (e) {
-      console.error('[doLogin] error:', e);
-      _showErr('login-error', e.message || 'Login failed — please try again.');
+      console.error('[doLogin] caught error:', e);
+      showLoginErr(e.message || 'Login failed. Please try again.');
       btn.disabled = false;
       btn.innerHTML = 'Sign In';
     }
   }
 
-  async function doVerify2FA(useBackup = false) {
-    console.log('[doVerify2FA] called, useBackup:', useBackup);
-    const btn = document.getElementById('btn-verify-2fa');
-    if (btn && btn.disabled) { console.log('[doVerify2FA] already in flight'); return; }
+  // ── 2FA VERIFY ────────────────────────────────────────────────────────────
+  async function doVerify2FA(useBackup) {
+    useBackup = useBackup === true;
+    console.log('[doVerify2FA] useBackup=' + useBackup);
+    var btn = document.getElementById('btn-verify-2fa');
+    if (btn && btn.disabled) return;
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Verifying…'; }
-    _showErr('tfa-error', '');
-    const rawCode = useBackup
-      ? (document.getElementById('tfa-backup-code').value.trim().toUpperCase())
-      : (document.getElementById('tfa-code').value.replace(/\s/g, ''));
+    show2faErr('');
+
+    var rawCode = useBackup
+      ? document.getElementById('tfa-backup-code').value.trim().toUpperCase()
+      : document.getElementById('tfa-code').value.replace(/\s/g, '');
+
     if (!rawCode) {
-      _showErr('tfa-error', 'Please enter a code.');
+      show2faErr('Please enter a code.');
       if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
       return;
     }
-    const rememberDevice = document.getElementById('tfa-remember').checked;
+
+    var rememberDevice = document.getElementById('tfa-remember').checked;
     try {
-      console.log('[doVerify2FA] sending verification …');
-      const data = await apiFetch('/api/auth/2fa/verify', {
+      var res = await fetch('/api/auth/2fa/verify', {
         method: 'POST',
-        body: { pendingToken: _pendingToken, code: rawCode, rememberDevice, deviceId: _deviceId }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingToken: _pendingToken, code: rawCode, rememberDevice: rememberDevice, deviceId: _deviceId })
       });
-      console.log('[doVerify2FA] success, redirecting');
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Verification failed (' + res.status + ')');
+      console.log('[doVerify2FA] success');
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
     } catch (e) {
       console.error('[doVerify2FA] error:', e);
-      _showErr('tfa-error', e.message || 'Verification failed — please try again.');
+      show2faErr(e.message || 'Verification failed. Please try again.');
       if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
     }
   }
 
   async function doResend2FA() {
-    _showErr('tfa-error', '');
+    show2faErr('');
     try {
-      const data = await apiFetch('/api/auth/2fa/resend', { method: 'POST', body: { pendingToken: _pendingToken } });
-      const el = document.getElementById('tfa-error');
+      var res = await fetch('/api/auth/2fa/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pendingToken: _pendingToken })
+      });
+      var data = await res.json();
+      var el = document.getElementById('tfa-error');
       el.style.color = 'var(--chip-green)';
       el.textContent = data.hint || 'Code resent.';
       el.style.display = 'block';
-      setTimeout(() => { el.textContent = ''; el.style.display = 'none'; el.style.color = ''; }, 4000);
+      setTimeout(function() { el.textContent = ''; el.style.display = 'none'; el.style.color = ''; }, 4000);
     } catch (e) {
-      _showErr('tfa-error', e.message || 'Failed to resend code.');
+      show2faErr(e.message || 'Failed to resend code.');
     }
   }
 
@@ -279,9 +353,10 @@
     document.getElementById('tfa-code').value = '';
     document.getElementById('tfa-backup-code').value = '';
     document.getElementById('tfa-error').textContent = '';
+    document.getElementById('tfa-error').style.display = 'none';
     document.getElementById('backup-code-form').style.display = 'none';
-    document.getElementById('form-2fa').style.display = 'none';
-    document.getElementById('form-login').style.display = '';
+    document.getElementById('form-2fa').style.display    = 'none';
+    document.getElementById('form-login').style.display  = '';
     document.getElementById('host-apply-link').style.display = '';
   }
 
@@ -291,83 +366,76 @@
   }
 
   function showBackupWarning(msg) {
-    const el = document.getElementById('tfa-backup-warning');
+    var el = document.getElementById('tfa-backup-warning');
     if (el) { el.textContent = '⚠️ ' + msg; el.style.display = ''; }
   }
 
+  // ── REGISTER ───────────────────────────────────────────────────────────────
   async function doRegister() {
     console.log('[doRegister] called');
-    const btn = document.getElementById('btn-register');
-    if (!btn) { console.error('[doRegister] btn-register not found'); return; }
-    if (btn.disabled) { console.log('[doRegister] already in flight'); return; }
-    _showErr('reg-error', '');
+    var btn = document.getElementById('btn-register');
+    if (!btn || btn.disabled) return;
+    showRegErr('');
     document.getElementById('reg-success').textContent = '';
 
-    const firstName = document.getElementById('reg-firstname').value.trim();
-    const lastName  = document.getElementById('reg-lastname').value.trim();
-    const nickname  = document.getElementById('reg-nickname').value.trim();
-    const username  = document.getElementById('reg-username').value.trim();
-    const email     = document.getElementById('reg-email').value.trim();
-    const phone     = document.getElementById('reg-phone').value.trim();
-    const password  = document.getElementById('reg-password').value;
+    var firstName = document.getElementById('reg-firstname').value.trim();
+    var lastName  = document.getElementById('reg-lastname').value.trim();
+    var nickname  = document.getElementById('reg-nickname').value.trim();
+    var username  = document.getElementById('reg-username').value.trim();
+    var email     = document.getElementById('reg-email').value.trim();
+    var phone     = document.getElementById('reg-phone').value.trim();
+    var password  = document.getElementById('reg-pass').value;
 
-    if (!firstName) { _showErr('reg-error', 'Legal First Name is required'); return; }
-    if (!lastName)  { _showErr('reg-error', 'Legal Last Name is required'); return; }
-    if (!nickname)  { _showErr('reg-error', 'Nickname is required'); return; }
-    if (!username)  { _showErr('reg-error', 'Username is required'); return; }
-    if (!email)     { _showErr('reg-error', 'Email is required'); return; }
-    if (!phone)     { _showErr('reg-error', 'Phone number is required for SMS alerts'); return; }
-    if (!password)  { _showErr('reg-error', 'Password is required'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { _showErr('reg-error', 'Please enter a valid email address'); return; }
-    if (phone.replace(/\D/g, '').length !== 10) { _showErr('reg-error', 'Please enter a valid 10-digit US phone number'); return; }
+    if (!firstName) { showRegErr('Legal First Name is required'); return; }
+    if (!lastName)  { showRegErr('Legal Last Name is required'); return; }
+    if (!nickname)  { showRegErr('Nickname is required'); return; }
+    if (!username)  { showRegErr('Username is required'); return; }
+    if (!email)     { showRegErr('Email is required'); return; }
+    if (!phone)     { showRegErr('Phone number is required for SMS alerts'); return; }
+    if (!password)  { showRegErr('Password is required'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showRegErr('Please enter a valid email address'); return; }
+    if (phone.replace(/\D/g, '').length !== 10) { showRegErr('Please enter a valid 10-digit US phone number'); return; }
 
     btn.disabled = true;
     btn.innerHTML = '<span class="btn-spinner"></span> Creating Account…';
-    const full_name = `${firstName} ${lastName}`;
+
     try {
-      console.log('[doRegister] sending registration …');
-      await register(username, email, password, nickname, phone, full_name);
-      console.log('[doRegister] success, redirecting');
+      console.log('[doRegister] fetching /api/auth/register');
+      var res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: username, email: email, password: password,
+          nickname: nickname, phone: phone, full_name: firstName + ' ' + lastName
+        })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Registration failed (' + res.status + ')');
+      console.log('[doRegister] success');
+      saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
     } catch (e) {
       console.error('[doRegister] error:', e);
-      _showErr('reg-error', e.message || 'Registration failed — please try again.');
+      showRegErr(e.message || 'Registration failed. Please try again.');
       btn.disabled = false;
       btn.innerHTML = 'Create Account';
     }
   }
 
-  // "Apply to Host" link shown below login tab
-  document.getElementById('tab-login').addEventListener('click', () => {
-    document.getElementById('host-apply-link').style.display = '';
-  });
-  document.getElementById('tab-register').addEventListener('click', () => {
-    document.getElementById('host-apply-link').style.display = 'none';
-  });
-
-  // Password visibility toggle
-  function togglePw(btn, id) {
-    const inp = document.getElementById(id);
-    const showing = inp.type === 'text';
-    inp.type = showing ? 'password' : 'text';
-    btn.textContent = showing ? '👁' : '🙈';
-    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
-  }
-
-  // Scroll input into view when mobile keyboard opens
-  document.addEventListener('focusin', e => {
-    if (e.target.matches('input')) {
-      setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+  // ── Enter key for 2FA ──────────────────────────────────────────────────────
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter') return;
+    var tfaVisible = document.getElementById('form-2fa').style.display !== 'none';
+    if (tfaVisible) {
+      var backupOpen = document.getElementById('backup-code-form').style.display !== 'none';
+      doVerify2FA(backupOpen);
     }
   });
 
-  // Enter key: only needed for 2FA (login/register handled by <form> submit)
-  document.addEventListener('keydown', e => {
-    if (e.key !== 'Enter') return;
-    const tfaVisible = document.getElementById('form-2fa').style.display !== 'none';
-    if (tfaVisible) {
-      const backupOpen = document.getElementById('backup-code-form').style.display !== 'none';
-      doVerify2FA(backupOpen);
+  // ── Scroll into view when keyboard opens on mobile ─────────────────────────
+  document.addEventListener('focusin', function(e) {
+    if (e.target.tagName === 'INPUT') {
+      setTimeout(function() { e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 350);
     }
   });
 </script>
