@@ -219,6 +219,8 @@
   <span id="spectator-table-name" style="color:var(--text);font-size:.85rem"></span>
   <button onclick="exitSpectateMode()" style="background:rgba(255,255,255,.1);border:1px solid var(--border);color:var(--text);padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">Exit</button>
   <button id="spectator-cam-btn" onclick="spectatorCamToggle()" style="display:none;background:rgba(0,200,80,.15);border:1px solid rgba(0,200,80,.4);color:var(--chip-green);padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">📷 Go Live</button>
+  <button id="rec-btn" onclick="startRecording()" style="display:none;background:rgba(200,0,0,.15);border:1px solid rgba(255,60,60,.5);color:#ff6060;padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">⏺ Record</button>
+  <button id="highlight-btn" onclick="saveHighlight()" style="display:none;background:rgba(212,175,55,.1);border:1px solid var(--border);color:var(--gold);padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">📎 Highlight</button>
 </div>
 
 <!-- Admin cam overlay (shown to players when admin camera is live) -->
@@ -239,6 +241,15 @@
 
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
+
+<!-- Recording indicator -->
+<div id="rec-indicator" style="display:none;position:fixed;top:14px;right:16px;z-index:9900;background:rgba(0,0,0,.85);border:1px solid #ff4444;border-radius:20px;padding:5px 12px;font-size:.78rem;color:#ff4444;font-weight:700;align-items:center;gap:6px">
+  <span id="rec-dot" style="width:8px;height:8px;background:#ff4444;border-radius:50%;display:inline-block;animation:recPulse 1s ease-in-out infinite"></span>
+  REC <span id="rec-timer">0:00</span>
+</div>
+<style>
+@keyframes recPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/auth.js"></script>

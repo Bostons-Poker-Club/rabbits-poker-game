@@ -2622,4 +2622,89 @@ router.get('/tables/:id/stats', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── Highlights ────────────────────────────────────────────────────────────────
+
+router.get('/highlights', async (req, res) => {
+  const category = req.query.category;
+  let q = supabaseAdmin.from('highlights').select('*').order('created_at', { ascending: false }).limit(50);
+  if (category && category !== 'all') q = q.eq('category', category);
+  const { data, error } = await q;
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+router.post('/highlights/upload-url', authMiddleware, adminMiddleware, async (req, res) => {
+  const { filename } = req.body;
+  const ext = (filename || 'clip.webm').split('.').pop().replace(/[^a-z0-9]/gi, '') || 'webm';
+  const path = `clips/${req.user.id}/${Date.now()}.${ext}`;
+  const { data, error } = await supabaseAdmin.storage.from('highlights').createSignedUploadUrl(path);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ signedUrl: data.signedUrl, path, token: data.token });
+});
+
+router.post('/highlights', authMiddleware, adminMiddleware, async (req, res) => {
+  const { title, description, category, storage_path, thumbnail_url } = req.body;
+  if (!title || !storage_path) return res.status(400).json({ error: 'title and storage_path required' });
+  const { data: { publicUrl } } = supabaseAdmin.storage.from('highlights').getPublicUrl(storage_path);
+  const { data, error } = await supabaseAdmin.from('highlights').insert({
+    title: String(title).slice(0, 120),
+    description: String(description || '').slice(0, 500),
+    category: ['bad_beat', 'big_win', 'bluff', 'funny', 'general'].includes(category) ? category : 'general',
+    video_url: publicUrl,
+    storage_path,
+    thumbnail_url: thumbnail_url || null,
+    uploaded_by: req.user.id,
+    uploader_username: req.user.username
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.delete('/highlights/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data: hl } = await supabaseAdmin.from('highlights').select('storage_path').eq('id', req.params.id).single();
+  if (hl?.storage_path) await supabaseAdmin.storage.from('highlights').remove([hl.storage_path]);
+  const { error } = await supabaseAdmin.from('highlights').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+router.post('/highlights/:id/like', authMiddleware, async (req, res) => {
+  const highlightId = req.params.id;
+  const userId = req.user.id;
+  const { data: existing } = await supabaseAdmin.from('highlight_likes')
+    .select('highlight_id').eq('highlight_id', highlightId).eq('user_id', userId).maybeSingle();
+  if (existing) {
+    await supabaseAdmin.from('highlight_likes').delete().eq('highlight_id', highlightId).eq('user_id', userId);
+    const { data: hl } = await supabaseAdmin.from('highlights').select('likes_count').eq('id', highlightId).single();
+    await supabaseAdmin.from('highlights').update({ likes_count: Math.max(0, (hl?.likes_count || 1) - 1) }).eq('id', highlightId);
+    return res.json({ liked: false });
+  }
+  await supabaseAdmin.from('highlight_likes').insert({ highlight_id: highlightId, user_id: userId });
+  const { data: hl } = await supabaseAdmin.from('highlights').select('likes_count').eq('id', highlightId).single();
+  await supabaseAdmin.from('highlights').update({ likes_count: (hl?.likes_count || 0) + 1 }).eq('id', highlightId);
+  res.json({ liked: true });
+});
+
+router.get('/highlights/:id/comments', async (req, res) => {
+  const { data, error } = await supabaseAdmin.from('highlight_comments').select('*').eq('highlight_id', req.params.id).order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data || []);
+});
+
+router.post('/highlights/:id/comments', authMiddleware, async (req, res) => {
+  const { comment } = req.body;
+  if (!comment?.trim()) return res.status(400).json({ error: 'Comment required' });
+  const { data, error } = await supabaseAdmin.from('highlight_comments').insert({
+    highlight_id: req.params.id, user_id: req.user.id,
+    username: req.user.username, comment: String(comment).slice(0, 500)
+  }).select().single();
+  if (error) return res.status(500).json({ error: error.message });
+  res.json(data);
+});
+
+router.delete('/highlights/:id/comments/:cid', authMiddleware, adminMiddleware, async (req, res) => {
+  await supabaseAdmin.from('highlight_comments').delete().eq('id', req.params.cid);
+  res.json({ ok: true });
+});
+
 module.exports = router;

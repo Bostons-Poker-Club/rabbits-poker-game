@@ -31,6 +31,7 @@
   <button class="admin-tab-btn" onclick="showPanel('fees')">💳 Fees <span id="fees-badge" style="display:none;background:var(--red);color:#fff;border-radius:8px;padding:1px 5px;font-size:.7rem;margin-left:3px">0</span></button>
   <button class="admin-tab-btn" onclick="showPanel('tournaments')">Tournaments</button>
   <button class="admin-tab-btn" onclick="showPanel('tables')">Tables</button>
+  <button class="admin-tab-btn" onclick="showPanel('clips')">🎬 Clips</button>
   <button class="admin-tab-btn" onclick="showPanel('rake')">Rake</button>
   <button class="admin-tab-btn" onclick="showPanel('reports')">📊 Reports</button>
   <button class="admin-tab-btn" onclick="showPanel('finance')">📈 Finance</button>
@@ -403,6 +404,16 @@
         <button class="btn btn-sm btn-outline" onclick="loadWaitlists()">Refresh</button>
       </div>
       <div id="waitlists-body" style="color:var(--text-dim);font-size:.85rem">No active waiting lists.</div>
+    </div>
+  </div>
+
+  <!-- Clips -->
+  <div class="admin-panel" id="panel-clips">
+    <h2 style="color:var(--gold);margin-bottom:16px">🎬 Highlight Clips</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:16px">Manage uploaded highlight clips. Players can view clips at <a href="/highlights.html" target="_blank" style="color:var(--gold)">/highlights.html</a>.</p>
+    <button class="btn btn-outline" onclick="window.open('/highlights.html','_blank')" style="margin-bottom:16px">Open Highlights Page</button>
+    <div id="admin-clips-list">
+      <div style="color:var(--text-dim);text-align:center;padding:24px">Loading clips…</div>
     </div>
   </div>
 

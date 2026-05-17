@@ -189,6 +189,10 @@ function _enterSpectatorMode(tableName) {
   }
   const camBtn = document.getElementById('spectator-cam-btn');
   if (camBtn) camBtn.style.display = '';
+  const recBtn = document.getElementById('rec-btn');
+  if (recBtn) recBtn.style.display = '';
+  const hlBtn = document.getElementById('highlight-btn');
+  if (hlBtn) hlBtn.style.display = 'none'; // only shown during active recording
   // Hide player action UI — spectators can't act
   const actionArea = document.getElementById('action-area');
   if (actionArea) actionArea.style.display = 'none';
@@ -233,6 +237,127 @@ function _checkAdminCamStream() {
   }
   // No unseat'd cam stream active
   if (!_adminCamUserId) overlay.style.display = 'none';
+}
+
+// ─── Screen Recording ─────────────────────────────────────────────────────────
+
+let _mediaRecorder   = null;
+let _recordingChunks = [];
+let _recordingStart  = null;
+let _recordingTimer  = null;
+let _highlights      = [];  // { t (seconds), description, handNum }
+
+async function startRecording() {
+  if (_mediaRecorder) { stopRecording(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 30 },
+      audio: true
+    });
+    _recordingChunks = [];
+    _highlights      = [];
+    _recordingStart  = Date.now();
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+      ? 'video/webm;codecs=vp9' : 'video/webm';
+    _mediaRecorder = new MediaRecorder(stream, { mimeType });
+    _mediaRecorder.ondataavailable = e => { if (e.data.size > 0) _recordingChunks.push(e.data); };
+    _mediaRecorder.onstop = _onRecordingStop;
+    _mediaRecorder.start(1000);
+    stream.getVideoTracks()[0].onended = stopRecording;
+
+    _updateRecordingUI(true);
+    toast('Recording started — share the browser tab');
+  } catch (e) {
+    if (e.name !== 'NotAllowedError' && e.name !== 'AbortError') {
+      toast('Recording failed: ' + e.message, 'error');
+    }
+  }
+}
+
+function stopRecording() {
+  if (!_mediaRecorder) return;
+  _mediaRecorder.stream.getTracks().forEach(t => t.stop());
+  _mediaRecorder.stop();
+  _mediaRecorder = null;
+  _updateRecordingUI(false);
+}
+
+function _onRecordingStop() {
+  const blob = new Blob(_recordingChunks, { type: 'video/webm' });
+  const url  = URL.createObjectURL(blob);
+  const ts   = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `rabbsroom-${ts}.webm`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  if (_highlights.length) _showHighlightsSummary();
+}
+
+function _updateRecordingUI(active) {
+  const recBtn = document.getElementById('rec-btn');
+  const hlBtn  = document.getElementById('highlight-btn');
+  const recInd = document.getElementById('rec-indicator');
+
+  if (recBtn) {
+    recBtn.textContent = active ? '⏹ Stop' : '⏺ Record';
+    recBtn.style.background    = active ? 'rgba(200,0,0,.3)' : 'rgba(200,0,0,.15)';
+    recBtn.style.borderColor   = active ? '#ff4444' : 'rgba(255,60,60,.5)';
+  }
+  if (hlBtn) hlBtn.style.display = active ? '' : 'none';
+  if (recInd) recInd.style.display = active ? 'flex' : 'none';
+
+  if (active) {
+    _recordingTimer = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - _recordingStart) / 1000);
+      const m = Math.floor(elapsed / 60), s = elapsed % 60;
+      const timerEl = document.getElementById('rec-timer');
+      if (timerEl) timerEl.textContent = `${m}:${String(s).padStart(2, '0')}`;
+    }, 1000);
+  } else {
+    clearInterval(_recordingTimer);
+    _recordingTimer = null;
+  }
+}
+
+function saveHighlight() {
+  if (!_mediaRecorder) { toast('Start recording first', 'error'); return; }
+  const elapsed = Math.floor((Date.now() - _recordingStart) / 1000);
+  const handNum = gameState?.handNumber || gameState?.currentHandNumber || '?';
+  const desc = prompt('Describe this highlight (e.g. "Bad Beat — lost with full house"):',
+    `Hand #${handNum}`);
+  if (desc == null) return;
+  const m = Math.floor(elapsed / 60), s = elapsed % 60;
+  _highlights.push({ t: elapsed, description: desc.trim() || `Hand #${handNum}`, handNum });
+  toast(`Highlight saved at ${m}:${String(s).padStart(2, '0')}`);
+}
+
+function _showHighlightsSummary() {
+  if (!_highlights.length) return;
+  const rows = _highlights.map(h => {
+    const m = Math.floor(h.t / 60), s = h.t % 60;
+    return `<tr><td style="padding:4px 8px;color:var(--gold)">${m}:${String(s).padStart(2, '0')}</td><td style="padding:4px 8px">${_escHl(h.description)}</td></tr>`;
+  }).join('');
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:9990;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#0a1a12;border:2px solid var(--gold);border-radius:12px;padding:24px;max-width:480px;width:92%;max-height:80vh;overflow-y:auto">
+      <h3 style="color:var(--gold);margin-bottom:12px">📎 ${_highlights.length} Highlight${_highlights.length > 1 ? 's' : ''} Saved</h3>
+      <p style="color:var(--text-dim);font-size:.82rem;margin-bottom:12px">These timestamps are in your downloaded .webm file. Upload it to the Highlights page to share.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:.85rem">${rows}</table>
+      <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="window.open('/highlights.html','_blank')" style="background:none;border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:.82rem">Open Highlights Page</button>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="background:none;border:1px solid var(--border);color:var(--text);padding:6px 14px;border-radius:8px;cursor:pointer;font-size:.82rem">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function _escHl(s) {
+  return String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 }
 
 // ─── Connect ──────────────────────────────────────────────────────────────

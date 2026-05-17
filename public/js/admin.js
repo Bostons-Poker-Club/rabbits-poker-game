@@ -841,6 +841,7 @@ function showPanel(name) {
   if (name === 'finance')  loadFinancialDashboard();
   if (name === 'alerts')   loadFailedLogins();
   if (name === 'tables')   setTimeout(loadWaitlists, 400);
+  if (name === 'clips')    loadAdminClips();
 }
 
 // ─── Players ──────────────────────────────────────────────────────────────
@@ -2766,6 +2767,40 @@ async function downloadBackupCodes() {
     a.click();
     URL.revokeObjectURL(url);
     toast(`${codes.length} new backup codes generated and downloaded`, 'success');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Highlight Clips ──────────────────────────────────────────────────────────
+
+async function loadAdminClips() {
+  const el = document.getElementById('admin-clips-list');
+  if (!el) return;
+  try {
+    const clips = await apiFetch('/api/highlights');
+    if (!clips.length) {
+      el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:24px">No clips uploaded yet</div>';
+      return;
+    }
+    el.innerHTML = clips.map(h => `
+      <div style="display:flex;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
+        <video src="${h.video_url}#t=0.1" preload="metadata" style="width:80px;height:50px;object-fit:cover;border-radius:6px;background:#000;flex-shrink:0"></video>
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:700;color:var(--text);font-size:.9rem">${esc(h.title)}</div>
+          <div style="color:var(--text-dim);font-size:.75rem">${h.category} · @${esc(h.uploader_username)} · ❤️ ${h.likes_count}</div>
+        </div>
+        <button onclick="deleteClip('${h.id}')" style="background:none;border:1px solid var(--red);color:var(--red);padding:3px 10px;border-radius:6px;cursor:pointer;font-size:.75rem;flex-shrink:0">Delete</button>
+      </div>`).join('');
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);padding:16px">${e.message}</div>`;
+  }
+}
+
+async function deleteClip(id) {
+  if (!confirm('Delete this clip permanently?')) return;
+  try {
+    await apiFetch(`/api/highlights/${id}`, { method: 'DELETE' });
+    loadAdminClips();
+    toast('Clip deleted');
   } catch (e) { toast(e.message, 'error'); }
 }
 

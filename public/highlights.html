@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Highlights — Boston Poker Club</title>
+  <meta name="theme-color" content="#c8a84b">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .hl-page { min-height:100vh; padding:0; }
+    .hl-header {
+      background:rgba(0,0,0,.6); border-bottom:1px solid var(--border);
+      padding:12px 20px; display:flex; align-items:center; gap:16px; position:sticky; top:0; z-index:100;
+    }
+    .hl-header h1 { color:var(--gold); font-size:1.1rem; margin:0; }
+    .hl-body { max-width:1100px; margin:0 auto; padding:24px 16px; }
+    .hl-filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+    .hl-filter-btn {
+      background:rgba(0,0,0,.3); border:1px solid var(--border); color:var(--text-dim);
+      padding:5px 14px; border-radius:20px; cursor:pointer; font-size:.82rem; transition:all .2s;
+    }
+    .hl-filter-btn.active, .hl-filter-btn:hover { border-color:var(--gold); color:var(--gold); background:rgba(212,175,55,.08); }
+    .hl-grid {
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:16px;
+    }
+    .hl-card {
+      background:rgba(0,0,0,.4); border:1px solid var(--border); border-radius:12px;
+      overflow:hidden; cursor:pointer; transition:transform .15s, border-color .2s;
+    }
+    .hl-card:hover { transform:translateY(-3px); border-color:var(--gold); }
+    .hl-card-thumb {
+      width:100%; aspect-ratio:16/9; background:#0a1a12; display:flex;
+      align-items:center; justify-content:center; position:relative; overflow:hidden;
+    }
+    .hl-card-thumb video { width:100%; height:100%; object-fit:cover; }
+    .hl-card-thumb .play-icon {
+      position:absolute; font-size:2.5rem; opacity:.85;
+      filter:drop-shadow(0 0 8px rgba(0,0,0,.8));
+    }
+    .hl-card-body { padding:12px; }
+    .hl-card-title { font-weight:700; color:var(--text); margin-bottom:4px; font-size:.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .hl-card-meta { color:var(--text-dim); font-size:.75rem; display:flex; justify-content:space-between; align-items:center; }
+    .hl-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.06em; }
+    .hl-badge.bad_beat  { background:rgba(230,57,70,.2); color:#ff6b6b; border:1px solid rgba(230,57,70,.4); }
+    .hl-badge.big_win   { background:rgba(212,175,55,.15); color:var(--gold); border:1px solid var(--border); }
+    .hl-badge.bluff     { background:rgba(74,144,217,.15); color:#7ab8f5; border:1px solid rgba(74,144,217,.3); }
+    .hl-badge.funny     { background:rgba(46,204,113,.1); color:var(--chip-green); border:1px solid rgba(46,204,113,.3); }
+    .hl-badge.general   { background:rgba(255,255,255,.05); color:var(--text-dim); border:1px solid var(--border); }
+    /* Upload panel */
+    .hl-upload-panel {
+      background:rgba(0,0,0,.45); border:1px solid rgba(212,175,55,.35); border-radius:12px;
+      padding:20px; margin-bottom:24px;
+    }
+    .hl-upload-panel h3 { color:var(--gold); margin-bottom:14px; font-size:.95rem; }
+    /* Viewer modal */
+    .hl-viewer-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:9000;
+      display:flex; align-items:center; justify-content:center; padding:16px;
+    }
+    .hl-viewer { background:#0a1a12; border:2px solid var(--gold); border-radius:14px; max-width:800px; width:100%; max-height:90vh; overflow-y:auto; }
+    .hl-viewer-vid { width:100%; aspect-ratio:16/9; background:#000; }
+    .hl-viewer-vid video { width:100%; height:100%; display:block; }
+    .hl-viewer-info { padding:16px 20px; }
+    .hl-viewer-title { font-size:1.1rem; font-weight:700; color:var(--text); margin-bottom:6px; }
+    .hl-viewer-meta { color:var(--text-dim); font-size:.8rem; margin-bottom:14px; }
+    .hl-actions { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    .hl-like-btn { background:none; border:1px solid var(--border); color:var(--text-dim); padding:5px 14px; border-radius:20px; cursor:pointer; font-size:.85rem; }
+    .hl-like-btn.liked { border-color:var(--red); color:var(--red); }
+    .hl-share-btn { background:none; border:1px solid var(--border); color:var(--text-dim); padding:5px 12px; border-radius:20px; cursor:pointer; font-size:.82rem; }
+    .hl-comments { border-top:1px solid var(--border); padding-top:14px; }
+    .hl-comment { padding:8px 0; border-bottom:1px solid rgba(255,255,255,.05); font-size:.83rem; }
+    .hl-comment-author { color:var(--gold); font-weight:700; margin-right:6px; }
+    .hl-comment-input { display:flex; gap:8px; margin-top:12px; }
+    .hl-comment-input input { flex:1; background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--text); padding:7px 11px; border-radius:8px; font-family:inherit; font-size:.85rem; }
+    .empty-state { text-align:center; padding:48px 16px; color:var(--text-dim); }
+    .empty-state .es-icon { font-size:3rem; margin-bottom:12px; }
+  </style>
+</head>
+<body class="hl-page">
+
+<div class="hl-header">
+  <img src="/images/logo.svg" alt="" style="width:32px;height:auto">
+  <h1>🎬 Highlights</h1>
+  <a href="/lobby.html" style="margin-left:auto;color:var(--text-dim);font-size:.82rem">← Lobby</a>
+</div>
+
+<div class="hl-body">
+  <!-- Admin upload panel (shown only to admins) -->
+  <div class="hl-upload-panel" id="upload-panel" style="display:none">
+    <h3>📤 Upload Clip</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+      <input type="text" id="up-title" placeholder="Clip title" maxlength="120"
+        style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:var(--radius);font-family:inherit;font-size:.88rem;grid-column:1/-1">
+      <textarea id="up-desc" placeholder="Description (optional)" rows="2" maxlength="500"
+        style="background:rgba(255,255,255,.06);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:var(--radius);font-family:inherit;font-size:.88rem;resize:vertical;grid-column:1/-1"></textarea>
+      <select id="up-category"
+        style="background:rgba(0,0,0,.6);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:var(--radius);font-family:inherit;font-size:.88rem">
+        <option value="general">General</option>
+        <option value="bad_beat">Bad Beat</option>
+        <option value="big_win">Big Win</option>
+        <option value="bluff">Bluff</option>
+        <option value="funny">Funny Moment</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.04);border:1px dashed var(--border);border-radius:var(--radius);padding:8px 12px;cursor:pointer;font-size:.85rem;color:var(--text-dim)">
+        📁 <span id="up-filename">Choose video file (webm/mp4, max 100MB)</span>
+        <input type="file" id="up-file" accept="video/webm,video/mp4,video/*" style="display:none" onchange="onFileChosen()">
+      </label>
+    </div>
+    <div id="up-progress" style="display:none;margin-bottom:8px">
+      <div style="height:6px;background:rgba(255,255,255,.1);border-radius:3px;overflow:hidden">
+        <div id="up-progress-bar" style="height:100%;background:var(--gold);width:0%;transition:width .2s"></div>
+      </div>
+      <div id="up-progress-label" style="color:var(--text-dim);font-size:.75rem;margin-top:4px">Uploading…</div>
+    </div>
+    <div id="up-error" style="color:var(--red);font-size:.82rem;margin-bottom:8px;display:none"></div>
+    <button class="btn btn-gold" onclick="uploadHighlight()" id="up-btn">Upload Clip</button>
+  </div>
+
+  <!-- Category filters -->
+  <div class="hl-filters">
+    <button class="hl-filter-btn active" data-cat="all" onclick="filterHighlights('all', this)">All</button>
+    <button class="hl-filter-btn" data-cat="bad_beat" onclick="filterHighlights('bad_beat', this)">💔 Bad Beat</button>
+    <button class="hl-filter-btn" data-cat="big_win" onclick="filterHighlights('big_win', this)">🏆 Big Win</button>
+    <button class="hl-filter-btn" data-cat="bluff" onclick="filterHighlights('bluff', this)">🃏 Bluff</button>
+    <button class="hl-filter-btn" data-cat="funny" onclick="filterHighlights('funny', this)">😂 Funny</button>
+  </div>
+
+  <div id="hl-grid" class="hl-grid">
+    <div class="empty-state" style="grid-column:1/-1">
+      <div class="es-icon">🎬</div>
+      <div>Loading highlights…</div>
+    </div>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script src="/js/maintenance-banner.js"></script>
+<script>
+requireAuth();
+const _user = getUser();
+let _allHighlights = [];
+let _activeCategory = 'all';
+let _chosenFile = null;
+
+// Show upload panel for admins
+if (_user?.isAdmin) {
+  document.getElementById('upload-panel').style.display = '';
+}
+
+// ─── Load & render ───────────────────────────────────────────────────────────
+
+async function loadHighlights(category) {
+  try {
+    const url = '/api/highlights' + (category && category !== 'all' ? '?category=' + category : '');
+    const r = await fetch(url);
+    _allHighlights = await r.json();
+    renderGrid(_allHighlights);
+  } catch (e) {
+    document.getElementById('hl-grid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">⚠️</div><div>Failed to load highlights</div></div>';
+  }
+}
+
+function renderGrid(clips) {
+  const grid = document.getElementById('hl-grid');
+  if (!clips.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="es-icon">🎬</div><div>No highlights yet</div></div>';
+    return;
+  }
+  grid.innerHTML = clips.map(h => `
+    <div class="hl-card" onclick="openViewer('${h.id}')">
+      <div class="hl-card-thumb">
+        ${h.video_url
+          ? `<video src="${h.video_url}#t=0.1" preload="metadata" style="pointer-events:none"></video>`
+          : '<span style="font-size:2.5rem">🎬</span>'}
+        <span class="play-icon">▶️</span>
+      </div>
+      <div class="hl-card-body">
+        <div class="hl-card-title" title="${esc(h.title)}">${esc(h.title)}</div>
+        <div class="hl-card-meta">
+          <span class="hl-badge ${h.category}">${catLabel(h.category)}</span>
+          <span>❤️ ${h.likes_count || 0} · @${esc(h.uploader_username || 'admin')}</span>
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+function filterHighlights(cat, btn) {
+  _activeCategory = cat;
+  document.querySelectorAll('.hl-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadHighlights(cat);
+}
+
+function catLabel(cat) {
+  return { bad_beat: 'Bad Beat', big_win: 'Big Win', bluff: 'Bluff', funny: 'Funny', general: 'General' }[cat] || cat;
+}
+
+function esc(s) {
+  return String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+}
+
+// ─── Viewer ──────────────────────────────────────────────────────────────────
+
+async function openViewer(id) {
+  const h = _allHighlights.find(x => x.id === id);
+  if (!h) return;
+
+  // Load comments
+  let comments = [];
+  try {
+    const r = await fetch(`/api/highlights/${id}/comments`);
+    comments = await r.json();
+  } catch {}
+
+  const liked = false; // TODO: check if user already liked (would need auth state)
+  const shareUrl = location.origin + '/highlights.html#' + id;
+
+  const overlay = document.createElement('div');
+  overlay.className = 'hl-viewer-overlay';
+  overlay.id = 'hl-viewer';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div class="hl-viewer">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 20px 0">
+        <span class="hl-badge ${h.category}">${catLabel(h.category)}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${_user?.isAdmin ? `<button onclick="deleteHighlight('${h.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.78rem">🗑 Delete</button>` : ''}
+          <button onclick="document.getElementById('hl-viewer')?.remove()" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:1.2rem">✕</button>
+        </div>
+      </div>
+      <div class="hl-viewer-vid">
+        ${h.video_url ? `<video src="${h.video_url}" controls autoplay></video>` : '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--text-dim)">No video file</div>'}
+      </div>
+      <div class="hl-viewer-info">
+        <div class="hl-viewer-title">${esc(h.title)}</div>
+        <div class="hl-viewer-meta">Uploaded by @${esc(h.uploader_username || 'admin')} · ${new Date(h.created_at).toLocaleDateString()}</div>
+        ${h.description ? `<p style="color:var(--text-dim);font-size:.85rem;margin-bottom:12px">${esc(h.description)}</p>` : ''}
+        <div class="hl-actions">
+          <button class="hl-like-btn${liked ? ' liked' : ''}" id="like-btn-${id}" onclick="toggleLike('${id}')">❤️ <span id="like-count-${id}">${h.likes_count || 0}</span></button>
+          <button class="hl-share-btn" onclick="copyShareLink('${shareUrl}')">🔗 Copy Link</button>
+          <button class="hl-share-btn" onclick="shareTwitter('${encodeURIComponent(h.title)}','${encodeURIComponent(shareUrl)}')">𝕏 Share</button>
+          ${navigator.share ? `<button class="hl-share-btn" onclick="nativeShare('${esc(h.title)}','${shareUrl}')">📤 Share</button>` : ''}
+        </div>
+        <div class="hl-comments">
+          <div style="font-weight:700;color:var(--text-dim);font-size:.8rem;margin-bottom:10px">💬 COMMENTS (${comments.length})</div>
+          <div id="comments-list-${id}">
+            ${comments.length ? comments.map(c => `
+              <div class="hl-comment">
+                <span class="hl-comment-author">@${esc(c.username)}</span>${esc(c.comment)}
+                ${_user?.isAdmin ? `<button onclick="deleteComment('${id}','${c.id}')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.7rem;float:right">✕</button>` : ''}
+              </div>`).join('') : '<div style="color:var(--text-dim);font-size:.82rem">No comments yet</div>'}
+          </div>
+          <div class="hl-comment-input">
+            <input type="text" id="comment-input-${id}" placeholder="Add a comment…" maxlength="500"
+              onkeydown="if(event.key==='Enter')postComment('${id}')">
+            <button class="btn btn-sm btn-outline" onclick="postComment('${id}')">Post</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+// ─── Like / Comment ───────────────────────────────────────────────────────────
+
+async function toggleLike(id) {
+  try {
+    const r = await apiFetch(`/api/highlights/${id}/like`, { method: 'POST' });
+    const btn = document.getElementById(`like-btn-${id}`);
+    const cnt = document.getElementById(`like-count-${id}`);
+    if (btn) btn.classList.toggle('liked', r.liked);
+    if (cnt) {
+      const h = _allHighlights.find(x => x.id === id);
+      if (h) { h.likes_count += r.liked ? 1 : -1; cnt.textContent = h.likes_count; }
+    }
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function postComment(id) {
+  const input = document.getElementById(`comment-input-${id}`);
+  if (!input) return;
+  const comment = input.value.trim();
+  if (!comment) return;
+  try {
+    const r = await apiFetch(`/api/highlights/${id}/comments`, { method: 'POST', body: JSON.stringify({ comment }) });
+    const list = document.getElementById(`comments-list-${id}`);
+    if (list) {
+      const div = document.createElement('div');
+      div.className = 'hl-comment';
+      div.innerHTML = `<span class="hl-comment-author">@${esc(r.username)}</span>${esc(r.comment)}`;
+      list.appendChild(div);
+    }
+    input.value = '';
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteComment(hlId, cid) {
+  if (!confirm('Delete comment?')) return;
+  try {
+    await apiFetch(`/api/highlights/${hlId}/comments/${cid}`, { method: 'DELETE' });
+    document.getElementById('hl-viewer')?.remove();
+    openViewer(hlId);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function deleteHighlight(id) {
+  if (!confirm('Delete this highlight permanently?')) return;
+  try {
+    await apiFetch(`/api/highlights/${id}`, { method: 'DELETE' });
+    document.getElementById('hl-viewer')?.remove();
+    _allHighlights = _allHighlights.filter(h => h.id !== id);
+    renderGrid(_allHighlights);
+    toast('Highlight deleted');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Social share ─────────────────────────────────────────────────────────────
+
+function copyShareLink(url) {
+  navigator.clipboard?.writeText(url)
+    .then(() => toast('Link copied!'))
+    .catch(() => { prompt('Copy this link:', url); });
+}
+
+function shareTwitter(title, url) {
+  const text = encodeURIComponent('Check out this poker highlight from Boston Poker Club! 🃏');
+  window.open(`https://twitter.com/intent/tweet?text=${text}&url=${url}`, '_blank');
+}
+
+function nativeShare(title, url) {
+  navigator.share({ title: 'Boston Poker Club — ' + title, url }).catch(() => {});
+}
+
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
+function onFileChosen() {
+  const file = document.getElementById('up-file').files[0];
+  if (!file) return;
+  _chosenFile = file;
+  document.getElementById('up-filename').textContent = file.name + ' (' + (file.size / 1024 / 1024).toFixed(1) + ' MB)';
+}
+
+async function uploadHighlight() {
+  const title    = document.getElementById('up-title').value.trim();
+  const desc     = document.getElementById('up-desc').value.trim();
+  const category = document.getElementById('up-category').value;
+  const errEl    = document.getElementById('up-error');
+  const btn      = document.getElementById('up-btn');
+  errEl.style.display = 'none';
+
+  if (!title) { errEl.textContent = 'Title is required'; errEl.style.display = ''; return; }
+  if (!_chosenFile) { errEl.textContent = 'Please choose a video file'; errEl.style.display = ''; return; }
+  if (_chosenFile.size > 100 * 1024 * 1024) { errEl.textContent = 'File must be under 100MB'; errEl.style.display = ''; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Uploading…';
+  const prog = document.getElementById('up-progress');
+  const bar  = document.getElementById('up-progress-bar');
+  const lbl  = document.getElementById('up-progress-label');
+  prog.style.display = '';
+
+  try {
+    // Step 1: get signed upload URL
+    lbl.textContent = 'Getting upload URL…';
+    bar.style.width = '10%';
+    const urlRes = await apiFetch('/api/highlights/upload-url', {
+      method: 'POST',
+      body: JSON.stringify({ filename: _chosenFile.name })
+    });
+
+    // Step 2: upload directly to Supabase Storage
+    lbl.textContent = 'Uploading video…';
+    bar.style.width = '30%';
+    const uploadRes = await fetch(urlRes.signedUrl, {
+      method: 'PUT',
+      body: _chosenFile,
+      headers: { 'Content-Type': _chosenFile.type || 'video/webm' }
+    });
+    if (!uploadRes.ok) throw new Error('Upload to storage failed: ' + uploadRes.status);
+    bar.style.width = '80%';
+    lbl.textContent = 'Saving metadata…';
+
+    // Step 3: save metadata
+    const newHighlight = await apiFetch('/api/highlights', {
+      method: 'POST',
+      body: JSON.stringify({ title, description: desc, category, storage_path: urlRes.path })
+    });
+    bar.style.width = '100%';
+    lbl.textContent = 'Done!';
+
+    _allHighlights.unshift(newHighlight);
+    renderGrid(_allHighlights);
+    // Reset form
+    document.getElementById('up-title').value = '';
+    document.getElementById('up-desc').value = '';
+    document.getElementById('up-file').value = '';
+    document.getElementById('up-filename').textContent = 'Choose video file (webm/mp4, max 100MB)';
+    _chosenFile = null;
+    setTimeout(() => { prog.style.display = 'none'; bar.style.width = '0%'; }, 2000);
+    toast('Highlight uploaded!', 'success');
+  } catch (e) {
+    errEl.textContent = e.message || 'Upload failed';
+    errEl.style.display = '';
+    prog.style.display = 'none';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Upload Clip';
+  }
+}
+
+// ─── Toast ───────────────────────────────────────────────────────────────────
+
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:${type === 'error' ? '#c0392b' : '#1a4a2e'};border:1px solid ${type === 'error' ? '#e74c3c' : 'var(--gold)'};color:#fff;padding:10px 20px;border-radius:8px;z-index:9999;font-size:.88rem;pointer-events:none`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+
+// Open specific highlight if hash present
+window.addEventListener('load', () => {
+  loadHighlights('all');
+  const hash = location.hash.slice(1);
+  if (hash) setTimeout(() => openViewer(hash), 1000);
+});
+</script>
+</body>
+</html>
