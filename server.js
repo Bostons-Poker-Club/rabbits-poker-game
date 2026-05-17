@@ -20,6 +20,7 @@ const helmet = require('helmet');
 const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
+const { sendStartupTestEmail } = require('./src/mail');
 
 const app = express();
 const server = http.createServer(app);
@@ -38,7 +39,7 @@ app.use(helmet({
       scriptSrc:     ["'self'", "'unsafe-inline'"],   // inline scripts used throughout app
       scriptSrcAttr: ["'unsafe-inline'"],            // inline event handlers (onclick, etc.)
       styleSrc:      ["'self'", "'unsafe-inline'"],  // inline styles used throughout app
-      imgSrc:      ["'self'", 'data:', 'blob:'],
+      imgSrc:      ["'self'", 'data:', 'blob:', 'https://api.qrserver.com'],
       connectSrc:  ["'self'", 'wss:', 'ws:'],       // socket.io websocket
       mediaSrc:    ["'self'"],
       workerSrc:   ["'self'", 'blob:'],             // service worker
@@ -87,4 +88,6 @@ startFeeScheduler();
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🃏 Rabbits Poker running on port ${PORT}`);
+  console.log('[mail] SendGrid configured:', !!process.env.SENDGRID_API_KEY, '| from:', 'bostonspokerclub.amitureflops@gmail.com');
+  sendStartupTestEmail();
 });
