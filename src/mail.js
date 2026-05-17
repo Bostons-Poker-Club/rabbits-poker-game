@@ -82,11 +82,12 @@ async function sendBroadcastEmail({ from, message, recipients }) {
 
 async function sendAdminEmail({ subject, text, html }) {
   if (!isConfigured()) return;
+  console.log(`[mail] Sending admin email → ${ADMIN_EMAIL} | ${subject}`);
   try {
     await sgMail.send({ from: FROM, to: ADMIN_EMAIL, subject, text, html });
-    console.log(`[mail] Admin email sent: ${subject}`);
+    console.log(`[mail] Admin email delivered to ${ADMIN_EMAIL}: ${subject}`);
   } catch (e) {
-    console.warn('[mail] Failed to send admin email:', e.message);
+    console.warn(`[mail] Admin email FAILED to ${ADMIN_EMAIL}: ${e.message}`);
   }
 }
 
@@ -105,13 +106,14 @@ async function sendPlayerEmail({ to, subject, text, html }) {
 async function sendPlayerSMS({ phone, text }) {
   if (!isConfigured() || !phone) return;
   const digits = phone.replace(/\D/g, '');
-  if (digits.length !== 10) return;
+  if (digits.length !== 10) { console.warn(`[mail] SMS skipped — invalid phone "${phone}"`); return; }
   const smsTo = `${digits}@vtext.com`;
+  console.log(`[mail] Sending SMS → ${smsTo}`);
   try {
     await sgMail.send({ from: FROM, to: smsTo, subject: 'RabbsRoom', text });
-    console.log(`[mail] SMS sent to ${digits}`);
+    console.log(`[mail] SMS delivered to ${smsTo}`);
   } catch (e) {
-    console.warn('[mail] Failed to send SMS:', e.message);
+    console.warn(`[mail] SMS FAILED to ${smsTo}: ${e.message}`);
   }
 }
 

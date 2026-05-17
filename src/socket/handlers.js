@@ -516,22 +516,25 @@ function setupSocketHandlers(io) {
             if (sid) io.to(sid).emit(event, data);
           };
           game.onHandEnd = (result) => persistHandResult(tableId, result);
-          game.onJackpotCheck = (rank, uid, uname, desc) => checkTableJackpot(io, tableId, rank, uid, uname, desc);
-          // Init per-table jackpot when game is created
-          if (!tableJackpots.has(tableId)) {
-            tableJackpots.set(tableId, {
-              tableName: game.tableName,
-              amount: 0,
-              highHandRank: -1,
-              highHandUserId: null,
-              highHandUsername: null,
-              highHandDescription: null,
-              timerStart: Date.now(),
-              isActive: false,
-              isOnHold: false,
-              awaitingPayout: false,
-              pausedAt: null
-            });
+          // High Hand Jackpot is Hold'em only — PLO tables do not participate
+          if (table.game_type !== 'plo') {
+            game.onJackpotCheck = (rank, uid, uname, desc) => checkTableJackpot(io, tableId, rank, uid, uname, desc);
+            if (!tableJackpots.has(tableId)) {
+              tableJackpots.set(tableId, {
+                tableName: game.tableName,
+                gameType: table.game_type || 'holdem',
+                amount: 0,
+                highHandRank: -1,
+                highHandUserId: null,
+                highHandUsername: null,
+                highHandDescription: null,
+                timerStart: Date.now(),
+                isActive: false,
+                isOnHold: false,
+                awaitingPayout: false,
+                pausedAt: null
+              });
+            }
           }
           game.onShotClockExpired = (uid) => {
             try {
@@ -2062,6 +2065,7 @@ function getAllJackpotState() {
     return {
       tableId,
       tableName: jp.tableName,
+      gameType: jp.gameType || 'holdem',
       amount: jp.amount,
       highHandRank: jp.highHandRank,
       highHandUserId: jp.highHandUserId,

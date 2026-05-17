@@ -626,8 +626,8 @@ class PokerGame {
       Math.floor(totalPot * (this.rakePercent / 100)),
       this.rakeCap
     );
-    // Flat $1 contribution per hand (only when pot covers it)
-    const jackpotContrib = totalPot > rakeAmount ? this.jackpotFlatContrib : 0;
+    // Flat $1 contribution per hand (Hold'em only, only when pot covers it)
+    const jackpotContrib = (this.gameType !== 'plo' && totalPot > rakeAmount) ? this.jackpotFlatContrib : 0;
     this.rakeCollected = rakeAmount;
     this.jackpotContribution = jackpotContrib;
 
@@ -750,7 +750,7 @@ class PokerGame {
       Math.floor(this.pot * (this.rakePercent / 100)),
       this.rakeCap
     );
-    const jackpotContrib = this.pot > rakeAmount ? this.jackpotFlatContrib : 0;
+    const jackpotContrib = (this.gameType !== 'plo' && this.pot > rakeAmount) ? this.jackpotFlatContrib : 0;
 
     winner.chips += this.pot - rakeAmount - jackpotContrib;
     this.rakeCollected = rakeAmount;

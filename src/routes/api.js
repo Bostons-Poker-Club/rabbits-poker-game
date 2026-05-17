@@ -604,7 +604,12 @@ router.get('/tournaments', authMiddleware, async (req, res) => {
     .select('*, tournament_players(count)')
     .order('created_at', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  // Mark which tournaments the current user is already registered for
+  const { data: myRegs } = await supabaseAdmin
+    .from('tournament_players').select('tournament_id').eq('user_id', req.user.id);
+  const regIds = new Set((myRegs || []).map(r => r.tournament_id));
+  res.json((data || []).map(t => ({ ...t, is_registered: regIds.has(t.id) })));
 });
 
 router.post('/tournaments', authMiddleware, adminMiddleware, async (req, res) => {
@@ -628,6 +633,25 @@ router.delete('/tournaments/:id', authMiddleware, adminMiddleware, async (req, r
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ success: true });
+});
+
+router.delete('/tournaments/:id/register', authMiddleware, async (req, res) => {
+  const { data: tournament } = await supabaseAdmin
+    .from('tournaments').select('buy_in, status').eq('id', req.params.id).single();
+  if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+  if (tournament.status !== 'registering') return res.status(400).json({ error: 'Cannot unregister — tournament already started' });
+
+  const { error: delErr } = await supabaseAdmin
+    .from('tournament_players')
+    .delete()
+    .eq('tournament_id', req.params.id)
+    .eq('user_id', req.user.id);
+  if (delErr) return res.status(500).json({ error: delErr.message });
+
+  const { data: usr } = await supabaseAdmin.from('users').select('chips').eq('id', req.user.id).single();
+  await supabaseAdmin.from('users').update({ chips: (usr?.chips || 0) + tournament.buy_in }).eq('id', req.user.id);
+
+  res.json({ ok: true, refunded: tournament.buy_in });
 });
 
 router.post('/tournaments/:id/register', authMiddleware, async (req, res) => {
@@ -718,7 +742,7 @@ router.post('/jackpot/control', authMiddleware, adminMiddleware, async (req, res
     const { tableJackpots, pendingJackpotPayouts, getAllJackpotState } = require('../socket/handlers');
     const io = req.app.get('io');
     const jp = tableJackpots.get(tableId);
-    if (!jp) return res.status(404).json({ error: 'No jackpot found for this table' });
+    if (!jp) return res.status(404).json({ error: 'No jackpot found for this table. Note: PLO tables do not support the High Hand Jackpot.' });
 
     switch (action) {
       case 'activate':
@@ -1392,6 +1416,25 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
       emails: emailRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', email: u.email })),
       phones: smsRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', phone: u.phone }))
     };
+
+    // Send admin copy: email + SMS confirming the broadcast was delivered
+    try {
+      const { sendAdminEmail } = require('../mail');
+      const adminSubject = `📢 Broadcast sent — "${msg.message.slice(0, 60)}${msg.message.length > 60 ? '…' : ''}"`;
+      const adminText = `Broadcast by ${req.user.username}:\n\n"${msg.message}"\n\nDelivered to: ${emailsSent} emails, ${smsSent} SMS.\nRecipient emails: ${emailRecipients.map(u => u.email).join(', ') || 'none'}\nRecipient phones: ${smsRecipients.map(u => u.phone).join(', ') || 'none'}`;
+      await sendAdminEmail({ subject: adminSubject, text: adminText, html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${adminText}</pre>` });
+      console.log(`[broadcast/api] Admin copy sent to bostonspokerclub.amitureflops@gmail.com`);
+      if (process.env.SENDGRID_API_KEY) {
+        const sgMail = require('@sendgrid/mail');
+        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+        const smsText = `RabbsRoom broadcast sent: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms`;
+        await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: 'Broadcast', text: smsText })
+          .then(() => console.log('[broadcast/api] Admin SMS copy sent to 5085219176@vtext.com'))
+          .catch(e => console.warn('[broadcast/api] Admin SMS copy error:', e.message));
+      }
+    } catch (e) {
+      console.warn('[broadcast/api] Admin copy error:', e.message);
+    }
   } catch (e) {
     console.warn('[broadcast/api] delivery error:', e.message);
   }

@@ -1605,7 +1605,7 @@ function renderJackpotTables(tables) {
   if (sel) {
     const cur = sel.value;
     sel.innerHTML = '<option value="">— Select a table —</option>' +
-      tables.map(t => `<option value="${t.tableId}" ${t.tableId === cur ? 'selected' : ''}>${esc(t.tableName)}</option>`).join('');
+      tables.filter(t => t.gameType !== 'plo').map(t => `<option value="${t.tableId}" ${t.tableId === cur ? 'selected' : ''}>${esc(t.tableName)}</option>`).join('');
   }
 
   const container = document.getElementById('jp-tables-list');
@@ -1615,7 +1615,7 @@ function renderJackpotTables(tables) {
   tableCountdownIntervals = {};
 
   if (!tables.length) {
-    container.innerHTML = '<div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No active tables yet. Tables appear here when players sit down.</div>';
+    container.innerHTML = '<div style="color:var(--text-dim);font-size:.9rem;text-align:center;padding:24px">No Hold\'em tables active. High Hand Jackpot applies to Texas Hold\'em only — PLO tables are excluded.</div>';
     return;
   }
 

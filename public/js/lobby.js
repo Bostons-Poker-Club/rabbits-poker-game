@@ -269,7 +269,8 @@ function renderTournaments(list) {
       <div class="table-info">Starting: ${fmtChips(t.starting_chips)} chips${blindsSnippet ? ' · ' + blindsSnippet : ''}</div>
       ${t.status === 'active' ? `<div id="tn-timer-${t.id}" style="font-size:.82rem;color:var(--text-dim);margin:4px 0">Loading timer…</div>` : ''}
       <div class="player-count"><span class="player-dot"></span> ${players} registered</div>
-      ${t.status === 'registering' ? `<button class="btn btn-gold btn-sm btn-full" onclick="registerTournament('${t.id}')">Register →</button>` : ''}
+      ${t.status === 'registering' && !t.is_registered ? `<button class="btn btn-gold btn-sm btn-full" onclick="registerTournament('${t.id}')">Register →</button>` : ''}
+      ${t.status === 'registering' && t.is_registered ? `<div style="display:flex;gap:8px;margin-top:4px"><div style="flex:1;text-align:center;padding:8px;border:1px solid var(--chip-green);border-radius:var(--radius);color:var(--chip-green);font-size:.85rem;font-weight:700">✓ Registered</div><button class="btn btn-sm btn-outline" style="color:var(--red);border-color:var(--red)" onclick="unregisterTournament('${t.id}')">Unregister</button></div>` : ''}
     </div>`;
   }).join('');
 }
@@ -278,6 +279,18 @@ async function registerTournament(id) {
   try {
     await apiFetch(`/api/tournaments/${id}/register`, { method: 'POST' });
     showToast('Registered for tournament!');
+    loadTournaments();
+    refreshChips();
+  } catch (e) {
+    showToast(e.message, 'error');
+  }
+}
+
+async function unregisterTournament(id) {
+  if (!confirm('Unregister from this tournament? Your buy-in chips will be refunded immediately.')) return;
+  try {
+    const r = await apiFetch(`/api/tournaments/${id}/register`, { method: 'DELETE' });
+    showToast(`✅ Unregistered — ${fmtChips(r.refunded)} chips refunded`);
     loadTournaments();
     refreshChips();
   } catch (e) {
