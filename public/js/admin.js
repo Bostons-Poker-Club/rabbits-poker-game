@@ -19,7 +19,7 @@ loadAll();
 let adminSocket = null;
 if (typeof io !== 'undefined') {
   adminSocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
-  adminSocket.on('connect', () => adminSocket.emit('lobby:join'));
+  adminSocket.on('connect', () => { adminSocket.emit('lobby:join'); adminSocket.emit('admin:get_overview'); });
 
   adminSocket.on('admin:new_player', ({ username }) => {
     toast(`🔔 New registration: ${username}`, 'success');
@@ -103,6 +103,10 @@ if (typeof io !== 'undefined') {
       badge.style.display = '';
     }
     toast(`💰 Buy-In Request: ${req.username} wants $${fmt(req.amount)} chips (${req.paymentMethod})`, 'success');
+  });
+
+  adminSocket.on('admin:overview', (tables) => {
+    renderLiveTableOverview(tables);
   });
 
 }
@@ -1330,6 +1334,48 @@ const FELT_COLORS = [
   { color: '#0a0a0a', label: 'Black' },
   { color: '#0a3a3a', label: 'Teal' }
 ];
+
+function renderLiveTableOverview(tables) {
+  const grid = document.getElementById('live-tables-grid');
+  if (!grid) return;
+  if (!tables || !tables.length) {
+    grid.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem">No active tables</div>';
+    return;
+  }
+  grid.innerHTML = tables.map(t => {
+    const streetLabel = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' }[t.currentStreet] || '—';
+    const playerRows = t.players.map(p =>
+      `<div style="display:flex;justify-content:space-between;font-size:.78rem;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+        <span style="color:${p.hasFolded ? '#666' : 'var(--text)'}">🪑${p.seatNumber} ${esc(p.username)}</span>
+        <span style="color:var(--gold)">$${fmt(p.chips)}</span>
+      </div>`
+    ).join('');
+    return `
+      <div class="live-table-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span style="font-weight:700;color:var(--gold);font-size:.9rem">${esc(t.tableName)}</span>
+          <span style="font-size:.72rem;color:var(--text-dim)">${t.gameType === 'plo' ? 'PLO' : "Hold'em"} $${t.smallBlind}/$${t.bigBlind}</span>
+        </div>
+        <div style="display:flex;gap:12px;font-size:.78rem;margin-bottom:8px;flex-wrap:wrap">
+          <span>👥 <strong>${t.playerCount}</strong> players</span>
+          <span style="color:${t.handActive ? 'var(--chip-green)' : 'var(--text-dim)'}">
+            ${t.handActive ? `🃏 ${streetLabel}` : '⏸ Waiting'}
+          </span>
+          ${t.pot > 0 ? `<span>💰 Pot: <strong>$${fmt(t.pot)}</strong></span>` : ''}
+          <span style="color:var(--text-dim)">Hand #${t.handNumber}</span>
+        </div>
+        <div style="margin-bottom:8px;max-height:120px;overflow-y:auto">${playerRows || '<div style="color:var(--text-dim);font-size:.78rem">No players seated</div>'}</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,.08);padding-top:6px">
+          <span>Hands: ${t.handsThisSession} | Rake: $${fmt(t.rakeThisSession)}</span>
+          <button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px" onclick="spectateTable('${t.tableId}')">👁 Spectate</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function spectateTable(tableId) {
+  window.open(`/table.html?tableId=${tableId}&spectate=1`, '_blank');
+}
 
 function renderTablesAdmin(list) {
   const tbody = document.getElementById('tables-body');

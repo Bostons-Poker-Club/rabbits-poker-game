@@ -6,8 +6,10 @@ const user = getUser();
 const params = new URLSearchParams(location.search);
 const tableId = params.get('tableId');
 const buyIn = parseInt(params.get('buyIn')) || 200;
+const spectateMode = params.get('spectate') === '1';
 
 if (!tableId) window.location.href = '/lobby.html';
+if (spectateMode && !user?.isAdmin) window.location.href = '/lobby.html';
 
 let socket = null;
 let gameState = null;
@@ -65,6 +67,7 @@ let _rabbitAvailable = false;
 // ─── Straddle prompt state ────────────────────────────────────────────────
 let _straddlePromptEl = null;
 let _straddleCountdown = null;
+let _adminCamUserId = null; // userId of spectating admin with camera live
 
 // ─── Camera state ─────────────────────────────────────────────────────────
 let camStream = null;            // local camera MediaStream
@@ -175,6 +178,63 @@ function toggleSoundThemePanel() {
   }, { capture: true }), 0);
 }
 
+// ─── Spectator / Observer Mode ────────────────────────────────────────────
+
+function _enterSpectatorMode(tableName) {
+  const banner = document.getElementById('spectator-banner');
+  if (banner) {
+    banner.style.display = 'flex';
+    const nameEl = document.getElementById('spectator-table-name');
+    if (nameEl) nameEl.textContent = tableName || 'Table';
+  }
+  const camBtn = document.getElementById('spectator-cam-btn');
+  if (camBtn) camBtn.style.display = '';
+  // Hide player action UI — spectators can't act
+  const actionArea = document.getElementById('action-area');
+  if (actionArea) actionArea.style.display = 'none';
+  const myCardsArea = document.getElementById('my-cards-area');
+  if (myCardsArea) myCardsArea.style.display = 'none';
+}
+
+function exitSpectateMode() {
+  socket?.emit('admin:leave_spectate', { tableId });
+  window.close();
+  setTimeout(() => { window.location.href = '/admin.html'; }, 300);
+}
+
+async function spectatorCamToggle() {
+  if (camEnabled) {
+    _camDisable();
+  } else {
+    await _camEnable();
+  }
+  const btn = document.getElementById('spectator-cam-btn');
+  if (btn) btn.textContent = camEnabled ? '📷 Live' : '📷 Go Live';
+}
+
+function _checkAdminCamStream() {
+  const overlay = document.getElementById('admin-cam-overlay');
+  const overlayVid = document.getElementById('admin-cam-video');
+  if (!overlay || !overlayVid) return;
+
+  for (const [uid, stream] of peerCamStreams) {
+    const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
+    if (avatarEl) continue; // has a seat — handled by normal flow
+    const enabled = peerCamEnabled.get(uid);
+    const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
+    if (enabled || hasLiveVideo) {
+      if (overlayVid.srcObject !== stream) {
+        overlayVid.srcObject = stream;
+        overlayVid.play().catch(() => {});
+      }
+      overlay.style.display = 'block';
+      return;
+    }
+  }
+  // No unseat'd cam stream active
+  if (!_adminCamUserId) overlay.style.display = 'none';
+}
+
 // ─── Connect ──────────────────────────────────────────────────────────────
 
 function connect() {
@@ -182,11 +242,16 @@ function connect() {
   window.tableSocket = socket; // expose globally for inline scripts
 
   socket.on('connect', () => {
-    console.log('[socket] connected, socketId:', socket.id, '— emitting join_table for tableId:', tableId);
+    console.log('[socket] connected, socketId:', socket.id);
     document.getElementById('reconnecting-banner').style.display = 'none';
-    socket.emit('join_table', { tableId, buyInChips: buyIn });
-    checkMicPermission();
-    renderHostControls();
+    if (spectateMode) {
+      socket.emit('admin:spectate', { tableId });
+      checkMicPermission();
+    } else {
+      socket.emit('join_table', { tableId, buyInChips: buyIn });
+      checkMicPermission();
+      renderHostControls();
+    }
   });
 
   socket.on('connect_error', (err) => {
@@ -662,6 +727,38 @@ function connect() {
   socket.on('cam:disabled_by_admin', () => {
     if (camEnabled) _camDisable();
     toast('Your camera has been disabled by admin', 'error');
+  });
+
+  // ─── Spectator socket events ──────────────────────────────────────────────
+
+  socket.on('spectator_joined', ({ tableName, feltColor }) => {
+    if (tableName) document.getElementById('hdr-table-name').textContent = tableName;
+    if (feltColor) applyFeltColor(feltColor);
+    _enterSpectatorMode(tableName);
+    _pttInit();
+    _showCamPrompt();
+    socket.emit('table:get_stats', { tableId });
+  });
+
+  socket.on('spectator_state', (state) => {
+    gameState = state;
+    renderTable(state);
+    updateHeader(state);
+  });
+
+  socket.on('admin:cam_presence', ({ userId: adminId, username: adminName, enabled }) => {
+    if (enabled) {
+      _adminCamUserId = adminId;
+      const lbl = document.getElementById('admin-cam-label');
+      if (lbl) lbl.textContent = `🎰 ${adminName}`;
+    } else {
+      if (_adminCamUserId === adminId) {
+        _adminCamUserId = null;
+        const overlay = document.getElementById('admin-cam-overlay');
+        if (overlay) overlay.style.display = 'none';
+      }
+    }
+    _updateSeatVideos();
   });
 }
 
@@ -1497,7 +1594,7 @@ function _updateSeatVideos() {
     const enabled = peerCamEnabled.get(uid);
     const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
     const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
-    if (!avatarEl) continue;
+    if (!avatarEl) { _checkAdminCamStream(); continue; }
     if (enabled || hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
     else _clearAvatarVideo(avatarEl);
   }

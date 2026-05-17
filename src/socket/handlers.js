@@ -42,6 +42,7 @@ const activeTournaments = new Map(); // tournamentId -> Tournament
 const socketUsers = new Map();       // socketId -> { userId, username, isAdmin }
 const userSockets = new Map();       // userId -> socketId
 const playerProfiles = new Map();    // userId -> { avatarUrl, isAdmin, isHost }
+const tableSpectators = new Map();   // tableId -> Set<socketId> (admin observers)
 
 // Per-table jackpot state
 // tableJackpots: Map<tableId, { tableName, amount, highHandRank, highHandUserId, highHandUsername, highHandDescription, timerStart }>
@@ -900,6 +901,47 @@ function setupSocketHandlers(io) {
       io.to(tId).emit('cam:disabled_by_admin', {});
     });
 
+    // ─── Admin Spectator Mode ────────────────────────────────────────────────
+
+    socket.on('admin:spectate', ({ tableId: tId }) => {
+      if (!isAdmin) return;
+      socket.join(tId);
+      socket.spectatingTableId = tId;
+      if (!tableSpectators.has(tId)) tableSpectators.set(tId, new Set());
+      tableSpectators.get(tId).add(socket.id);
+      const game = activeGames.get(tId);
+      if (game) {
+        socket.emit('spectator_state', _buildGodState(game));
+        socket.emit('spectator_joined', { tableId: tId, tableName: game.tableName || tId, feltColor: game.feltColor || '#1a5c2a' });
+      } else {
+        socket.emit('spectator_joined', { tableId: tId, tableName: tId, feltColor: '#1a5c2a' });
+      }
+      console.log(`[spectate] admin ${username} spectating ${tId}`);
+    });
+
+    socket.on('admin:leave_spectate', () => {
+      if (!isAdmin) return;
+      const tId = socket.spectatingTableId;
+      if (tId) {
+        tableSpectators.get(tId)?.delete(socket.id);
+        socket.spectatingTableId = null;
+        socket.to(tId).emit('admin:cam_presence', { userId, username, enabled: false });
+      }
+    });
+
+    socket.on('admin:get_overview', () => {
+      if (!isAdmin) return;
+      socket.emit('admin:overview', buildTableOverview());
+    });
+
+    socket.on('admin:cam_presence', ({ enabled }) => {
+      if (!isAdmin) return;
+      const tId = socket.spectatingTableId;
+      if (!tId) return;
+      socket.to(tId).emit('admin:cam_presence', { userId, username, enabled: !!enabled });
+      if (enabled) socket.to(tId).emit('ptt:new_peer', { userId, username });
+    });
+
     // ─── Host Actions ─────────────────────────────────────────────────────
 
     socket.on('host:add_chips', async ({ targetUserId, amount }) => {
@@ -1662,11 +1704,60 @@ function setupSocketHandlers(io) {
           }
         }
       }
+      // Clean up spectator registration
+      if (socket.spectatingTableId) {
+        tableSpectators.get(socket.spectatingTableId)?.delete(socket.id);
+        socket.spectatingTableId = null;
+      }
     });
   });
 }
 
 // ─── Game State Broadcast Helpers ──────────────────────────────────────────────
+
+function buildTableOverview() {
+  const tables = [];
+  for (const [tableId, game] of activeGames) {
+    const stats = tableStats.get(tableId) || {};
+    const rakeData = sessionRake.byTable.get(tableId);
+    tables.push({
+      tableId,
+      tableName: game.tableName || tableId,
+      gameType: game.gameType,
+      playerCount: game.players.size,
+      players: Array.from(game.players.values()).map(p => ({
+        username: p.username, chips: p.chips, seatNumber: p.seatNumber, hasFolded: p.hasFolded
+      })),
+      pot: game.pot,
+      currentStreet: game.currentStreet || null,
+      handActive: game.handActive,
+      handNumber: game.handNumber,
+      smallBlind: game.smallBlind,
+      bigBlind: game.bigBlind,
+      handsThisSession: stats.handsPlayed || 0,
+      rakeThisSession: rakeData?.total || 0,
+      spectatorCount: tableSpectators.get(tableId)?.size || 0
+    });
+  }
+  return tables;
+}
+
+function _buildGodState(game) {
+  const state = game.getPublicState();
+  state.players = enrichPlayers(state.players.map(p => {
+    const player = game.players.get(p.userId);
+    return { ...p, holeCards: player?.holeCards || [] };
+  }));
+  state.isGodView = true;
+  return state;
+}
+
+function _broadcastOverviewToAdmins(io) {
+  const overview = buildTableOverview();
+  for (const sid of getAdminSockets(io)) {
+    io.to(sid).emit('admin:overview', overview);
+  }
+}
 
 function enrichPlayers(players) {
   return players.map(p => {
@@ -1689,6 +1780,17 @@ function broadcastGameState(io, tableId, game) {
       io.to(sid).emit('my_state', personalState);
     }
   }
+
+  // Send god-view state to spectators
+  const spectators = tableSpectators.get(tableId);
+  if (spectators?.size) {
+    const godState = _buildGodState(game);
+    for (const sid of spectators) {
+      io.to(sid).emit('spectator_state', godState);
+    }
+  }
+
+  _broadcastOverviewToAdmins(io);
 }
 
 function sendPersonalizedState(io, socket, game, userId) {
@@ -2480,4 +2582,4 @@ function _postStraddleAction(io, tableId, game) {
   game.lastActionAt = Date.now();
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats };
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats, tableSpectators, buildTableOverview };

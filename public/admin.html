@@ -363,6 +363,16 @@
 
   <!-- Tables -->
   <div class="admin-panel" id="panel-tables">
+    <!-- Live Table Overview -->
+    <div style="margin-bottom:24px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <h3 style="color:var(--gold);margin:0;font-size:.95rem">🔴 Live Tables</h3>
+        <button class="btn btn-sm btn-outline" onclick="adminSocket&&adminSocket.emit('admin:get_overview')">Refresh</button>
+      </div>
+      <div id="live-tables-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">
+        <div style="color:var(--text-dim);font-size:.85rem">No active tables</div>
+      </div>
+    </div>
     <!-- Host Table Requests -->
     <div id="table-requests-section" style="margin-bottom:24px;background:rgba(100,50,0,.15);border:1px solid rgba(255,165,0,.3);border-radius:var(--radius);padding:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">

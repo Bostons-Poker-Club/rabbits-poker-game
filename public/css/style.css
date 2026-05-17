@@ -850,6 +850,26 @@ input, select, textarea { font-family: inherit; }
 .jackpot-admin-info { color: var(--text-dim); font-size: 0.85rem; margin-top: 4px; }
 .jackpot-admin-actions { display: flex; flex-direction: column; gap: 8px; }
 
+/* ─── Live Tables Overview ───────────────────────────────────────────────── */
+#live-tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.live-table-card {
+  background: rgba(0,0,0,0.4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  transition: border-color 0.2s;
+}
+
+.live-table-card:hover {
+  border-color: var(--gold);
+}
+
 /* ─── Player Detail Modal ────────────────────────────────────────────────── */
 .player-detail-grid { margin-top: 16px; }
 .pd-row {

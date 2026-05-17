@@ -213,6 +213,25 @@
   </div>
 </div>
 
+<!-- Spectator mode banner -->
+<div id="spectator-banner" style="display:none;position:fixed;top:50px;left:50%;transform:translateX(-50%);z-index:8000;background:rgba(0,0,0,.88);border:2px solid var(--gold);border-radius:24px;padding:8px 20px;align-items:center;gap:12px">
+  <span style="color:var(--gold);font-weight:700;font-size:.88rem">👁 Observing</span>
+  <span id="spectator-table-name" style="color:var(--text);font-size:.85rem"></span>
+  <button onclick="exitSpectateMode()" style="background:rgba(255,255,255,.1);border:1px solid var(--border);color:var(--text);padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">Exit</button>
+  <button id="spectator-cam-btn" onclick="spectatorCamToggle()" style="display:none;background:rgba(0,200,80,.15);border:1px solid rgba(0,200,80,.4);color:var(--chip-green);padding:3px 12px;border-radius:12px;cursor:pointer;font-size:.78rem">📷 Go Live</button>
+</div>
+
+<!-- Admin cam overlay (shown to players when admin camera is live) -->
+<div id="admin-cam-overlay" style="display:none;position:fixed;bottom:80px;right:16px;z-index:8500;background:rgba(0,0,0,.88);border:2px solid var(--gold);border-radius:12px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,.6)">
+  <div style="padding:4px 10px;background:rgba(200,168,75,.15);font-size:.72rem;font-weight:700;color:var(--gold);display:flex;justify-content:space-between;align-items:center">
+    <span id="admin-cam-label">🎰 Admin</span>
+    <button onclick="document.getElementById('admin-cam-overlay').style.display='none'" style="background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.78rem;padding:0 0 0 8px">✕</button>
+  </div>
+  <div style="width:160px;height:120px;background:#000">
+    <video id="admin-cam-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>
+  </div>
+</div>
+
 <!-- Reconnecting banner -->
 <div id="reconnecting-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b8240a;color:#fff;font-weight:700;font-size:.9rem;text-align:center;padding:10px;letter-spacing:.03em">
   ⚠️ Connection lost — reconnecting…
