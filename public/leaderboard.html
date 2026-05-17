@@ -31,7 +31,7 @@
     <p style="color:var(--text-dim);font-size:.88rem;margin:0">Boston Poker Club — All-Time Rankings</p>
   </div>
 
-  <!-- My Stats Card -->
+  <!-- My Stats Card (own data only — never shown to others) -->
   <div id="my-stats-card" style="display:none;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.3);border-radius:12px;padding:16px 20px;margin-bottom:24px">
     <div style="color:var(--gold);font-weight:700;font-size:.8rem;letter-spacing:.06em;margin-bottom:10px">YOUR STATS</div>
     <div id="my-stats-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:12px"></div>
@@ -39,10 +39,11 @@
 
   <!-- Category Tabs -->
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-    <button class="lb-tab active" onclick="loadLeaderboard('total_won',this)">💰 Chips Won</button>
-    <button class="lb-tab" onclick="loadLeaderboard('biggest_pot',this)">🎯 Biggest Pot</button>
-    <button class="lb-tab" onclick="loadLeaderboard('sessions_played',this)">📅 Most Sessions</button>
-    <button class="lb-tab" onclick="loadLeaderboard('win_rate',this)">📈 Win Rate</button>
+    <button id="tab-sessions" class="lb-tab active" onclick="loadLeaderboard('sessions_played',this)">📅 Sessions</button>
+    <button id="tab-winrate" class="lb-tab" onclick="loadLeaderboard('win_rate',this)">📈 Win Rate</button>
+    <!-- Admin-only financial tabs -->
+    <button id="tab-chips" class="lb-tab" style="display:none" onclick="loadLeaderboard('total_won',this)">💰 Chips Won</button>
+    <button id="tab-pot" class="lb-tab" style="display:none" onclick="loadLeaderboard('biggest_pot',this)">🎯 Biggest Pot</button>
   </div>
 
   <!-- Leaderboard Table -->
@@ -65,10 +66,18 @@ const user = getUser();
 
 if (user) {
   document.getElementById('header-username').textContent = user.username || user.nickname || '';
-  if (user.isAdmin) document.getElementById('lb-admin-reset').style.display = '';
+  if (user.isAdmin) {
+    document.getElementById('lb-admin-reset').style.display = '';
+    document.getElementById('tab-chips').style.display = '';
+    document.getElementById('tab-pot').style.display = '';
+    // Admin defaults to chips-won sort; activate that tab
+    document.getElementById('tab-sessions').classList.remove('active');
+    document.getElementById('tab-chips').classList.add('active');
+  }
 }
 
-let currentSortBy = 'total_won';
+let currentSortBy = user?.isAdmin ? 'total_won' : 'sessions_played';
+let isAdminView = false; // set from API response
 
 function fmt(n) { return Number(n || 0).toLocaleString(); }
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -77,17 +86,24 @@ function initials(name) {
   return (name || '?').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-function avatarHtml(name) {
+function avatarColor(name) {
   const colors = ['#2ecc71','#3498db','#e74c3c','#9b59b6','#f39c12','#1abc9c'];
-  const idx = name ? name.charCodeAt(0) % colors.length : 0;
-  return `<div style="width:36px;height:36px;border-radius:50%;background:${colors[idx]};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;color:#111;flex-shrink:0">${initials(name)}</div>`;
+  return colors[(name || '').charCodeAt(0) % colors.length] || colors[0];
+}
+
+function playerAvatarHtml(r) {
+  const name = r.nickname || r.username || '?';
+  const fallback = `<div style="width:36px;height:36px;border-radius:50%;background:${avatarColor(name)};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;color:#111;flex-shrink:0">${initials(name)}</div>`;
+  if (r.avatar_url) {
+    return `<img src="${esc(r.avatar_url)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.replaceWith(document.createRange().createContextualFragment('${fallback.replace(/'/g, "\\'")}'))">`;
+  }
+  return fallback;
 }
 
 async function loadLeaderboard(by, btn, force) {
-  if (by === 'win_rate') by = 'hands_won'; // server sorts by hands_won, we compute rate client-side
+  if (by === 'win_rate') by = 'hands_won';
   currentSortBy = by;
 
-  // Update tab active state
   if (btn) {
     document.querySelectorAll('.lb-tab').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -98,54 +114,80 @@ async function loadLeaderboard(by, btn, force) {
   try {
     const token = localStorage.getItem('rp_token') || sessionStorage.getItem('rp_token');
     const res = await fetch(`/api/leaderboard?by=${by}`, { headers: { Authorization: 'Bearer ' + token } });
-    const { leaderboard } = await res.json();
+    const json = await res.json();
+    const { leaderboard } = json;
+    isAdminView = !!json.isAdmin;
 
     if (!leaderboard?.length) {
       document.getElementById('lb-table-wrap').innerHTML = '<div class="empty-state">No data yet — play some hands!</div>';
       return;
     }
 
-    const colLabel = {
-      total_won: 'Total Won', biggest_pot: 'Biggest Pot',
-      sessions_played: 'Sessions', hands_won: 'Win Rate'
-    }[by] || 'Total Won';
-
-    const rows = leaderboard.map((r, i) => {
-      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span style="color:var(--text-dim)">${i+1}</span>`;
-      const isMe = r.user_id === user?.id;
-      const mainVal = by === 'hands_won'
-        ? `${r.win_rate}% <span style="color:var(--text-dim);font-size:.78rem">(${fmt(r.hands_won)}/${fmt(r.hands_played)})</span>`
-        : by === 'sessions_played' ? fmt(r.sessions_played)
-        : `$${fmt(r[by])}`;
-      return `
-        <tr class="${isMe ? 'lb-me-row' : ''}">
-          <td style="text-align:center;font-size:1.1rem;width:44px">${medal}</td>
-          <td>
-            <div style="display:flex;align-items:center;gap:10px">
-              ${avatarHtml(r.username)}
-              <div>
-                <div style="font-weight:700;color:${isMe ? 'var(--gold)' : 'var(--text)'}">${esc(r.username)}${isMe ? ' <span style="font-size:.7rem;color:var(--chip-green)">(You)</span>' : ''}</div>
-                ${r.favorite_hand ? `<div style="font-size:.72rem;color:var(--text-dim)">${r.favorite_hand}</div>` : ''}
+    let tableHtml;
+    if (isAdminView) {
+      // Admin: show financial columns
+      const colLabel = { total_won: 'Total Won', biggest_pot: 'Biggest Pot', sessions_played: 'Sessions', hands_won: 'Win Rate' }[by] || 'Total Won';
+      const rows = leaderboard.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span style="color:var(--text-dim)">${i+1}</span>`;
+        const isMe = r.user_id === user?.id;
+        const displayName = r.nickname ? `${esc(r.nickname)} <span style="color:var(--text-dim);font-size:.78rem">(${esc(r.username)})</span>` : esc(r.username);
+        const mainVal = by === 'hands_won'
+          ? `${r.win_rate}% <span style="color:var(--text-dim);font-size:.78rem">(${fmt(r.hands_won)}/${fmt(r.hands_played)})</span>`
+          : by === 'sessions_played' ? fmt(r.sessions_played)
+          : `$${fmt(r[by])}`;
+        return `
+          <tr class="${isMe ? 'lb-me-row' : ''}">
+            <td style="text-align:center;font-size:1.1rem;width:44px">${medal}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                ${playerAvatarHtml(r)}
+                <div>
+                  <div style="font-weight:700;color:${isMe ? 'var(--gold)' : 'var(--text)'}">${displayName}${isMe ? ' <span style="font-size:.7rem;color:var(--chip-green)">(You)</span>' : ''}</div>
+                  ${r.favorite_hand ? `<div style="font-size:.72rem;color:var(--text-dim)">${esc(r.favorite_hand)}</div>` : ''}
+                </div>
               </div>
-            </div>
-          </td>
-          <td style="text-align:right;font-weight:700;color:var(--chip-green);font-size:.95rem">${mainVal}</td>
-          <td style="text-align:right;color:var(--text-dim);font-size:.8rem">${fmt(r.hands_played)} hands</td>
-        </tr>`;
-    }).join('');
+            </td>
+            <td style="text-align:right;font-weight:700;color:var(--chip-green);font-size:.95rem">${mainVal}</td>
+            <td style="text-align:right;color:var(--text-dim);font-size:.8rem">${fmt(r.hands_played)} hands</td>
+          </tr>`;
+      }).join('');
+      tableHtml = `
+        <table class="lb-table">
+          <thead><tr><th></th><th>Player</th><th style="text-align:right">${colLabel}</th><th style="text-align:right">Hands</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } else {
+      // Non-admin: rank, nickname+avatar, sessions, win rate only — no dollar amounts
+      const rows = leaderboard.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `<span style="color:var(--text-dim)">${i+1}</span>`;
+        const isMe = r.user_id === user?.id;
+        const displayName = r.nickname
+          ? `<span style="font-weight:700;color:${isMe ? 'var(--gold)' : 'var(--text)'}">${esc(r.nickname)}</span>`
+          : `<span style="font-weight:700;color:${isMe ? 'var(--gold)' : 'var(--text)'}">${esc(r.username)}</span>`;
+        return `
+          <tr class="${isMe ? 'lb-me-row' : ''}">
+            <td style="text-align:center;font-size:1.1rem;width:44px">${medal}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                ${playerAvatarHtml(r)}
+                <div>
+                  ${displayName}${isMe ? ' <span style="font-size:.7rem;color:var(--chip-green)">(You)</span>' : ''}
+                  ${r.favorite_hand ? `<div style="font-size:.72rem;color:var(--text-dim)">${esc(r.favorite_hand)}</div>` : ''}
+                </div>
+              </div>
+            </td>
+            <td style="text-align:right;color:var(--text);font-size:.88rem">${fmt(r.sessions_played)}</td>
+            <td style="text-align:right;color:var(--chip-green);font-weight:700;font-size:.88rem">${r.win_rate}%</td>
+          </tr>`;
+      }).join('');
+      tableHtml = `
+        <table class="lb-table">
+          <thead><tr><th></th><th>Player</th><th style="text-align:right">Sessions</th><th style="text-align:right">Win Rate</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
 
-    document.getElementById('lb-table-wrap').innerHTML = `
-      <table class="lb-table">
-        <thead>
-          <tr>
-            <th></th>
-            <th>Player</th>
-            <th style="text-align:right">${colLabel}</th>
-            <th style="text-align:right">Hands</th>
-          </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-      </table>`;
+    document.getElementById('lb-table-wrap').innerHTML = tableHtml;
   } catch (err) {
     document.getElementById('lb-table-wrap').innerHTML = `<div class="empty-state" style="color:var(--red)">${err.message}</div>`;
   }
@@ -158,9 +200,7 @@ async function loadMyStats() {
     const { stats } = await res.json();
     if (!stats) return;
 
-    const card = document.getElementById('my-stats-card');
-    const grid = document.getElementById('my-stats-grid');
-    card.style.display = '';
+    document.getElementById('my-stats-card').style.display = '';
 
     const items = [
       { label: 'Hands Played', value: fmt(stats.hands_played) },
@@ -172,7 +212,7 @@ async function loadMyStats() {
       { label: 'Fav Hand', value: stats.favorite_hand || '–' },
     ];
 
-    grid.innerHTML = items.map(it => `
+    document.getElementById('my-stats-grid').innerHTML = items.map(it => `
       <div style="text-align:center">
         <div style="color:var(--chip-green);font-weight:700;font-size:1rem">${it.value}</div>
         <div style="color:var(--text-dim);font-size:.7rem">${it.label}</div>
@@ -188,7 +228,7 @@ async function resetLeaderboard() {
 }
 
 // Init
-loadLeaderboard('total_won', null);
+loadLeaderboard(currentSortBy, null);
 if (user) loadMyStats();
 
 // Auto-refresh every 30s

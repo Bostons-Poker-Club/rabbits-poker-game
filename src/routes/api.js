@@ -1990,28 +1990,53 @@ router.get('/admin/rake-splits', authMiddleware, adminMiddleware, async (req, re
 // ─── Leaderboard ──────────────────────────────────────────────────────────────
 
 // GET /api/leaderboard?by=total_won  (by = total_won | biggest_pot | sessions_played | win_rate)
+// Financial amounts (total_won, biggest_pot) are only included for admins
 router.get('/leaderboard', authMiddleware, async (req, res) => {
   try {
-    const by = req.query.by || 'total_won';
+    const isAdmin = !!req.user.isAdmin;
+    const defaultSort = isAdmin ? 'total_won' : 'sessions_played';
+    const by = req.query.by || defaultSort;
     const validColumns = ['total_won', 'biggest_pot', 'sessions_played', 'hands_won'];
-    const orderCol = validColumns.includes(by) ? by : 'total_won';
+    const orderCol = validColumns.includes(by) ? by : defaultSort;
 
     const { data, error } = await supabaseAdmin
       .from('player_stats')
-      .select('user_id, username, hands_played, hands_won, total_won, total_lost, biggest_pot, favorite_hand, sessions_played, last_hand_at')
+      .select('user_id, username, hands_played, hands_won, total_won, biggest_pot, sessions_played, favorite_hand')
       .order(orderCol, { ascending: false })
       .limit(10);
 
     if (error) throw error;
 
-    // Compute win_rate
-    const rows = (data || []).map((r, i) => ({
-      rank: i + 1,
-      ...r,
-      win_rate: r.hands_played > 0 ? Math.round((r.hands_won / r.hands_played) * 100) : 0
-    }));
+    // Fetch nicknames and avatar URLs from users table
+    const userIds = (data || []).map(r => r.user_id);
+    let userMap = {};
+    if (userIds.length) {
+      const { data: udata } = await supabaseAdmin
+        .from('users').select('id, nickname, avatar_url').in('id', userIds);
+      if (udata) udata.forEach(u => { userMap[u.id] = u; });
+    }
 
-    res.json({ leaderboard: rows });
+    const rows = (data || []).map((r, i) => {
+      const row = {
+        rank: i + 1,
+        user_id: r.user_id,
+        username: r.username,
+        nickname: userMap[r.user_id]?.nickname || '',
+        avatar_url: userMap[r.user_id]?.avatar_url || null,
+        hands_played: r.hands_played,
+        hands_won: r.hands_won,
+        sessions_played: r.sessions_played,
+        favorite_hand: r.favorite_hand,
+        win_rate: r.hands_played > 0 ? Math.round((r.hands_won / r.hands_played) * 100) : 0,
+      };
+      if (isAdmin) {
+        row.total_won = r.total_won;
+        row.biggest_pot = r.biggest_pot;
+      }
+      return row;
+    });
+
+    res.json({ leaderboard: rows, isAdmin });
   } catch (err) {
     console.error('[leaderboard]', err.message);
     res.status(500).json({ error: err.message });
@@ -2412,7 +2437,7 @@ router.get('/me/profile', authMiddleware, async (req, res) => {
   const userId = req.user.id;
   let { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, full_name, nickname, phone, created_at, is_admin')
+    .select('id, username, email, chips, full_name, nickname, phone, created_at, is_admin, avatar_url')
     .eq('id', userId)
     .single();
 
@@ -2476,6 +2501,37 @@ router.put('/me/profile', authMiddleware, async (req, res) => {
   if (error) return res.status(500).json({ error: error.message });
 
   res.json({ ok: true });
+});
+
+// ─── Avatar Upload ────────────────────────────────────────────────────────────
+
+router.post('/me/avatar', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { imageData } = req.body;
+  if (!imageData || typeof imageData !== 'string') return res.status(400).json({ error: 'No image provided' });
+
+  try {
+    const match = imageData.match(/^data:(image\/[\w+]+);base64,(.+)$/);
+    if (!match) return res.status(400).json({ error: 'Invalid image format' });
+    const [, contentType, b64] = match;
+    const buffer = Buffer.from(b64, 'base64');
+    const ext = contentType === 'image/png' ? 'png' : contentType === 'image/webp' ? 'webp' : 'jpg';
+    const path = `${userId}.${ext}`;
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('avatars')
+      .upload(path, buffer, { contentType, upsert: true });
+
+    if (uploadError) return res.status(500).json({ error: uploadError.message });
+
+    const { data: { publicUrl } } = supabaseAdmin.storage.from('avatars').getPublicUrl(path);
+
+    await supabaseAdmin.from('users').update({ avatar_url: publicUrl }).eq('id', userId);
+
+    res.json({ ok: true, avatar_url: publicUrl });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ─── Change Password ──────────────────────────────────────────────────────────

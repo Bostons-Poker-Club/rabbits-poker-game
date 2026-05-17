@@ -27,7 +27,11 @@
 
   <!-- Avatar + Name Block -->
   <div style="display:flex;align-items:center;gap:20px;margin-bottom:28px">
-    <div id="profile-avatar" style="width:72px;height:72px;border-radius:50%;background:var(--chip-green);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:#fff;flex-shrink:0;border:3px solid var(--gold)">?</div>
+    <label for="avatar-upload" style="cursor:pointer;display:block;position:relative;width:72px;height:72px;flex-shrink:0">
+      <div id="profile-avatar" style="width:72px;height:72px;border-radius:50%;background:var(--chip-green);display:flex;align-items:center;justify-content:center;font-size:2rem;font-weight:700;color:#fff;border:3px solid var(--gold);overflow:hidden">?</div>
+      <div style="position:absolute;bottom:0;right:0;background:rgba(0,0,0,.75);border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.75rem;border:1px solid var(--gold);pointer-events:none">📷</div>
+      <input type="file" id="avatar-upload" accept="image/*" capture="environment" style="display:none" onchange="handleAvatarUpload(this)">
+    </label>
     <div>
       <div id="profile-display-name" style="font-size:1.4rem;font-weight:700;color:var(--text)">Loading…</div>
       <div id="profile-username" style="color:var(--text-dim);font-size:.9rem"></div>
@@ -145,9 +149,21 @@ async function loadProfile() {
     document.getElementById('hdr-chips').textContent = `🪙 ${data.chips?.toLocaleString() || 0}`;
     document.getElementById('hdr-username').textContent = data.username;
 
-    // Avatar (initials)
+    // Avatar
     const displayName = data.nickname || data.full_name || data.username || '?';
-    document.getElementById('profile-avatar').textContent = displayName.charAt(0).toUpperCase();
+    const avatarEl = document.getElementById('profile-avatar');
+    if (data.avatar_url) {
+      avatarEl.innerHTML = '';
+      avatarEl.style.padding = '0';
+      avatarEl.style.fontSize = '0';
+      const img = document.createElement('img');
+      img.src = data.avatar_url;
+      img.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+      img.onerror = () => { avatarEl.innerHTML = ''; avatarEl.style.fontSize = '2rem'; avatarEl.textContent = displayName.charAt(0).toUpperCase(); };
+      avatarEl.appendChild(img);
+    } else {
+      avatarEl.textContent = displayName.charAt(0).toUpperCase();
+    }
     document.getElementById('profile-display-name').textContent = displayName;
     document.getElementById('profile-username').textContent = `@${data.username}${data.full_name ? '  ·  ' + data.full_name : ''}`;
     document.getElementById('profile-chips').textContent = `🪙 ${(data.chips || 0).toLocaleString()}`;
@@ -207,9 +223,10 @@ async function saveProfile() {
     status.style.color = 'var(--chip-green)';
     status.textContent = '✓ Saved!';
     setTimeout(() => { status.textContent = ''; }, 3000);
-    // Update display
+    // Update display name; preserve avatar image if already showing
     if (body.nickname) {
-      document.getElementById('profile-avatar').textContent = body.nickname.charAt(0).toUpperCase();
+      const av = document.getElementById('profile-avatar');
+      if (!av.querySelector('img')) av.textContent = body.nickname.charAt(0).toUpperCase();
       document.getElementById('profile-display-name').textContent = body.nickname;
     }
   } catch {
@@ -256,6 +273,57 @@ async function changePassword() {
   } catch {
     status.style.color = 'var(--red)';
     status.textContent = 'Network error';
+  }
+}
+
+async function handleAvatarUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById('save-status');
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Uploading photo…';
+
+  try {
+    // Resize to 400×400 max via canvas, export as JPEG
+    const dataUrl = await new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 400;
+        const scale = Math.min(MAX / img.width, MAX / img.height, 1);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(file);
+    });
+
+    // Preview immediately
+    const avatarEl = document.getElementById('profile-avatar');
+    avatarEl.innerHTML = '';
+    avatarEl.style.padding = '0';
+    avatarEl.style.fontSize = '0';
+    const previewImg = document.createElement('img');
+    previewImg.src = dataUrl;
+    previewImg.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:50%';
+    avatarEl.appendChild(previewImg);
+
+    // Upload to server
+    const res = await fetch('/api/me/avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ imageData: dataUrl })
+    });
+    const result = await res.json();
+    if (!res.ok) { status.style.color = 'var(--red)'; status.textContent = result.error || 'Upload failed'; return; }
+    status.style.color = 'var(--chip-green)';
+    status.textContent = '✓ Photo saved!';
+    setTimeout(() => { status.textContent = ''; }, 3000);
+  } catch {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Upload failed';
   }
 }
 
