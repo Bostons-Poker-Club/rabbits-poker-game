@@ -67,6 +67,12 @@ const railQueue = [];
 // Per-table waiting lists: tableId -> [{ userId, username, phone, socketId, joinedAt }]
 const tableWaitlists = new Map();
 
+// Per-table session stats: tableId -> { handsPlayed, sessionStart, totalPot, biggestPot, recentTimestamps }
+const tableStats = new Map();
+
+// Per-table rabbit hunt data (cleared after use): tableId -> { cards, foldedCards, communityCards }
+const tableRabbitData = new Map();
+
 // Host table requests: { id, hostId, hostName, gameType, sb, bb, maxPlayers, rake, requestedAt, status }
 const tableRequests = [];
 let tableRequestSeq = 0;
@@ -1143,6 +1149,83 @@ function setupSocketHandlers(io) {
       });
     });
 
+    // ─── Chat Extras (clear, reactions, stickers) ─────────────────────────
+
+    socket.on('chat:clear', () => {
+      const tId = socket.currentTableId;
+      if (!tId || (!isAdmin && !hostSet.has(userId))) return;
+      io.to(tId).emit('chat:cleared', { by: username });
+    });
+
+    socket.on('chat_reaction', ({ tableId: tId, emoji }) => {
+      const finalTId = tId || socket.currentTableId;
+      if (!finalTId || !emoji) return;
+      const allowed = ['😂', '🔥', '💰', '😤', '🤙'];
+      if (!allowed.includes(emoji)) return;
+      io.to(finalTId).emit('chat_reaction', { userId, username, emoji });
+    });
+
+    // ─── Rabbit Hunt ──────────────────────────────────────────────────────
+
+    socket.on('host:toggle_rabbit', ({ tableId: tId, enabled }) => {
+      const finalTId = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = activeGames.get(finalTId);
+      if (!game) return socket.emit('error', { message: 'No active game' });
+      game.rabbitHuntEnabled = !!enabled;
+      broadcastGameState(io, finalTId, game);
+      io.to(finalTId).emit('chat', { username: 'system', message: `🐇 Rabbit Hunt ${enabled ? 'enabled' : 'disabled'}` });
+    });
+
+    socket.on('rabbit:run', ({ tableId: tId }) => {
+      const finalTId = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const data = tableRabbitData.get(finalTId);
+      if (!data) return socket.emit('error', { message: 'No rabbit hunt data — only available after a fold win' });
+      io.to(finalTId).emit('rabbit:result', data);
+      tableRabbitData.delete(finalTId);
+    });
+
+    // ─── Straddle ─────────────────────────────────────────────────────────
+
+    socket.on('host:toggle_straddle', ({ tableId: tId, enabled }) => {
+      const finalTId = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = activeGames.get(finalTId);
+      if (!game) return socket.emit('error', { message: 'No active game' });
+      game.straddleEnabled = !!enabled;
+      broadcastGameState(io, finalTId, game);
+      io.to(finalTId).emit('chat', { username: 'system', message: `🎯 UTG Straddle ${enabled ? 'enabled' : 'disabled'}` });
+    });
+
+    socket.on('straddle:respond', ({ tableId: tId, accepted }) => {
+      const finalTId = tId || socket.currentTableId;
+      const game = activeGames.get(finalTId);
+      if (!game) return;
+
+      if (game._straddleTimer) { clearTimeout(game._straddleTimer); game._straddleTimer = null; }
+      game._straddleOffered = false;
+
+      if (accepted) {
+        try {
+          const result = game.acceptStraddle(userId);
+          broadcastGameState(io, finalTId, game);
+          io.to(finalTId).emit('chat', { username: 'system', message: `🎯 ${username} posted straddle ($${result.straddleAmount})` });
+        } catch (err) {
+          console.error('[straddle] acceptStraddle failed:', err.message);
+        }
+      }
+
+      _postStraddleAction(io, finalTId, game);
+    });
+
+    // ─── Table Stats ──────────────────────────────────────────────────────
+
+    socket.on('table:get_stats', ({ tableId: tId }) => {
+      const finalTId = tId || socket.currentTableId;
+      socket.emit('table:stats', { tableId: finalTId, ...getTableStats(finalTId) });
+    });
+
     // ─── Host Table Requests ──────────────────────────────────────────────
 
     socket.on('table:request', ({ tableName, gameType, sb, bb, maxPlayers, rake }) => {
@@ -1667,14 +1750,33 @@ async function startNewHand(io, tableId, game) {
     }
   }
 
-  io.to(tableId).emit('action_required', {
-    seatNumber: game.currentPlayerSeat,
-    userId: game.seats.get(game.currentPlayerSeat)
-  });
+  // UTG Straddle offer (host feature, separate from money puck)
+  let straddleOffered = false;
+  if (game.straddleEnabled && game._utgSeat && !game._straddleOffered) {
+    const utgPlayer = game.getPlayerBySeat(game._utgSeat);
+    const utgSid = utgPlayer ? userSockets.get(utgPlayer.userId) : null;
+    if (utgSid && !utgPlayer.isAllIn && !utgPlayer.hasFolded && utgPlayer.chips >= game.bigBlind * 2) {
+      game._straddleOffered = true;
+      straddleOffered = true;
+      io.to(utgSid).emit('straddle_offer', { amount: game.bigBlind * 2, deadline: Date.now() + 8000 });
+      game._straddleTimer = setTimeout(() => {
+        game._straddleOffered = false;
+        game._straddleTimer = null;
+        _postStraddleAction(io, tableId, game);
+      }, 8000);
+    }
+  }
+
+  if (!straddleOffered) {
+    io.to(tableId).emit('action_required', {
+      seatNumber: game.currentPlayerSeat,
+      userId: game.seats.get(game.currentPlayerSeat)
+    });
+  }
 
   // Start shot clock for first player + SMS warning after 10s
   const firstPlayer = game.getPlayerBySeat(game.currentPlayerSeat);
-  if (firstPlayer) {
+  if (firstPlayer && !straddleOffered) {
     game.startShotClock(firstPlayer.userId);
     const _smsUid0 = firstPlayer.userId;
     setTimeout(async () => {
@@ -1750,6 +1852,32 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
     const handResult = result.result;
     const tblName = game.tableName || tableId;
     const isSplitPot = handResult.winners.some(w => w.isSplit);
+
+    // ── Update table session stats ────────────────────────────────────────
+    const handPot = handResult.pot || 0;
+    if (!tableStats.has(tableId)) {
+      tableStats.set(tableId, { handsPlayed: 0, sessionStart: Date.now(), totalPot: 0, biggestPot: 0, recentTimestamps: [] });
+    }
+    const tStats = tableStats.get(tableId);
+    tStats.handsPlayed++;
+    tStats.totalPot += handPot;
+    if (handPot > tStats.biggestPot) tStats.biggestPot = handPot;
+    tStats.recentTimestamps.push(Date.now());
+    tStats.recentTimestamps = tStats.recentTimestamps.filter(t => t > Date.now() - 7200000);
+    io.to(tableId).emit('table:stats', { tableId, ...getTableStats(tableId) });
+
+    // ── Save rabbit hunt data when hand ends by fold ──────────────────────
+    if (handResult.folded && game.rabbitHuntEnabled && handResult.rabbitCards?.length > 0) {
+      tableRabbitData.set(tableId, {
+        cards: handResult.rabbitCards,
+        foldedCards: handResult.foldedCards || {},
+        communityCards: handResult.communityCards || []
+      });
+      io.to(tableId).emit('rabbit:available', { tableId });
+    } else {
+      tableRabbitData.delete(tableId);
+    }
+
     io.to(tableId).emit('hand_ended', {
       winners: handResult.winners.map(w => ({
         userId: w.winner.userId,
@@ -2312,4 +2440,28 @@ function _broadcastWaitlistUpdate(io, tableId) {
   }
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists };
+function getTableStats(tableId) {
+  const s = tableStats.get(tableId);
+  if (!s) return { handsPlayed: 0, handsPerHour: 0, avgPot: 0, biggestPot: 0, sessionStart: null };
+  const now = Date.now();
+  const hoursElapsed = Math.max((now - s.sessionStart) / 3600000, 1 / 60);
+  const handsPerHour = Math.round(s.handsPlayed / hoursElapsed);
+  const avgPot = s.handsPlayed > 0 ? Math.round(s.totalPot / s.handsPlayed) : 0;
+  return { handsPlayed: s.handsPlayed, handsPerHour, avgPot, biggestPot: s.biggestPot, sessionStart: s.sessionStart };
+}
+
+function _postStraddleAction(io, tableId, game) {
+  const firstPlayer = game.getPlayerBySeat(game.currentPlayerSeat);
+  if (!firstPlayer || !game.handActive) return;
+  io.to(tableId).emit('action_required', {
+    seatNumber: game.currentPlayerSeat,
+    userId: firstPlayer.userId,
+    callAmount: Math.max(0, game.currentBet - firstPlayer.currentBet),
+    minRaise: game.currentBet + game.minRaise,
+    pot: game.pot
+  });
+  game.startShotClock(firstPlayer.userId);
+  game.lastActionAt = Date.now();
+}
+
+module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats };

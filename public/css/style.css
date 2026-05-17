@@ -1842,3 +1842,125 @@ input, select, textarea { font-family: inherit; }
 #blind-schedule-modal .sched-row:last-child { border-bottom: none; }
 #blind-schedule-modal .sched-header { color: var(--text-dim); font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 #blind-schedule-modal .sched-current { color: var(--gold); font-weight: 700; }
+
+/* ─── Lobby Table Stats ─────────────────────────────────────────────────────── */
+.lobby-table-stats {
+  display: flex; gap: 10px; font-size: .72rem; color: var(--text-dim);
+  margin: 4px 0; flex-wrap: wrap;
+}
+.lobby-table-stats span { white-space: nowrap; }
+
+/* ─── Table Stats Bar ────────────────────────────────────────────────────────── */
+.table-stats-bar {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  background: rgba(0,0,0,.25); padding: 4px 14px; font-size: .72rem;
+  color: var(--text-dim); border-bottom: 1px solid rgba(255,255,255,.06);
+}
+.table-stats-bar span { white-space: nowrap; }
+
+/* ─── Straddle Badge ─────────────────────────────────────────────────────────── */
+.straddle-badge {
+  position: absolute; top: -8px; right: -4px;
+  background: #7c3aed; color: #ede9fe;
+  font-size: .6rem; font-weight: 700; padding: 1px 5px;
+  border-radius: 6px; border: 1px solid #4c1d95; white-space: nowrap;
+}
+
+/* ─── Straddle Offer Prompt ──────────────────────────────────────────────────── */
+.straddle-offer-prompt {
+  position: fixed; bottom: 200px; left: 50%; transform: translateX(-50%);
+  background: #0a1a12; border: 2px solid #7c3aed; border-radius: 12px;
+  padding: 16px 22px; z-index: 9200; text-align: center;
+  min-width: 220px; box-shadow: 0 8px 32px rgba(0,0,0,.7);
+  animation: slideUp .25s ease;
+}
+.straddle-title { color: #c4b5fd; font-size: .85rem; font-weight: 700; margin-bottom: 6px; }
+.straddle-desc  { color: var(--text); font-size: .82rem; margin-bottom: 10px; }
+.straddle-cd    { font-size: 1.4rem; font-weight: 700; color: #7c3aed; margin-bottom: 12px; }
+.straddle-btns  { display: flex; gap: 10px; justify-content: center; }
+
+/* ─── Chat Reaction Bar ──────────────────────────────────────────────────────── */
+.chat-reactions-bar {
+  display: flex; gap: 4px; padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,.07);
+  background: rgba(0,0,0,.15);
+}
+.reaction-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 1.1rem; padding: 2px 5px; border-radius: 6px;
+  transition: transform .15s, background .15s;
+}
+.reaction-btn:hover { background: rgba(255,255,255,.12); transform: scale(1.2); }
+.sticker-btn { font-size: .9rem; }
+
+/* ─── Floating Reaction ──────────────────────────────────────────────────────── */
+.reaction-float {
+  position: fixed; font-size: 1.8rem; z-index: 9100; pointer-events: none;
+  animation: reactionRise 2s ease forwards;
+}
+@keyframes reactionRise {
+  0%   { transform: translateY(0) scale(1);   opacity: 1; }
+  70%  { transform: translateY(-60px) scale(1.3); opacity: .9; }
+  100% { transform: translateY(-100px) scale(.8); opacity: 0; }
+}
+
+/* ─── Sticker Panel ──────────────────────────────────────────────────────────── */
+.sticker-panel {
+  position: fixed; bottom: 200px; left: 12px; z-index: 9100;
+  background: #0a1a12; border: 1px solid var(--gold); border-radius: 10px;
+  padding: 10px; display: grid; grid-template-columns: 1fr 1fr;
+  gap: 5px; min-width: 160px; box-shadow: 0 4px 20px rgba(0,0,0,.6);
+}
+.sticker-pick-btn {
+  background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1);
+  border-radius: 6px; padding: 6px 8px; color: var(--text); cursor: pointer;
+  font-size: .78rem; text-align: left; transition: background .15s;
+}
+.sticker-pick-btn:hover { background: rgba(255,255,255,.14); }
+
+/* ─── Sticker Message ────────────────────────────────────────────────────────── */
+.sticker { display: inline-block; font-size: 1.6rem; animation: stickerPop .3s ease; }
+@keyframes stickerPop { 0% { transform: scale(0); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+
+/* ─── Rabbit Hunt ────────────────────────────────────────────────────────────── */
+.rabbit-run-btn {
+  display: block; margin: 8px auto 0;
+  background: linear-gradient(135deg, #1a3a1a, #2d6a2d);
+  border-color: var(--chip-green); font-size: .8rem;
+}
+.rabbit-result-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.82);
+  z-index: 9500; display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.rabbit-result-box {
+  background: #0a1a12; border: 2px solid var(--chip-green);
+  border-radius: 16px; padding: 22px 26px; max-width: 480px;
+  width: 100%; text-align: center; box-shadow: 0 8px 40px rgba(0,0,0,.8);
+  animation: slideUp .25s ease;
+}
+.rabbit-title {
+  color: var(--chip-green); font-size: 1.1rem; font-weight: 700; margin-bottom: 14px;
+}
+.rabbit-community { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+.rabbit-community .rabbit-card { animation: rabbitReveal .4s ease; }
+@keyframes rabbitReveal {
+  0% { transform: rotateY(90deg) scale(.8); opacity: 0; }
+  100% { transform: rotateY(0) scale(1); opacity: 1; }
+}
+.rabbit-card .card { border-color: var(--chip-green) !important; box-shadow: 0 0 8px rgba(46,204,113,.5); }
+.rabbit-folded-label { color: var(--text-dim); font-size: .75rem; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+.rabbit-folded { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+.rabbit-player { text-align: center; }
+.rabbit-player-name { display: block; color: var(--gold); font-size: .78rem; margin-bottom: 4px; }
+.rabbit-player-cards { display: flex; gap: 4px; justify-content: center; }
+
+/* ─── Profile Page ───────────────────────────────────────────────────────────── */
+.stat-card {
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 12px; text-align: center;
+}
+.stat-value { font-size: 1.4rem; font-weight: 700; color: var(--gold); }
+.stat-label { font-size: .72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .06em; margin-top: 3px; }
+
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }

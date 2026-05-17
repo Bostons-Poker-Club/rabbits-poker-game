@@ -100,6 +100,15 @@
   <div class="chat-panel" id="chat-panel">
     <div class="chat-header">Table Chat</div>
     <div class="chat-messages" id="chat-messages"></div>
+    <!-- Emoji reactions -->
+    <div class="chat-reactions-bar">
+      <button class="reaction-btn" onclick="sendChatReaction('😂')" title="Laugh">😂</button>
+      <button class="reaction-btn" onclick="sendChatReaction('🔥')" title="Fire">🔥</button>
+      <button class="reaction-btn" onclick="sendChatReaction('💰')" title="Money">💰</button>
+      <button class="reaction-btn" onclick="sendChatReaction('😤')" title="Angry">😤</button>
+      <button class="reaction-btn" onclick="sendChatReaction('🤙')" title="Hang Loose">🤙</button>
+      <button class="reaction-btn sticker-btn" onclick="openStickerPicker()" title="Stickers">🎴</button>
+    </div>
     <div class="chat-input-row">
       <input type="text" id="chat-input" placeholder="Say something…" maxlength="200">
       <button onclick="sendChat()">Send</button>

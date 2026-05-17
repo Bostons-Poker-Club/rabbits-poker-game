@@ -2342,4 +2342,88 @@ router.post('/admin/send-weekly-summary', authMiddleware, adminMiddleware, async
   }
 });
 
+// ─── Player Profile (self) ────────────────────────────────────────────────────
+
+router.get('/me/profile', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  let { data, error } = await supabaseAdmin
+    .from('users')
+    .select('id, username, email, chips, full_name, nickname, phone, created_at, is_admin')
+    .eq('id', userId)
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const isHost = hostSet.has(userId);
+
+  // Stats: wins from transactions table
+  const { data: txns } = await supabaseAdmin
+    .from('transactions')
+    .select('amount, type, table_name, created_at, notes')
+    .eq('user_id', userId)
+    .eq('type', 'win')
+    .order('created_at', { ascending: false })
+    .limit(100)
+    .catch(() => ({ data: [] }));
+
+  const wins = txns || [];
+  const handsWon = wins.length;
+  const biggestPot = wins.reduce((max, t) => Math.max(max, t.amount || 0), 0);
+  const totalWon = wins.reduce((sum, t) => sum + (t.amount || 0), 0);
+  const recentSessions = wins.slice(0, 10).map(t => ({
+    amount: t.amount, tableName: t.table_name, handName: t.notes, date: t.created_at
+  }));
+
+  // Live table stats if at a table
+  let liveStats = null;
+  try {
+    const { getTableStats: _gts, activeGames: _ag } = require('../socket/handlers');
+    for (const [tid, game] of _ag) {
+      if (game.getPlayer(userId)) {
+        liveStats = _gts(tid);
+        break;
+      }
+    }
+  } catch {}
+
+  res.json({
+    ...data,
+    is_host: isHost,
+    stats: { handsWon, biggestPot, totalWon },
+    recentSessions,
+    liveStats
+  });
+});
+
+router.put('/me/profile', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { nickname, phone, email } = req.body;
+
+  const updates = {};
+  if (nickname !== undefined) updates.nickname = String(nickname || '').trim().slice(0, 50);
+  if (phone !== undefined) updates.phone = String(phone || '').trim().slice(0, 20);
+  if (email !== undefined && email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
+    updates.email = String(email).trim().slice(0, 200);
+  }
+
+  if (!Object.keys(updates).length) return res.json({ ok: true });
+
+  const { error } = await supabaseAdmin.from('users').update(updates).eq('id', userId);
+  if (error) return res.status(500).json({ error: error.message });
+
+  res.json({ ok: true });
+});
+
+// ─── Table Stats (public) ─────────────────────────────────────────────────────
+
+router.get('/tables/:id/stats', authMiddleware, async (req, res) => {
+  try {
+    const { getTableStats: _gts } = require('../socket/handlers');
+    res.json(_gts(req.params.id));
+  } catch {
+    res.json({ handsPlayed: 0, handsPerHour: 0, avgPot: 0, biggestPot: 0 });
+  }
+});
+
 module.exports = router;

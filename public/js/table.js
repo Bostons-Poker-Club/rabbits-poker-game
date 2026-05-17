@@ -46,6 +46,26 @@ let openMicActive = false;     // true when currently transmitting in open-mic m
 // ─── Waitlist state ───────────────────────────────────────────────────────
 let _waitlistState = {}; // { active, position, total, seatAvailable }
 
+// ─── Chat state ───────────────────────────────────────────────────────────
+const CHAT_STORAGE_KEY = `rp_chat_${tableId}`;
+let _chatHistory = [];
+(function _restoreChatHistory() {
+  try {
+    const saved = sessionStorage.getItem(CHAT_STORAGE_KEY);
+    if (saved) _chatHistory = JSON.parse(saved);
+  } catch {}
+})();
+
+// ─── Table stats ──────────────────────────────────────────────────────────
+let _tableStats = null;
+
+// ─── Rabbit hunt state ────────────────────────────────────────────────────
+let _rabbitAvailable = false;
+
+// ─── Straddle prompt state ────────────────────────────────────────────────
+let _straddlePromptEl = null;
+let _straddleCountdown = null;
+
 // ─── Camera state ─────────────────────────────────────────────────────────
 let camStream = null;            // local camera MediaStream
 let camEnabled = false;          // whether our camera is on
@@ -185,6 +205,10 @@ function connect() {
     }
     _pttInit();
     _showCamPrompt();
+    // Request current table stats
+    socket.emit('table:get_stats', { tableId });
+    // Restore chat history
+    _chatHistory.forEach(m => chatMsg(m.name, m.text, m.type));
   });
 
   socket.on('game_state', (state) => {
@@ -311,6 +335,8 @@ function connect() {
     currentRunoutCards = null; // clear runout overlay
     lastHandHistory = result.history || [];
     lastHandResult = result;
+    _rabbitAvailable = false;
+    _hideRabbitButton();
     // Reveal all hole cards at showdown
     if (result.allHoleCards) _revealAllSeatsCards(result.allHoleCards);
     if (result.allHoleCards && !result.folded) _highlightWinners(result.winners);
@@ -408,8 +434,12 @@ function connect() {
     updateBlindTimer(timerState);
   });
 
-  socket.on('chat', ({ username, message }) => {
-    chatMsg(username, message);
+  socket.on('chat', ({ username: chatUser, message }) => {
+    if (message && message.startsWith('__sticker__:')) {
+      chatMsg(chatUser, message.replace('__sticker__:', ''), 'sticker');
+    } else {
+      chatMsg(chatUser, message);
+    }
   });
 
   socket.on('break_granted', ({ breakPassesRemaining }) => {
@@ -483,6 +513,43 @@ function connect() {
     _waitlistState = {};
     _updateWaitlistBanner();
     toast(reason || 'Removed from waitlist', 'error');
+  });
+
+  // ─── Chat extras ───────────────────────────────────────────────────────
+  socket.on('chat:cleared', ({ by }) => {
+    const el = document.getElementById('chat-messages');
+    if (el) el.innerHTML = '';
+    _chatHistory = [];
+    try { sessionStorage.removeItem(CHAT_STORAGE_KEY); } catch {}
+    chatMsg('system', `🧹 Chat cleared by ${by}`);
+  });
+
+  socket.on('chat_reaction', ({ username: reactorName, emoji }) => {
+    _showReactionFloat(reactorName, emoji);
+  });
+
+  // ─── Table stats ───────────────────────────────────────────────────────
+  socket.on('table:stats', (stats) => {
+    _tableStats = stats;
+    _renderTableStats();
+  });
+
+  // ─── Rabbit hunt ───────────────────────────────────────────────────────
+  socket.on('rabbit:available', () => {
+    _rabbitAvailable = true;
+    const u = getUser();
+    if (u?.isHost || u?.isAdmin) _showRabbitButton();
+  });
+
+  socket.on('rabbit:result', (data) => {
+    _rabbitAvailable = false;
+    _showRabbitResult(data);
+    _hideRabbitButton();
+  });
+
+  // ─── Straddle ──────────────────────────────────────────────────────────
+  socket.on('straddle_offer', ({ amount, deadline }) => {
+    _showStraddleOffer(amount, deadline);
   });
 
   socket.on('disconnect', () => {
@@ -626,7 +693,8 @@ function renderHostControls(state) {
 
   const others = allPlayers.filter(p => p.userId !== user.id);
 
-  // Player chip controls
+  const src2 = src;
+  // Player chip controls + money puck + table options — all in one assignment
   document.getElementById('host-player-list').innerHTML = others.map(p => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.07)">
       <span style="color:var(--text)">${esc(p.username)}</span>
@@ -648,6 +716,19 @@ function renderHostControls(state) {
             <button class="btn btn-sm btn-red" style="font-size:.68rem;padding:3px 7px" onclick="clearPuck()">Remove</button>
            </div>`
       }
+    </div>` +
+    // Table options: straddle, rabbit hunt, clear chat
+    `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)">
+      <div style="color:var(--gold);font-size:.72rem;font-weight:700;margin-bottom:5px">⚙️ TABLE OPTIONS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        <button class="btn btn-sm btn-outline" style="font-size:.66rem;padding:2px 6px" onclick="hostToggleStraddle(${!src2?.straddleEnabled})">
+          🎯 Straddle: ${src2?.straddleEnabled ? 'ON' : 'OFF'}
+        </button>
+        <button class="btn btn-sm btn-outline" style="font-size:.66rem;padding:2px 6px" onclick="hostToggleRabbit(${!src2?.rabbitHuntEnabled})">
+          🐇 Rabbit: ${src2?.rabbitHuntEnabled ? 'ON' : 'OFF'}
+        </button>
+        ${u?.isAdmin ? `<button class="btn btn-sm btn-outline" style="font-size:.66rem;padding:2px 6px;color:var(--red)" onclick="clearChat()">🧹 Clear Chat</button>` : ''}
+      </div>
     </div>`;
 
   // Admin Mic Controls (dedicated panel, top-left)
@@ -754,6 +835,7 @@ function renderSeats(state) {
     if (player) {
       const isMe = player.userId === user.id;
       const hasPuck = moneyPuck?.holderSeat === seatNum;
+      const isStraddler = state.straddlePlayerSeat === seatNum;
       const holeCardsHtml = player.holeCards?.length
         ? player.holeCards.map(c => c.rank === '?' ? '<div class="card back"></div>' : cardHtml(c)).join('')
         : '';
@@ -763,6 +845,7 @@ function renderSeats(state) {
           <div class="seat-box ${isActive ? 'active-player' : ''} ${player.hasFolded ? 'folded' : ''} ${player.isSittingOut ? 'sitting-out' : ''} ${isMe ? 'me' : ''}" data-user-id="${player.userId}">
             ${isDealer ? '<div class="dealer-puck">D</div>' : ''}
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
+            ${isStraddler ? `<div class="straddle-badge">STR $${fmt(state.bigBlind * 2)}</div>` : ''}
             <div class="seat-avatar" data-cam-uid="${player.userId}"><div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div></div>
             <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
@@ -1144,16 +1227,47 @@ function sendChat() {
   input.value = '';
 }
 
-function chatMsg(name, text) {
+function chatMsg(name, text, type) {
   const el = document.getElementById('chat-messages');
   const isSystem = name === 'system';
   const div = document.createElement('div');
-  div.className = `chat-msg ${isSystem ? 'system' : ''}`;
-  div.innerHTML = isSystem
-    ? `<span class="chat-text">${esc(text)}</span>`
-    : `<span class="chat-name">${esc(name)}:</span> <span class="chat-text">${esc(text)}</span>`;
+
+  if (type === 'sticker') {
+    div.className = 'chat-msg chat-sticker-msg';
+    div.innerHTML = `<span class="chat-name">${esc(name)}:</span> <span class="chat-sticker">${_renderSticker(text)}</span>`;
+  } else if (type === 'gif') {
+    div.className = 'chat-msg';
+    div.innerHTML = `<span class="chat-name">${esc(name)}:</span> <span class="chat-text">${esc(text)}</span>`;
+  } else {
+    div.className = `chat-msg ${isSystem ? 'system' : ''}`;
+    div.innerHTML = isSystem
+      ? `<span class="chat-text">${esc(text)}</span>`
+      : `<span class="chat-name">${esc(name)}:</span> <span class="chat-text">${esc(text)}</span>`;
+  }
+
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
+
+  // Persist to session storage (skip system messages to reduce noise)
+  if (!isSystem) {
+    _chatHistory.push({ name, text, type, ts: Date.now() });
+    if (_chatHistory.length > 150) _chatHistory = _chatHistory.slice(-100);
+    try { sessionStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(_chatHistory)); } catch {}
+  }
+}
+
+function _renderSticker(key) {
+  const stickers = {
+    'nicehd':  '<div class="sticker s-nicehd" title="Nice Hand">🤝</div>',
+    'onfire':  '<div class="sticker s-onfire" title="On Fire">🔥</div>',
+    'bust':    '<div class="sticker s-bust" title="Busted">💀</div>',
+    'money':   '<div class="sticker s-money" title="Money">🤑</div>',
+    'rabbit':  '<div class="sticker s-rabbit" title="Rabbit">🐰</div>',
+    'cool':    '<div class="sticker s-cool" title="Cool">😎</div>',
+    'facepalm':'<div class="sticker s-facepalm" title="Bad Beat">🤦</div>',
+    'winner':  '<div class="sticker s-winner" title="Winner">🏆</div>',
+  };
+  return stickers[key] || esc(key);
 }
 
 document.getElementById('chat-input').addEventListener('keydown', e => {
@@ -2260,6 +2374,198 @@ function openBlindSchedule() {
     }).join('')}`;
 
   openModal('blind-schedule-modal');
+}
+
+// ─── Chat Extras ─────────────────────────────────────────────────────────
+
+function sendChatReaction(emoji) {
+  if (!socket) return;
+  socket.emit('chat_reaction', { tableId, emoji });
+}
+
+function openStickerPicker() {
+  let panel = document.getElementById('sticker-panel');
+  if (panel) { panel.remove(); return; }
+  panel = document.createElement('div');
+  panel.id = 'sticker-panel';
+  panel.className = 'sticker-panel';
+  const stickers = [
+    { key: 'nicehd', label: '🤝 Nice Hand' },
+    { key: 'onfire', label: '🔥 On Fire' },
+    { key: 'bust',   label: '💀 Busted' },
+    { key: 'money',  label: '🤑 Money' },
+    { key: 'rabbit', label: '🐰 Rabbit' },
+    { key: 'cool',   label: '😎 Cool' },
+    { key: 'facepalm', label: '🤦 Bad Beat' },
+    { key: 'winner', label: '🏆 Winner' },
+  ];
+  panel.innerHTML = '<div class="stp-title">Stickers</div>' +
+    stickers.map(s => `<button class="sticker-pick-btn" onclick="sendSticker('${s.key}')">${s.label}</button>`).join('');
+  document.body.appendChild(panel);
+  setTimeout(() => document.addEventListener('click', function _sp(e) {
+    if (!document.getElementById('sticker-panel')?.contains(e.target)) {
+      document.getElementById('sticker-panel')?.remove();
+      document.removeEventListener('click', _sp);
+    }
+  }, { capture: true }), 0);
+}
+
+function sendSticker(key) {
+  if (!socket) return;
+  socket.emit('chat_message', { tableId, message: `__sticker__:${key}` });
+  document.getElementById('sticker-panel')?.remove();
+}
+
+function sendChatWithReactions() {
+  sendChat();
+}
+
+function clearChat() {
+  if (!socket) return;
+  if (!confirm('Clear all chat messages for everyone?')) return;
+  socket.emit('chat:clear');
+}
+
+function _showReactionFloat(fromUser, emoji) {
+  const pot = document.getElementById('pot-amount');
+  if (!pot) return;
+  const el = document.createElement('div');
+  el.className = 'reaction-float';
+  el.textContent = emoji;
+  const rect = pot.getBoundingClientRect();
+  el.style.left = (rect.left + rect.width / 2) + 'px';
+  el.style.top  = rect.top + 'px';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2200);
+}
+
+// ─── Table Stats ─────────────────────────────────────────────────────────
+
+function _renderTableStats() {
+  let bar = document.getElementById('table-stats-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'table-stats-bar';
+    bar.className = 'table-stats-bar';
+    const hdr = document.querySelector('.table-info-bar');
+    if (hdr) hdr.parentElement.insertBefore(bar, hdr.nextSibling);
+    else document.querySelector('.table-header')?.appendChild(bar);
+  }
+  if (!_tableStats) { bar.style.display = 'none'; return; }
+  const s = _tableStats;
+  bar.style.display = '';
+  bar.innerHTML =
+    `<span>⏱ ${s.handsPerHour}/hr</span>` +
+    `<span>🍵 Avg $${fmt(s.avgPot)}</span>` +
+    `<span>🏆 Best $${fmt(s.biggestPot)}</span>` +
+    `<span style="color:var(--text-dim)">${s.handsPlayed} hands</span>`;
+}
+
+// ─── Rabbit Hunt ─────────────────────────────────────────────────────────
+
+function _showRabbitButton() {
+  let btn = document.getElementById('rabbit-run-btn');
+  if (btn) { btn.style.display = ''; return; }
+  btn = document.createElement('button');
+  btn.id = 'rabbit-run-btn';
+  btn.className = 'btn btn-sm btn-gold rabbit-run-btn';
+  btn.textContent = '🐇 Run It';
+  btn.onclick = runRabbitHunt;
+  const overlay = document.getElementById('hand-result-overlay');
+  if (overlay) overlay.querySelector('.hand-result-box')?.appendChild(btn);
+  else document.querySelector('.my-cards-area')?.appendChild(btn);
+}
+
+function _hideRabbitButton() {
+  document.getElementById('rabbit-run-btn')?.remove();
+}
+
+function runRabbitHunt() {
+  if (!socket || !_rabbitAvailable) return;
+  socket.emit('rabbit:run', { tableId });
+}
+
+function _showRabbitResult({ cards, foldedCards, communityCards }) {
+  const existing = document.getElementById('rabbit-result-overlay');
+  if (existing) existing.remove();
+
+  const allCommunity = [...(communityCards || []), ...(cards || [])];
+  const communityHtml = allCommunity.map((c, i) => {
+    const isRabbit = i >= (communityCards?.length || 0);
+    return `<span class="${isRabbit ? 'rabbit-card' : ''}">${cardHtml(c, true)}</span>`;
+  }).join('');
+
+  const foldedEntries = Object.values(foldedCards || {});
+  const foldedHtml = foldedEntries.length > 0
+    ? foldedEntries.map(p => `
+        <div class="rabbit-player">
+          <span class="rabbit-player-name">${esc(p.username)}</span>
+          <div class="rabbit-player-cards">${(p.cards || []).map(c => cardHtml(c, true)).join('')}</div>
+        </div>`).join('')
+    : '<div style="color:var(--text-dim);font-size:.8rem">No folded cards recorded</div>';
+
+  const div = document.createElement('div');
+  div.id = 'rabbit-result-overlay';
+  div.className = 'rabbit-result-overlay';
+  div.innerHTML = `
+    <div class="rabbit-result-box">
+      <div class="rabbit-title">🐇 Rabbit Hunt</div>
+      <div class="rabbit-community">${communityHtml}</div>
+      <div class="rabbit-folded-label">Folded Cards</div>
+      <div class="rabbit-folded">${foldedHtml}</div>
+      <button class="btn btn-outline" style="margin-top:14px;font-size:.8rem" onclick="document.getElementById('rabbit-result-overlay').remove()">Close</button>
+    </div>`;
+  div.addEventListener('click', e => { if (e.target === div) div.remove(); });
+  document.body.appendChild(div);
+  setTimeout(() => div.remove(), 10000);
+}
+
+// ─── Straddle Offer ───────────────────────────────────────────────────────
+
+function _showStraddleOffer(amount, deadline) {
+  _dismissStraddleOffer();
+  const el = document.createElement('div');
+  el.className = 'straddle-offer-prompt';
+  el.id = 'straddle-offer-prompt';
+  el.innerHTML = `
+    <div class="straddle-title">🎯 UTG Straddle?</div>
+    <div class="straddle-desc">Post <strong>$${fmt(amount)}</strong> straddle and act last preflop?</div>
+    <div class="straddle-cd" id="straddle-offer-cd">8</div>
+    <div class="straddle-btns">
+      <button class="btn btn-gold" onclick="respondStraddle(true)">Post $${fmt(amount)}</button>
+      <button class="btn btn-outline" onclick="respondStraddle(false)">Skip</button>
+    </div>`;
+  document.body.appendChild(el);
+  _straddlePromptEl = el;
+  const endTime = deadline;
+  _straddleCountdown = setInterval(() => {
+    const rem = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
+    const cd = document.getElementById('straddle-offer-cd');
+    if (cd) cd.textContent = rem;
+    if (rem <= 0) { respondStraddle(false); }
+  }, 500);
+}
+
+function _dismissStraddleOffer() {
+  if (_straddleCountdown) { clearInterval(_straddleCountdown); _straddleCountdown = null; }
+  if (_straddlePromptEl)  { _straddlePromptEl.remove(); _straddlePromptEl = null; }
+  document.getElementById('straddle-offer-prompt')?.remove();
+}
+
+function respondStraddle(accepted) {
+  _dismissStraddleOffer();
+  if (!socket) return;
+  socket.emit('straddle:respond', { tableId, accepted });
+}
+
+// ─── Host Control Extras (rabbit hunt toggle, straddle toggle, clear chat) ──
+
+function hostToggleRabbit(enabled) {
+  socket?.emit('host:toggle_rabbit', { tableId, enabled });
+}
+
+function hostToggleStraddle(enabled) {
+  socket?.emit('host:toggle_straddle', { tableId, enabled });
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────

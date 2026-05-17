@@ -206,10 +206,28 @@ function renderTables(tables) {
       <div class="table-stakes">$${t.stakes_small_blind}/$${t.stakes_big_blind}</div>
       <div class="table-info">Max Players: ${t.max_players} | Rake: ${t.rake_percent}% | Min: $${fmtChips(minBuyIn)}</div>
       ${jpLine}
+      <div id="lobby-stats-${t.id}" class="lobby-table-stats" style="display:none"></div>
       <div class="player-count">${dots} <span style="margin-left:4px">${seated}/${t.max_players} seated</span></div>
       <button class="btn btn-gold btn-sm btn-full">Join Table →</button>
     </div>`;
   }).join('');
+
+  // Fetch live stats for each active table (fire-and-forget)
+  tables.forEach(t => _fetchTableStats(t.id));
+}
+
+async function _fetchTableStats(tableId) {
+  try {
+    const stats = await apiFetch(`/api/tables/${tableId}/stats`);
+    if (!stats || !stats.handsPlayed) return;
+    const el = document.getElementById(`lobby-stats-${tableId}`);
+    if (!el) return;
+    el.style.display = '';
+    el.innerHTML =
+      `<span>⏱ ${stats.handsPerHour}/hr</span>` +
+      `<span>🍵 Avg $${(stats.avgPot || 0).toLocaleString()}</span>` +
+      `<span>🏆 Best $${(stats.biggestPot || 0).toLocaleString()}</span>`;
+  } catch {}
 }
 
 // ─── Tournaments ──────────────────────────────────────────────────────────

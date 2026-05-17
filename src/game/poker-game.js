@@ -65,6 +65,16 @@ class PokerGame {
 
     // Watchdog / stuck-game detection
     this.lastActionAt = Date.now();
+
+    // Straddle option
+    this.straddleEnabled = tableConfig.straddleEnabled || false;
+    this.straddlePlayerSeat = null;
+    this._utgSeat = null;
+    this._straddleOffered = false;
+    this._straddleTimer = null;
+
+    // Rabbit hunt
+    this.rabbitHuntEnabled = tableConfig.rabbitHuntEnabled || false;
   }
 
   // ─── Player Management ─────────────────────────────────────────────────
@@ -186,6 +196,8 @@ class PokerGame {
     this._postBlinds(active);
 
     this.currentStreet = 'preflop';
+    this.straddlePlayerSeat = null;
+    this._straddleOffered = false;
     this.lastActionAt = Date.now();
 
     console.log(`[poker] hand#${this.handNumber} | type:${this.gameType} blinds:${this.smallBlind}/${this.bigBlind} players:${active.length} dealer:${this.dealerSeat} firstAct:${this.currentPlayerSeat}`);
@@ -270,8 +282,47 @@ class PokerGame {
     this.currentPlayerSeat = orderedPlayers[firstToActIndex].seatNumber;
     this.lastAggressorSeat = bbPlayer.seatNumber;
 
+    // Record UTG for optional straddle (3+ players only)
+    this._utgSeat = orderedPlayers.length >= 3 ? orderedPlayers[firstToActIndex].seatNumber : null;
+
     // Do NOT mark SB/BB as acted — they must voluntarily act.
     // BB gets the "option" to raise even if everyone just calls.
+  }
+
+  acceptStraddle(userId) {
+    const player = this.players.get(userId);
+    if (!player) throw new Error('Player not found');
+    if (player.seatNumber !== this._utgSeat) throw new Error('Not UTG player');
+    if (player.isAllIn || player.hasFolded) throw new Error('Player cannot straddle');
+
+    const straddleAmount = this.bigBlind * 2;
+    const actual = Math.min(straddleAmount, player.chips);
+    player.chips -= actual;
+    player.currentBet += actual;
+    player.totalBetThisHand += actual;
+    this.pot += actual;
+
+    if (player.chips === 0) {
+      player.isAllIn = true;
+      this.allInPlayers.add(player.userId);
+    }
+
+    this.currentBet = player.currentBet;
+    this.minRaise = this.bigBlind * 2;
+    this.straddlePlayerSeat = player.seatNumber;
+    this.lastAggressorSeat = player.seatNumber;
+
+    // Reset acted set — everyone must act relative to the straddle
+    this.playersActedThisStreet = new Set();
+
+    // UTG+1 acts first
+    const handPlayers = this._getHandOrderPlayers();
+    const utgIdx = handPlayers.findIndex(p => p.seatNumber === this._utgSeat);
+    const nextIdx = (utgIdx + 1) % handPlayers.length;
+    this.currentPlayerSeat = handPlayers[nextIdx].seatNumber;
+
+    this.handHistory.push({ street: 'preflop', userId: player.userId, username: player.username, action: 'straddle', amount: actual });
+    return { straddleAmount: actual, straddlePlayerSeat: this.straddlePlayerSeat };
   }
 
   // ─── Action Processing ──────────────────────────────────────────────────
@@ -706,6 +757,16 @@ class PokerGame {
     this.jackpotContribution = jackpotContrib;
     this.handActive = false;
 
+    // Rabbit hunt: cards that would have been dealt if all hands ran out
+    const communityNeeded = Math.max(0, 5 - this.communityCards.length);
+    const rabbitCards = this.deck.cards.slice(0, communityNeeded);
+    const foldedCards = {};
+    for (const p of this.players.values()) {
+      if (p.hasFolded && p.holeCards.length > 0) {
+        foldedCards[p.userId] = { cards: p.holeCards, username: p.username };
+      }
+    }
+
     const handResult = {
       winners: [{ winner, amount: this.pot - rakeAmount - jackpotContrib }],
       communityCards: this.communityCards,
@@ -713,7 +774,9 @@ class PokerGame {
       jackpotContribution: jackpotContrib,
       handNumber: this.handNumber,
       pot: this.pot,
-      folded: true
+      folded: true,
+      rabbitCards,
+      foldedCards
     };
 
     if (this.onHandEnd) {
@@ -830,6 +893,9 @@ class PokerGame {
       minRaise: this.minRaise,
       dealerSeat: this.dealerSeat,
       currentPlayerSeat: this.currentPlayerSeat,
+      straddlePlayerSeat: this.straddlePlayerSeat,
+      straddleEnabled: this.straddleEnabled,
+      rabbitHuntEnabled: this.rabbitHuntEnabled,
       players
     };
   }
