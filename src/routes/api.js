@@ -51,7 +51,6 @@ const loginLimiter = rateLimit({
   handler: (_req, res) => {
     res.status(429).json({ error: 'Too many login attempts. Please try again in 15 minutes.' });
   },
-  keyGenerator: (req) => req.ip,
 });
 
 // In-memory high hand state
