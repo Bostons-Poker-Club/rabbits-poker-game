@@ -582,10 +582,10 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
 // Payment method details map for confirmation message
 const PAYMENT_DETAILS = {
-  'CashApp $rabbsroom':                       { label: 'CashApp',  detail: '$rabbsroom' },
-  'Venmo @Roger-Depina':                         { label: 'Venmo',    detail: '@Roger-Depina' },
-  'Zelle rogerio.depinaslabor@gmail.com':     { label: 'Zelle',    detail: 'rogerio.depinaslabor@gmail.com' },
-  'Cash':                                     { label: 'Cash',     detail: 'in person' }
+  'CashApp $rabbsroom':                   { label: 'CashApp', detail: '$rabbsroom',                    qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://cash.app/$rabbsroom' },
+  'Venmo @Roger-Depina':                  { label: 'Venmo',   detail: '@Rabbsroom',                   qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://venmo.com/Rabbsroom' },
+  'Zelle rogerio.depinaslabor@gmail.com': { label: 'Zelle',   detail: 'rogerio.depinaslabor@gmail.com', qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=rogerio.depinaslabor@gmail.com' },
+  'Cash':                                 { label: 'Cash',    detail: 'in person' }
 };
 
 function selectPaymentCard(el) {
@@ -621,9 +621,19 @@ function _updateBuyInConfirmMsg() {
   if (!info) { confirmEl.style.display = 'none'; return; }
   const isCash = method === 'Cash';
   confirmEl.style.display = '';
-  confirmEl.innerHTML = isCash
-    ? `\u{1F4B5} <strong>Cash payment:</strong> Bring <strong>$${fmtChips(amount)}</strong> in person, then wait for admin to add your chips.`
-    : `\u{1F4F2} Send <strong>$${fmtChips(amount)}</strong> to <strong>${info.detail}</strong> on ${info.label}, then wait for admin to add your chips.`;
+  if (isCash) {
+    confirmEl.innerHTML = `💵 <strong>Cash payment:</strong> Bring <strong>$${fmtChips(amount)}</strong> in person, then wait for admin to add your chips.`;
+  } else {
+    confirmEl.innerHTML = `
+      <div style="text-align:center;margin-bottom:10px">
+        <img src="${info.qr}" alt="${info.label} QR code" style="width:150px;height:150px;border-radius:8px;border:2px solid rgba(255,255,255,.15);display:inline-block">
+      </div>
+      <div style="text-align:center;line-height:1.6">
+        📲 Scan to send <strong>$${fmtChips(amount)}</strong> on ${info.label}<br>
+        <span style="color:var(--text-dim);font-size:.82rem">${info.detail}</span><br>
+        <span style="color:var(--text-dim);font-size:.78rem">Then wait for admin to add your chips.</span>
+      </div>`;
+  }
 }
 
 function openBuyInModal() {

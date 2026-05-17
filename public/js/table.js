@@ -858,7 +858,7 @@ function renderSeats(state) {
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             ${isStraddler ? `<div class="straddle-badge">STR $${fmt(state.bigBlind * 2)}</div>` : ''}
             <div class="seat-avatar" data-cam-uid="${player.userId}"><div class="seat-initials">${esc(player.username).charAt(0).toUpperCase()}</div></div>
-            <div class="seat-name" title="${esc(player.username)}">${esc(player.username)}${isMe ? ' (You)' : ''}</div>
+            <div class="seat-name" title="${esc(player.username)}">${esc(player.username.length > 10 ? player.username.slice(0,10) + '…' : player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}

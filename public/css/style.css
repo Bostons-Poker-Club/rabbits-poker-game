@@ -442,18 +442,21 @@ input, select, textarea { font-family: inherit; }
   border: 1px solid rgba(255,255,255,0.15);
   border-radius: 10px;
   padding: 6px 10px;
-  min-width: 88px;
+  min-width: 130px;
   text-align: center;
   position: relative;
   font-size: 0.78rem;
   transition: border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 .seat-box.active-player { border-color: var(--gold); box-shadow: 0 0 12px rgba(212,175,55,0.5); }
 .seat-box.folded { opacity: 0.45; }
 .seat-box.sitting-out { border-color: #666; }
 .seat-box.empty { border: 1px dashed rgba(255,255,255,0.2); color: #555; cursor: pointer; }
 .seat-box.empty:hover { border-color: var(--gold); color: var(--gold); }
-.seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 80px; }
+.seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; margin-top: 5px; }
 .seat-chips { font-size: 0.80rem; line-height: 1.4; }
 .seat-bet { color: var(--chip-green); font-size: 0.78rem; min-height: 14px; }
 .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
@@ -956,8 +959,8 @@ input, select, textarea { font-family: inherit; }
   .poker-area { padding: 4px; }
   .poker-table-wrap { max-width: 100%; }
 
-  .seat-box { min-width: 74px; padding: 4px 6px; font-size: 0.72rem; }
-  .seat-name { max-width: 70px; font-size: 0.72rem; }
+  .seat-box { min-width: 130px; padding: 4px 6px; font-size: 0.72rem; }
+  .seat-name { max-width: 120px; font-size: 0.72rem; }
   .seat-chips { font-size: 0.68rem; }
 
   .my-cards-area { padding: 8px 10px; gap: 8px; }
@@ -1023,12 +1026,12 @@ input, select, textarea { font-family: inherit; }
   .poker-table-oval { border-radius: 40%; border-width: 4px; }
   .seats-container { inset: -40px; }
   .seat-box {
-    min-width: 60px;
+    min-width: 72px;
     padding: 3px 4px;
     font-size: 0.62rem;
     border-radius: 7px;
   }
-  .seat-name { max-width: 54px; font-size: 0.62rem; }
+  .seat-name { max-width: 62px; font-size: 0.62rem; }
   .seat-chips { font-size: 0.58rem; }
   .seat-bet { font-size: 0.56rem; min-height: 12px; }
   .seat-cards .card { width: 30px; height: 44px; font-size: 0.62rem; }
@@ -1160,8 +1163,8 @@ input, select, textarea { font-family: inherit; }
 /* ─── Responsive: Very small phones ≤390px (iPhone 14, iPhone SE) ─────────── */
 @media (max-width: 390px) {
   .seats-container { inset: -32px; }
-  .seat-box { min-width: 54px; padding: 2px 4px; font-size: 0.58rem; }
-  .seat-name { max-width: 48px; font-size: 0.58rem; }
+  .seat-box { min-width: 72px; padding: 2px 4px; font-size: 0.58rem; }
+  .seat-name { max-width: 62px; font-size: 0.58rem; }
   .seat-chips { font-size: 0.52rem; }
   .chip-dot { width: 11px; height: 11px; }
   .chip-total { font-size: 0.70rem; }
@@ -1563,12 +1566,12 @@ input, select, textarea { font-family: inherit; }
   body.table-page .poker-table-wrap { max-width: 100%; }
   body.table-page .seats-container { inset: -34px; }
   body.table-page .seat-box {
-    min-width: 58px;
+    min-width: 86px;
     padding: 2px 4px;
     font-size: 0.58rem;
     border-radius: 6px;
   }
-  body.table-page .seat-name { max-width: 52px; font-size: 0.58rem; }
+  body.table-page .seat-name { max-width: 78px; font-size: 0.58rem; }
   body.table-page .seat-chips { font-size: 0.54rem; }
   body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
   body.table-page .chip-total { font-size: 0.66rem; }
