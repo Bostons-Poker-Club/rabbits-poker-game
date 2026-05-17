@@ -1495,7 +1495,7 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
     nickname,
     phone,
     amount: parseInt(amount),
-    paymentMethod: String(paymentMethod || 'Cash').slice(0, 50),
+    paymentMethod: String(paymentMethod || 'Cash').slice(0, 80),
     notes: String(notes || '').slice(0, 200),
     requestedAt: Date.now(),
     status: 'pending'
@@ -1526,8 +1526,8 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
           <tr><td style="padding:8px 14px;color:#555;width:140px">Username</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
           ${nickname ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Nickname</td><td style="padding:8px 14px">${nickname}</td></tr>` : ''}
           ${phone ? `<tr><td style="padding:8px 14px;color:#555">Phone</td><td style="padding:8px 14px">${phone}</td></tr>` : ''}
-          <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem">$${amount} chips</td></tr>
-          <tr><td style="padding:8px 14px;color:#555">Payment</td><td style="padding:8px 14px">${request.paymentMethod}</td></tr>
+          <tr style="background:#fff"><td style="padding:8px 14px;color:#555">Amount</td><td style="padding:8px 14px;font-weight:700;font-size:1.1rem;color:#1a7a3f">${amount} chips</td></tr>
+          <tr><td style="padding:8px 14px;color:#555">Payment Method</td><td style="padding:8px 14px;font-weight:700">${request.paymentMethod}</td></tr>
           ${notes ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Notes</td><td style="padding:8px 14px">${notes}</td></tr>` : ''}
         </table>
         <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>

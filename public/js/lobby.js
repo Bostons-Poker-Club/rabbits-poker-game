@@ -567,10 +567,69 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 
 // ─── Buy-In Request ────────────────────────────────────────────────────────
 
+// Payment method details map for confirmation message
+const PAYMENT_DETAILS = {
+  'CashApp $rabbsroom':                       { label: 'CashApp',  detail: '$rabbsroom' },
+  'Venmo @Rabbsroom':                         { label: 'Venmo',    detail: '@Rabbsroom' },
+  'Zelle rogerio.depinaslabor@gmail.com':     { label: 'Zelle',    detail: 'rogerio.depinaslabor@gmail.com' },
+  'Cash':                                     { label: 'Cash',     detail: 'in person' }
+};
+
+function selectPaymentCard(el) {
+  // Deselect all cards
+  document.querySelectorAll('.bi-pay-card').forEach(c => {
+    c.style.outline = '';
+    c.style.boxShadow = '';
+    c.setAttribute('aria-selected', 'false');
+  });
+  // Select clicked card
+  el.style.outline = '2px solid var(--gold)';
+  el.style.boxShadow = '0 0 0 3px rgba(200,168,75,.25)';
+  el.setAttribute('aria-selected', 'true');
+  // Hide error
+  const errEl = document.getElementById('bi-method-error');
+  if (errEl) errEl.style.display = 'none';
+  // Update confirmation message
+  _updateBuyInConfirmMsg();
+}
+
+function _getSelectedPaymentMethod() {
+  const selected = document.querySelector('.bi-pay-card[aria-selected="true"]');
+  return selected ? selected.getAttribute('data-method') : null;
+}
+
+function _updateBuyInConfirmMsg() {
+  const confirmEl = document.getElementById('bi-confirm-msg');
+  if (!confirmEl) return;
+  const method = _getSelectedPaymentMethod();
+  const amount = parseInt(document.getElementById('bi-amount')?.value) || 0;
+  if (!method || !amount) { confirmEl.style.display = 'none'; return; }
+  const info = PAYMENT_DETAILS[method];
+  if (!info) { confirmEl.style.display = 'none'; return; }
+  const isCash = method === 'Cash';
+  confirmEl.style.display = '';
+  confirmEl.innerHTML = isCash
+    ? `\u{1F4B5} <strong>Cash payment:</strong> Bring <strong>$${fmtChips(amount)}</strong> in person, then wait for admin to add your chips.`
+    : `\u{1F4F2} Send <strong>$${fmtChips(amount)}</strong> to <strong>${info.detail}</strong> on ${info.label}, then wait for admin to add your chips.`;
+}
+
 function openBuyInModal() {
   const hint = document.getElementById('bi-min-hint');
   if (hint) hint.textContent = '';
+  // Reset card selection and confirm message
+  document.querySelectorAll('.bi-pay-card').forEach(c => {
+    c.style.outline = '';
+    c.style.boxShadow = '';
+    c.removeAttribute('aria-selected');
+  });
+  const confirmEl = document.getElementById('bi-confirm-msg');
+  if (confirmEl) confirmEl.style.display = 'none';
+  const errEl = document.getElementById('bi-method-error');
+  if (errEl) errEl.style.display = 'none';
   openModal('buyin-request-modal');
+  // Update confirm msg when amount changes
+  const amountEl = document.getElementById('bi-amount');
+  if (amountEl) amountEl.oninput = _updateBuyInConfirmMsg;
 }
 
 // Step 1: show "chips required" info modal before the form
@@ -580,7 +639,7 @@ function _openBuyInFromTable(minBuyIn, currentChips) {
     msg.innerHTML = currentChips <= 0
       ? `You have <strong style="color:var(--red)">0 chips</strong>. You need chips to join this table.<br>
          <strong>Minimum buy-in is $${fmtChips(minBuyIn)}.</strong><br>
-         <span style="color:var(--text-dim);font-size:.88rem">Send payment via CashApp or Venmo, then click Request Buy-In and admin will add your chips right away.</span>`
+         <span style="color:var(--text-dim);font-size:.88rem">Select a payment method below, send the amount, then click Request Buy-In and admin will add your chips right away.</span>`
       : `You need chips to join this table. <strong>Minimum buy-in is $${fmtChips(minBuyIn)}</strong><br>
          <span style="color:var(--text-dim);font-size:.88rem">You currently have $${fmtChips(currentChips)} — you need $${fmtChips(minBuyIn - Math.max(currentChips, 0))} more.</span>`;
   }
@@ -595,20 +654,49 @@ function openBuyInFormFromInsufficient() {
   document.getElementById('bi-amount').value = min;
   const hint = document.getElementById('bi-min-hint');
   if (hint) hint.textContent = `Minimum for this table: $${fmtChips(min)}`;
+  // Reset card selection
+  document.querySelectorAll('.bi-pay-card').forEach(c => {
+    c.style.outline = '';
+    c.style.boxShadow = '';
+    c.removeAttribute('aria-selected');
+  });
+  const confirmEl = document.getElementById('bi-confirm-msg');
+  if (confirmEl) confirmEl.style.display = 'none';
+  const errEl = document.getElementById('bi-method-error');
+  if (errEl) errEl.style.display = 'none';
+  const amountEl = document.getElementById('bi-amount');
+  if (amountEl) amountEl.oninput = _updateBuyInConfirmMsg;
   openModal('buyin-request-modal');
 }
 
 async function submitBuyInRequest() {
   const amount = parseInt(document.getElementById('bi-amount').value);
-  const paymentMethod = document.getElementById('bi-method').value;
+  const paymentMethod = _getSelectedPaymentMethod();
   const notes = document.getElementById('bi-notes').value.trim();
   if (!amount || amount <= 0) return showToast('Enter a valid amount', 'error');
+  if (!paymentMethod) {
+    const errEl = document.getElementById('bi-method-error');
+    if (errEl) errEl.style.display = '';
+    return showToast('Please select a payment method', 'error');
+  }
   try {
     await apiFetch('/api/buyin-request', { method: 'POST', body: { amount, paymentMethod, notes } });
     closeModal('buyin-request-modal');
-    showToast('✅ Request sent! Admin will add your chips shortly.');
+    const info = PAYMENT_DETAILS[paymentMethod];
+    const isCash = paymentMethod === 'Cash';
+    const confirmMsg = isCash
+      ? `\u2705 Request sent! Bring $${fmtChips(amount)} cash in person \u2014 admin will add your chips once received.`
+      : `\u2705 Request sent! Send $${fmtChips(amount)} to ${info?.detail || paymentMethod} \u2014 admin will add your chips shortly.`;
+    showToast(confirmMsg, 'success');
     document.getElementById('bi-amount').value = '200';
     document.getElementById('bi-notes').value = '';
+    document.querySelectorAll('.bi-pay-card').forEach(c => {
+      c.style.outline = '';
+      c.style.boxShadow = '';
+      c.removeAttribute('aria-selected');
+    });
+    const confirmEl = document.getElementById('bi-confirm-msg');
+    if (confirmEl) confirmEl.style.display = 'none';
     window._pendingBuyInMin = null;
   } catch (e) {
     showToast(e.message || 'Failed to send request', 'error');
