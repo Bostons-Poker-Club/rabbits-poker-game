@@ -2247,6 +2247,15 @@ function renderRakeSplits(splits, byHost) {
   }).join('');
 }
 
+// ─── Password visibility toggle ───────────────────────────────────────────
+function togglePw(btn, id) {
+  const inp = document.getElementById(id);
+  const showing = inp.type === 'text';
+  inp.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? '👁' : '🙈';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+}
+
 // ─── Create Admin Account ─────────────────────────────────────────────────
 
 let caGovIdData     = null;

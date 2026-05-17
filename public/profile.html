@@ -86,6 +86,38 @@
     </div>
   </div>
 
+  <!-- Change Password -->
+  <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px">
+    <h3 style="color:var(--gold);margin:0 0 16px;font-size:1rem">🔒 Change Password</h3>
+    <div style="display:grid;gap:12px">
+      <div class="form-group">
+        <label class="form-label">Current Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="pw-current" class="form-input" autocomplete="current-password" placeholder="Your current password">
+          <button type="button" class="pw-toggle" onclick="togglePw(this,'pw-current')" aria-label="Show password">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">New Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="pw-new" class="form-input" autocomplete="new-password" placeholder="Min 6 characters">
+          <button type="button" class="pw-toggle" onclick="togglePw(this,'pw-new')" aria-label="Show password">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Confirm New Password</label>
+        <div class="pw-wrap">
+          <input type="password" id="pw-confirm" class="form-input" autocomplete="new-password" placeholder="Repeat new password">
+          <button type="button" class="pw-toggle" onclick="togglePw(this,'pw-confirm')" aria-label="Show password">👁</button>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn btn-gold" onclick="changePassword()">Update Password</button>
+        <span id="pw-status" style="font-size:.82rem"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- Recent Sessions -->
   <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
     <h3 style="color:var(--gold);margin:0 0 14px;font-size:1rem">📋 Recent Wins</h3>
@@ -187,6 +219,52 @@ async function saveProfile() {
 }
 
 function esc(s) { return String(s || '').replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])); }
+
+function togglePw(btn, id) {
+  const inp = document.getElementById(id);
+  const showing = inp.type === 'text';
+  inp.type = showing ? 'password' : 'text';
+  btn.textContent = showing ? '👁' : '🙈';
+  btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+}
+
+async function changePassword() {
+  const status = document.getElementById('pw-status');
+  const current = document.getElementById('pw-current').value;
+  const newPw   = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  status.textContent = '';
+  if (!current) { status.style.color = 'var(--red)'; status.textContent = 'Enter your current password'; return; }
+  if (!newPw || newPw.length < 6) { status.style.color = 'var(--red)'; status.textContent = 'New password must be at least 6 characters'; return; }
+  if (newPw !== confirm) { status.style.color = 'var(--red)'; status.textContent = 'Passwords do not match'; return; }
+  status.style.color = 'var(--text-dim)';
+  status.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/me/password', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ currentPassword: current, newPassword: newPw })
+    });
+    const data = await res.json();
+    if (!res.ok) { status.style.color = 'var(--red)'; status.textContent = data.error || 'Error'; return; }
+    status.style.color = 'var(--chip-green)';
+    status.textContent = '✓ Password updated!';
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-new').value = '';
+    document.getElementById('pw-confirm').value = '';
+    setTimeout(() => { status.textContent = ''; }, 4000);
+  } catch {
+    status.style.color = 'var(--red)';
+    status.textContent = 'Network error';
+  }
+}
+
+// Scroll input into view when mobile keyboard opens
+document.addEventListener('focusin', e => {
+  if (e.target.matches('input')) {
+    setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+  }
+});
 
 function logout() {
   clearAuth();

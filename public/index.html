@@ -28,18 +28,21 @@
     </div>
 
     <!-- Login Form -->
-    <div id="form-login">
+    <form id="form-login" onsubmit="event.preventDefault(); doLogin()">
       <div class="form-group">
         <label>Username</label>
-        <input type="text" id="login-username" placeholder="Enter username" autocomplete="username">
+        <input type="text" id="login-username" placeholder="Enter username" autocomplete="username" inputmode="text">
       </div>
       <div class="form-group">
         <label>Password</label>
-        <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password">
+        <div class="pw-wrap">
+          <input type="password" id="login-password" placeholder="Enter password" autocomplete="current-password">
+          <button type="button" class="pw-toggle" onclick="togglePw(this,'login-password')" aria-label="Show password">👁</button>
+        </div>
       </div>
-      <button class="btn btn-gold btn-full" onclick="doLogin()">Sign In</button>
+      <button type="submit" class="btn btn-gold btn-full" id="btn-login">Sign In</button>
       <div id="login-error" class="error-msg"></div>
-    </div>
+    </form>
 
     <div id="host-apply-link" style="text-align:center;margin-top:10px;font-size:.82rem;color:var(--text-dim)">
       Interested in hosting tables?
@@ -63,7 +66,7 @@
         <input type="checkbox" id="tfa-remember" style="width:16px;height:16px;accent-color:var(--gold)">
         Remember this device for 30 days
       </label>
-      <button class="btn btn-gold btn-full" onclick="doVerify2FA()">Verify →</button>
+      <button class="btn btn-gold btn-full" id="btn-verify-2fa" onclick="doVerify2FA()">Verify →</button>
       <div id="tfa-error" class="error-msg"></div>
       <div style="display:flex;justify-content:space-between;margin-top:12px;font-size:.8rem">
         <button onclick="doResend2FA()" style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.8rem;padding:0">↺ Resend code</button>
@@ -83,7 +86,7 @@
     </div>
 
     <!-- Register Form -->
-    <div id="form-register" style="display:none">
+    <form id="form-register" style="display:none" onsubmit="event.preventDefault(); doRegister()">
       <div class="auth-name-row" style="display:flex;gap:10px">
         <div class="form-group" style="flex:1">
           <label>First Name <span style="color:var(--gold)">*</span><br><span style="color:var(--text-dim);font-size:.7rem;font-weight:400">as on government ID</span></label>
@@ -96,7 +99,7 @@
       </div>
       <div class="form-group">
         <label>Nickname <span style="color:var(--gold)">*</span> <span style="color:var(--text-dim);font-size:.75rem;font-weight:400">— shown at the table</span></label>
-        <input type="text" id="reg-nickname" placeholder="Maverick" maxlength="40">
+        <input type="text" id="reg-nickname" placeholder="Maverick" maxlength="40" autocomplete="nickname">
       </div>
       <div class="form-group">
         <label>Username <span style="color:var(--gold)">*</span></label>
@@ -112,15 +115,18 @@
       </div>
       <div class="form-group">
         <label>Password <span style="color:var(--gold)">*</span></label>
-        <input type="password" id="reg-password" placeholder="Min 6 characters" autocomplete="new-password">
+        <div class="pw-wrap">
+          <input type="password" id="reg-password" placeholder="Min 6 characters" autocomplete="new-password">
+          <button type="button" class="pw-toggle" onclick="togglePw(this,'reg-password')" aria-label="Show password">👁</button>
+        </div>
       </div>
-      <button class="btn btn-gold btn-full" onclick="doRegister()">Create Account</button>
+      <button type="submit" class="btn btn-gold btn-full" id="btn-register">Create Account</button>
       <p style="text-align:center;color:var(--text-dim);font-size:.8rem;margin-top:12px">
         You start with 0 chips — admin will add chips after verifying your identity.
       </p>
       <div id="reg-error" class="error-msg"></div>
       <div id="reg-success" class="success-msg"></div>
-    </div>
+    </form>
   </div>
 </div>
 
@@ -156,18 +162,23 @@
   let _pendingToken = null;
 
   async function doLogin() {
-    const username = document.getElementById('login-username').value.trim();
-    const password = document.getElementById('login-password').value;
+    const btn = document.getElementById('btn-login');
     const errEl = document.getElementById('login-error');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> Signing In…';
     errEl.textContent = '';
     try {
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
       const data = await apiFetch('/api/auth/login', {
         method: 'POST',
         body: { username, password, deviceId: _deviceId }
       });
 
       if (data.requires2fa) {
-        // Show 2FA screen
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In';
         _pendingToken = data.pendingToken;
         document.getElementById('tfa-hint').textContent = data.hint || 'Enter the 6-digit code sent to your phone and email.';
         document.getElementById('form-login').style.display  = 'none';
@@ -184,30 +195,36 @@
       window.location.href = '/lobby.html';
     } catch (e) {
       errEl.textContent = e.message;
+      btn.disabled = false;
+      btn.innerHTML = 'Sign In';
     }
   }
 
   async function doVerify2FA(useBackup = false) {
+    const btn = document.getElementById('btn-verify-2fa');
     const errEl = document.getElementById('tfa-error');
+    if (btn && btn.disabled) return;
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="btn-spinner"></span> Verifying…'; }
     errEl.textContent = '';
     const rawCode = useBackup
       ? (document.getElementById('tfa-backup-code').value.trim().toUpperCase())
       : (document.getElementById('tfa-code').value.replace(/\s/g, ''));
-    if (!rawCode) { errEl.textContent = 'Please enter a code.'; return; }
-
+    if (!rawCode) {
+      errEl.textContent = 'Please enter a code.';
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
+      return;
+    }
     const rememberDevice = document.getElementById('tfa-remember').checked;
     try {
       const data = await apiFetch('/api/auth/2fa/verify', {
         method: 'POST',
         body: { pendingToken: _pendingToken, code: rawCode, rememberDevice, deviceId: _deviceId }
       });
-      if (data.backupCodesLeft !== undefined && data.backupCodesLeft < 3) {
-        // Store warning to show after redirect (edge case — just proceed)
-      }
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
     } catch (e) {
       errEl.textContent = e.message;
+      if (btn) { btn.disabled = false; btn.innerHTML = 'Verify →'; }
     }
   }
 
@@ -247,6 +264,12 @@
   }
 
   async function doRegister() {
+    const btn = document.getElementById('btn-register');
+    const errEl = document.getElementById('reg-error');
+    const okEl  = document.getElementById('reg-success');
+    if (btn.disabled) return;
+    errEl.textContent = '';
+    okEl.textContent  = '';
     const firstName = document.getElementById('reg-firstname').value.trim();
     const lastName  = document.getElementById('reg-lastname').value.trim();
     const nickname  = document.getElementById('reg-nickname').value.trim();
@@ -254,10 +277,6 @@
     const email     = document.getElementById('reg-email').value.trim();
     const phone     = document.getElementById('reg-phone').value.trim();
     const password  = document.getElementById('reg-password').value;
-    const errEl = document.getElementById('reg-error');
-    const okEl  = document.getElementById('reg-success');
-    errEl.textContent = '';
-    okEl.textContent  = '';
     if (!firstName) { errEl.textContent = 'Legal First Name is required'; return; }
     if (!lastName)  { errEl.textContent = 'Legal Last Name is required'; return; }
     if (!nickname)  { errEl.textContent = 'Nickname is required'; return; }
@@ -267,12 +286,16 @@
     if (!password)  { errEl.textContent = 'Password is required'; return; }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address'; return; }
     if (phone.replace(/\D/g, '').length !== 10) { errEl.textContent = 'Please enter a valid 10-digit US phone number'; return; }
+    btn.disabled = true;
+    btn.innerHTML = '<span class="btn-spinner"></span> Creating Account…';
     const full_name = `${firstName} ${lastName}`;
     try {
       await register(username, email, password, nickname, phone, full_name);
       window.location.href = '/lobby.html';
     } catch (e) {
       errEl.textContent = e.message;
+      btn.disabled = false;
+      btn.innerHTML = 'Create Account';
     }
   }
 
@@ -284,19 +307,29 @@
     document.getElementById('host-apply-link').style.display = 'none';
   });
 
-  // Allow Enter key to submit
+  // Password visibility toggle
+  function togglePw(btn, id) {
+    const inp = document.getElementById(id);
+    const showing = inp.type === 'text';
+    inp.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? '👁' : '🙈';
+    btn.setAttribute('aria-label', showing ? 'Show password' : 'Hide password');
+  }
+
+  // Scroll input into view when mobile keyboard opens
+  document.addEventListener('focusin', e => {
+    if (e.target.matches('input')) {
+      setTimeout(() => e.target.scrollIntoView({ behavior: 'smooth', block: 'center' }), 300);
+    }
+  });
+
+  // Enter key: only needed for 2FA (login/register handled by <form> submit)
   document.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      const tfaVisible   = document.getElementById('form-2fa').style.display !== 'none';
-      const loginVisible = document.getElementById('form-login').style.display !== 'none';
-      if (tfaVisible) {
-        const backupOpen = document.getElementById('backup-code-form').style.display !== 'none';
-        doVerify2FA(backupOpen);
-      } else if (loginVisible) {
-        doLogin();
-      } else {
-        doRegister();
-      }
+    if (e.key !== 'Enter') return;
+    const tfaVisible = document.getElementById('form-2fa').style.display !== 'none';
+    if (tfaVisible) {
+      const backupOpen = document.getElementById('backup-code-form').style.display !== 'none';
+      doVerify2FA(backupOpen);
     }
   });
 </script>

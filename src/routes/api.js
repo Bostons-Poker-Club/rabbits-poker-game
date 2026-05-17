@@ -2415,6 +2415,29 @@ router.put('/me/profile', authMiddleware, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Change Password ──────────────────────────────────────────────────────────
+
+router.put('/me/password', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
+  if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+
+  const { data: user, error: fetchErr } = await supabaseAdmin
+    .from('users').select('password_hash').eq('id', userId).single();
+  if (fetchErr || !user) return res.status(404).json({ error: 'User not found' });
+
+  const valid = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+
+  const newHash = await bcrypt.hash(newPassword, 10);
+  const { error: updateErr } = await supabaseAdmin
+    .from('users').update({ password_hash: newHash }).eq('id', userId);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+  res.json({ ok: true });
+});
+
 // ─── Table Stats (public) ─────────────────────────────────────────────────────
 
 router.get('/tables/:id/stats', authMiddleware, async (req, res) => {
