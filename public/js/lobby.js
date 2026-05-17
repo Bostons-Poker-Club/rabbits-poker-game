@@ -570,7 +570,7 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 // Payment method details map for confirmation message
 const PAYMENT_DETAILS = {
   'CashApp $rabbsroom':                       { label: 'CashApp',  detail: '$rabbsroom' },
-  'Venmo @Rabbsroom':                         { label: 'Venmo',    detail: '@Rabbsroom' },
+  'Venmo @Roger-Depina':                         { label: 'Venmo',    detail: '@Roger-Depina' },
   'Zelle rogerio.depinaslabor@gmail.com':     { label: 'Zelle',    detail: 'rogerio.depinaslabor@gmail.com' },
   'Cash':                                     { label: 'Cash',     detail: 'in person' }
 };
