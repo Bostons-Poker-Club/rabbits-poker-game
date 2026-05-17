@@ -182,7 +182,8 @@ async function submitApplication() {
   if (!phone)     return showError('Phone number is required.');
   if (phone.replace(/\D/g, '').length !== 10) return showError('Please enter a valid 10-digit US phone number.');
   if (!email)     return showError('Email is required.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showError('Please enter a valid email address.');
+  const emailClean = email.replace(/\s/g, '');
+  if (!/@/.test(emailClean) || !/\.[a-zA-Z]{2,}$/.test(emailClean)) return showError('Please enter a valid email address (e.g. name@gmail.com).');
   if (!address)   return showError('Home address is required.');
   if (!govIdData) {
     document.getElementById('govid-error').style.display = '';
@@ -202,7 +203,7 @@ async function submitApplication() {
       body: JSON.stringify({
         full_name: fullName,
         phone,
-        email,
+        email: emailClean,
         address,
         government_id_data: govIdData,
         government_id_filename: govIdFilename,

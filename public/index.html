@@ -389,7 +389,8 @@
     if (!email)     { showRegErr('Email is required'); return; }
     if (!phone)     { showRegErr('Phone number is required for SMS alerts'); return; }
     if (!password)  { showRegErr('Password is required'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showRegErr('Please enter a valid email address'); return; }
+    email = email.replace(/\s/g, ''); // strip any whitespace autocorrect may have added
+    if (!/@/.test(email) || !/\.[a-zA-Z]{2,}$/.test(email)) { showRegErr('Please enter a valid email address (e.g. name@gmail.com)'); return; }
     if (phone.replace(/\D/g, '').length !== 10) { showRegErr('Please enter a valid 10-digit US phone number'); return; }
 
     btn.disabled = true;

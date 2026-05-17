@@ -1424,14 +1424,8 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
       const adminText = `Broadcast by ${req.user.username}:\n\n"${msg.message}"\n\nDelivered to: ${emailsSent} emails, ${smsSent} SMS.\nRecipient emails: ${emailRecipients.map(u => u.email).join(', ') || 'none'}\nRecipient phones: ${smsRecipients.map(u => u.phone).join(', ') || 'none'}`;
       await sendAdminEmail({ subject: adminSubject, text: adminText, html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${adminText}</pre>` });
       console.log(`[broadcast/api] Admin copy sent to bostonspokerclub.amitureflops@gmail.com`);
-      if (process.env.SENDGRID_API_KEY) {
-        const sgMail = require('@sendgrid/mail');
-        sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-        const smsText = `RabbsRoom broadcast sent: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms`;
-        await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: 'Broadcast', text: smsText })
-          .then(() => console.log('[broadcast/api] Admin SMS copy sent to 5085219176@vtext.com'))
-          .catch(e => console.warn('[broadcast/api] Admin SMS copy error:', e.message));
-      }
+      const smsText = `RabbsRoom broadcast sent: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms`;
+      await sendPlayerSMS({ phone: '8572308682', text: smsText });
     } catch (e) {
       console.warn('[broadcast/api] Admin copy error:', e.message);
     }
@@ -1559,7 +1553,7 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
 
   // Send email + SMS to admin
   try {
-    const { sendAdminEmail } = require('../mail');
+    const { sendAdminEmail, sendPlayerSMS } = require('../mail');
     const displayName = nickname ? `${req.user.username} (${nickname})` : req.user.username;
     const subject = `💰 Buy-In Request — ${displayName} $${amount} chips`;
     const html = `
@@ -1577,11 +1571,7 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
       </div>`;
     const text = `Buy-In: ${displayName}${phone ? ' ' + phone : ''} wants $${amount} chips via ${request.paymentMethod}${notes ? '. ' + notes : ''}. Approve: rabbsroom.com/admin.html`;
     await sendAdminEmail({ subject, text, html });
-    if (process.env.SENDGRID_API_KEY) {
-      const sgMail = require('@sendgrid/mail');
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-      await sgMail.send({ from: 'bostonspokerclub.amitureflops@gmail.com', to: '5085219176@vtext.com', subject: `Buy-In: ${displayName} $${amount}`, text }).catch(() => {});
-    }
+    await sendPlayerSMS({ phone: '8572308682', text });
     console.log(`[buyin] Notification sent for ${displayName} $${amount}`);
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);
@@ -2534,8 +2524,11 @@ router.put('/me/profile', authMiddleware, async (req, res) => {
   if (nickname !== undefined) updates.nickname = String(nickname || '').trim().slice(0, 50);
   if (phone !== undefined) updates.phone = String(phone || '').trim().slice(0, 20);
   if (email !== undefined && email) {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Invalid email address' });
-    updates.email = String(email).trim().slice(0, 200);
+    const normalizedEmail = email.replace(/\s/g, '');
+    if (!/@/.test(normalizedEmail) || !/\.[a-zA-Z]{2,}$/.test(normalizedEmail)) {
+      return res.status(400).json({ error: 'Invalid email address — must contain @ and a valid domain (e.g. name@gmail.com)' });
+    }
+    updates.email = normalizedEmail.slice(0, 200);
   }
 
   if (!Object.keys(updates).length) return res.json({ ok: true });

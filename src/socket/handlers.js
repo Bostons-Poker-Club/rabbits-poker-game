@@ -2260,7 +2260,7 @@ async function expireTableJackpot(io, tableId, jp) {
   // SMS alert to admin phone
   try {
     const smsText = `Boston Poker Club: High Hand expired at ${tableName}. Winner: ${winnerName} — ${winnerHand}. Payout: $${awarded}. Log in to confirm.`;
-    await sendPlayerSMS({ phone: '5085219176', text: smsText });
+    await sendPlayerSMS({ phone: '8572308682', text: smsText });
   } catch (e) {
     console.warn('[jackpot] Failed to send expiry SMS:', e.message);
   }
@@ -2313,7 +2313,7 @@ async function awardTableJackpot(io, tableId, amount, awardedTo, winnerName, win
       text: `High Hand Jackpot paid at ${tName}.\nWinner: ${wName} — ${wHand}\nAmount: $${amount}`,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto"><h2 style="color:#1a7a3f">Jackpot Paid — ${tName}</h2><table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px"><tr><td style="padding:8px 14px;color:#555">Table</td><td style="padding:8px 14px;font-weight:700">${tName}</td></tr><tr style="background:#fff"><td style="padding:8px 14px;color:#555">Winner</td><td style="padding:8px 14px;font-weight:700;color:#1a7a3f">${wName}</td></tr><tr><td style="padding:8px 14px;color:#555">Hand</td><td style="padding:8px 14px">${wHand}</td></tr><tr style="background:#fff"><td style="padding:8px 14px;color:#555">Payout</td><td style="padding:8px 14px;font-weight:700;color:#c8a800">$${amount}</td></tr></table></div>`
     });
-    await sendPlayerSMS({ phone: '5085219176', text: `Boston Poker Club: Jackpot paid $${amount} to ${wName} (${wHand}) at ${tName}.` });
+    await sendPlayerSMS({ phone: '8572308682', text: `Boston Poker Club: Jackpot paid $${amount} to ${wName} (${wHand}) at ${tName}.` });
   } catch (e) {
     console.warn('[jackpot] Award notification error:', e.message);
   }
