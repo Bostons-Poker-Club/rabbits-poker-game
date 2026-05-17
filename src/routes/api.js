@@ -1257,6 +1257,20 @@ router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => 
   }
 });
 
+router.get('/admin/players/contacts', authMiddleware, adminMiddleware, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, nickname, full_name, email, phone, role')
+      .neq('is_banned', true)
+      .order('username', { ascending: true });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.get('/admin/messages', authMiddleware, adminMiddleware, (req, res) => {
   try {
     const { broadcastMessages } = require('../socket/handlers');
@@ -1317,16 +1331,23 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
     console.warn('[broadcast/api] io not available on app');
   }
 
-  // Email all players and queue offline ones for banner on next login
+  // Email + SMS all players, queue offline ones for banner on next login
   try {
-    const { sendBroadcastEmail } = require('../mail');
-    const { data: allUsers } = await supabaseAdmin
+    const { sendBroadcastEmail, sendPlayerSMS } = require('../mail');
+
+    // neq('is_banned', true) includes rows where is_banned IS NULL (most players)
+    const { data: allUsers, error: usersErr } = await supabaseAdmin
       .from('users')
-      .select('id, email, username')
-      .eq('is_banned', false);
+      .select('id, email, username, phone, nickname, full_name')
+      .neq('is_banned', true);
+    if (usersErr) console.warn('[broadcast/api] users query error:', usersErr.message);
+
     const onlineIds = new Set();
     if (io) { for (const [, s] of io.sockets.sockets) { if (s.user) onlineIds.add(s.user.id); } }
+
     const others = (allUsers || []).filter(u => u.id !== req.user.id);
+    console.log(`[broadcast/api] total players found: ${others.length}`);
+
     if (!targetUserId) {
       // Queue offline players for banner on next login
       for (const u of others.filter(u => !onlineIds.has(u.id))) {
@@ -1335,13 +1356,44 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
         queued++;
       }
     }
+
+    // Send emails
     const emailRecipients = others.filter(u => u.email);
+    let emailsSent = 0;
     if (emailRecipients.length > 0) {
-      sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients: emailRecipients }).catch(() => {});
-      console.log(`[broadcast/api] email queued for ${emailRecipients.length} players`);
+      try {
+        emailsSent = await sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients: emailRecipients });
+      } catch (e) { console.warn('[broadcast/api] email error:', e.message); }
+      console.log(`[broadcast/api] Broadcast sent to ${emailsSent}/${emailRecipients.length} emails: ${emailRecipients.map(u => u.email).join(', ')}`);
+    } else {
+      console.warn('[broadcast/api] No email recipients found — check users have email column populated');
     }
+
+    // Send SMS to all players with a phone number
+    const smsRecipients = others.filter(u => u.phone);
+    let smsSent = 0;
+    if (smsRecipients.length > 0) {
+      const smsText = `RabbsRoom message from ${req.user.username}: ${msg.message}`;
+      for (const u of smsRecipients) {
+        try {
+          await sendPlayerSMS({ phone: u.phone, text: smsText });
+          smsSent++;
+        } catch (e) { console.warn(`[broadcast/api] SMS error for ${u.phone}:`, e.message); }
+      }
+      console.log(`[broadcast/api] SMS sent to ${smsSent}/${smsRecipients.length} phones: ${smsRecipients.map(u => u.phone).join(', ')}`);
+    } else {
+      console.warn('[broadcast/api] No SMS recipients found — check users have phone column populated');
+    }
+
+    // Attach delivery audit to message so admin can review
+    msg.delivery = {
+      emailCount: emailsSent,
+      smsCount: smsSent,
+      emails: emailRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', email: u.email })),
+      phones: smsRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', phone: u.phone }))
+    };
   } catch (e) {
-    console.warn('[broadcast/api] email error:', e.message);
+    console.warn('[broadcast/api] delivery error:', e.message);
   }
 
   res.json({ ok: true, delivered, queued, message: msg });

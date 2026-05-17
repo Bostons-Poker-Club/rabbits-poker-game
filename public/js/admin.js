@@ -605,11 +605,37 @@ function renderMessages(list) {
       const name = p ? (p.nickname ? `${p.username} "${p.nickname}"` : p.username) : (m.targetUserId || 'Unknown');
       targetLabel = `<span style="color:var(--chip-green)">${esc(name)}</span>`;
     }
+
+    let deliveryHtml = '';
+    if (m.delivery) {
+      const d = m.delivery;
+      const emailRows = (d.emails || []).map(u =>
+        `<tr><td style="padding:2px 8px;color:var(--text)">${esc(u.username)}${u.nickname ? ` <span style="color:var(--text-dim)">"${esc(u.nickname)}"</span>` : ''}</td><td style="padding:2px 8px;color:#7ec8e3">${esc(u.email)}</td></tr>`
+      ).join('');
+      const phoneRows = (d.phones || []).map(u =>
+        `<tr><td style="padding:2px 8px;color:var(--text)">${esc(u.username)}${u.nickname ? ` <span style="color:var(--text-dim)">"${esc(u.nickname)}"</span>` : ''}</td><td style="padding:2px 8px;color:#a8e6a3">${esc(u.phone)}</td></tr>`
+      ).join('');
+      deliveryHtml = `
+        <div style="margin-top:8px;font-size:.75rem">
+          <details style="cursor:pointer">
+            <summary style="color:var(--text-dim);list-style:none;outline:none">
+              ✉️ ${d.emailCount || 0} emails · 📱 ${d.smsCount || 0} SMS — <span style="text-decoration:underline">show recipients</span>
+            </summary>
+            <div style="margin-top:6px;background:rgba(0,0,0,.3);border-radius:6px;padding:8px;overflow-x:auto">
+              ${emailRows ? `<div style="color:var(--gold);font-size:.72rem;margin-bottom:4px">EMAILS</div><table style="border-collapse:collapse;width:100%">${emailRows}</table>` : ''}
+              ${phoneRows ? `<div style="color:var(--gold);font-size:.72rem;margin:8px 0 4px">SMS</div><table style="border-collapse:collapse;width:100%">${phoneRows}</table>` : ''}
+              ${!emailRows && !phoneRows ? '<span style="color:var(--text-dim)">No email or SMS recipients</span>' : ''}
+            </div>
+          </details>
+        </div>`;
+    }
+
     return `<div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.06)">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
         <div style="flex:1">
           <div style="color:var(--text-dim);font-size:.75rem;margin-bottom:4px">To: ${targetLabel} · From: <strong>${esc(m.from)}</strong> · ${time}</div>
           <div style="color:var(--text);font-size:.88rem">${esc(m.message)}</div>
+          ${deliveryHtml}
         </div>
       </div>
     </div>`;
