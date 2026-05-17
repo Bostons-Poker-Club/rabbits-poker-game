@@ -120,13 +120,33 @@ async function sendPlayerEmail({ to, subject, text, html }) {
   await _send({ from: FROM, to, subject, text, html });
 }
 
-// Send SMS via carrier email gateway. phone is a 10-digit string.
+// Send SMS via Verizon email-to-SMS gateways.
+// Sends to both vtext.com (SMS) and vzwpix.com (MMS) in parallel as belt-and-suspenders.
+// Text is hard-truncated to 160 chars to avoid SMS gateway rejection.
 async function sendPlayerSMS({ phone, text }) {
   if (!phone) return;
   const digits = phone.replace(/\D/g, '');
-  if (digits.length !== 10) { console.warn(`[mail] SMS skipped — invalid phone "${phone}"`); return; }
-  const smsTo = `${digits}@vtext.com`;
-  await _send({ from: FROM, to: smsTo, subject: 'RabbsRoom', text });
+  if (digits.length !== 10) {
+    console.warn(`[mail] SMS skipped — invalid phone "${phone}" (${digits.length} digits)`);
+    return;
+  }
+
+  // Truncate to 160 chars — carrier gateways often silently drop longer messages
+  const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
+  if (text.length > 160) {
+    console.log(`[mail] SMS text truncated from ${text.length} to 160 chars`);
+  }
+
+  const vtextAddr  = `${digits}@vtext.com`;   // Verizon SMS gateway
+  const vzwpixAddr = `${digits}@vzwpix.com`;  // Verizon MMS gateway (backup)
+
+  console.log(`[mail] SMS attempt → ${vtextAddr} and ${vzwpixAddr} | length: ${truncated.length} chars`);
+
+  // Fire both in parallel — whichever Verizon routes first wins
+  await Promise.allSettled([
+    _send({ from: FROM, to: vtextAddr,  subject: '', text: truncated }),
+    _send({ from: FROM, to: vzwpixAddr, subject: '', text: truncated })
+  ]);
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
