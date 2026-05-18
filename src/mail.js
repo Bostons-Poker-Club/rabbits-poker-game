@@ -23,10 +23,11 @@ async function _send(msg) {
     console.warn('[mail] Skipping email (not configured) to:', msg.to, '|', msg.subject);
     return;
   }
-  console.log('[mail] Sending email to:', msg.to, '| subject:', msg.subject);
+  console.log('[mail] Sending email to:', msg.to, '| subject:', msg.subject, '| from:', msg.from);
   try {
     const [response] = await sgMail.send(msg);
-    console.log('[mail] SendGrid response:', response.statusCode, '| to:', msg.to);
+    console.log('[mail] SendGrid response:', response.statusCode, '| to:', msg.to,
+      '| body:', JSON.stringify(response.body), '| headers:', JSON.stringify(response.headers));
   } catch (e) {
     console.error('[mail] SendGrid FAILED to:', msg.to, '| subject:', msg.subject);
     console.error('[mail] Error message:', e.message);
@@ -39,8 +40,8 @@ async function _send(msg) {
 
 // ─── Startup tests ───────────────────────────────────────────────────────────
 async function sendStartupTestSMS() {
-  console.log('[SMS] Sending startup test SMS to 8572308682');
-  await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started at ${new Date().toISOString()} - SMS working` });
+  console.log('[SMS] Sending startup test SMS to 8572308682 via vtext/vzwpix/att gateways');
+  await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started ${new Date().toISOString()} - if you see this, SMS works` });
 }
 
 async function sendStartupTestEmail() {
@@ -125,11 +126,12 @@ async function sendPlayerEmail({ to, subject, text, html }) {
   await _send({ from: FROM, to, subject, text, html });
 }
 
-// Send SMS via Verizon email-to-SMS gateways.
-// Sends to both vtext.com (SMS) and vzwpix.com (MMS) in parallel as belt-and-suspenders.
-// Text is hard-truncated to 160 chars to avoid SMS gateway rejection.
+// Send SMS via email-to-SMS gateways.
+// Tries Verizon SMS, Verizon MMS, and AT&T MMS gateways in parallel.
+// Subject line included — some gateways require it to pass spam filters.
+// Text hard-truncated to 160 chars to avoid gateway rejection.
 async function sendPlayerSMS({ phone, text }) {
-  console.log('[SMS] sendPlayerSMS called | phone:', phone, '| configured:', CONFIGURED);
+  console.log('[SMS] sendPlayerSMS called | phone:', phone, '| configured:', CONFIGURED, '| from:', FROM);
   if (!phone) {
     console.warn('[SMS] Skipped — no phone provided');
     return;
@@ -143,20 +145,27 @@ async function sendPlayerSMS({ phone, text }) {
   const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
   if (text.length > 160) console.log(`[SMS] Text truncated from ${text.length} to 160 chars`);
 
-  const vtextAddr  = `${digits}@vtext.com`;
-  const vzwpixAddr = `${digits}@vzwpix.com`;
+  // Three gateways: Verizon SMS, Verizon MMS (backup), AT&T MMS (in case number is AT&T)
+  const vtextAddr  = `${digits}@vtext.com`;    // Verizon SMS
+  const vzwpixAddr = `${digits}@vzwpix.com`;   // Verizon MMS
+  const attAddr    = `${digits}@mms.att.net`;  // AT&T MMS
 
   console.log('[SMS] Attempting to send to:', phone);
-  console.log('[SMS] Gateway addresses:', vtextAddr, vzwpixAddr);
+  console.log('[SMS] Gateway addresses:', vtextAddr, vzwpixAddr, attAddr);
   console.log('[SMS] Message:', truncated.substring(0, 50));
 
+  // Subject required by some gateway spam filters; use short app name
+  const subject = 'RabbsRoom';
+
   const results = await Promise.allSettled([
-    _send({ from: FROM, to: vtextAddr,  subject: '', text: truncated }),
-    _send({ from: FROM, to: vzwpixAddr, subject: '', text: truncated })
+    _send({ from: FROM, to: vtextAddr,  subject, text: truncated }),
+    _send({ from: FROM, to: vzwpixAddr, subject, text: truncated }),
+    _send({ from: FROM, to: attAddr,    subject, text: truncated })
   ]);
 
   console.log('[SMS] SendGrid result vtext:', results[0].status, results[0].reason?.message || 'ok');
   console.log('[SMS] SendGrid result vzwpix:', results[1].status, results[1].reason?.message || 'ok');
+  console.log('[SMS] SendGrid result att:', results[2].status, results[2].reason?.message || 'ok');
 }
 
 async function sendAdminSMS(text) {
