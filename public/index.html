@@ -54,12 +54,77 @@
         Sign In
       </button>
 
+      <div style="text-align:right;margin-top:6px">
+        <button type="button" onclick="showForgotPassword()"
+          style="background:none;border:none;color:var(--gold);cursor:pointer;font-size:.82rem;padding:0;touch-action:manipulation">
+          Forgot password?
+        </button>
+      </div>
+
       <div id="login-error"
         style="display:none;color:#e74c3c;font-size:.9rem;margin-top:12px;text-align:center;padding:8px 12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:8px">
       </div>
 
     </div>
     <!-- ═══ END LOGIN PANEL ═══ -->
+
+    <!-- ═══ FORGOT PASSWORD PANEL ═══ -->
+    <div id="form-forgot" style="display:none">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:2rem;margin-bottom:8px">🔑</div>
+        <h3 style="color:var(--gold);margin:0 0 6px;font-size:1.1rem">Reset Password</h3>
+        <p style="color:var(--text-dim);font-size:.85rem;margin:0">Enter your username or email. If your account exists, we'll send a temporary password to your registered email.</p>
+      </div>
+      <div class="form-group">
+        <label>Username or Email</label>
+        <input type="text" id="forgot-identifier" placeholder="username or email@example.com"
+          autocomplete="username email"
+          style="width:100%;padding:14px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:16px;outline:none;box-sizing:border-box">
+      </div>
+      <button type="button" id="btn-forgot" onclick="doForgotPassword()"
+        style="width:100%;padding:14px;background:linear-gradient(135deg,#d4af37,#a08020);color:#1a1a1a;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:4px">
+        Send Temporary Password
+      </button>
+      <div id="forgot-error" style="display:none;color:#e74c3c;font-size:.9rem;margin-top:12px;text-align:center;padding:8px 12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:8px"></div>
+      <div id="forgot-success" style="display:none;color:#2ecc71;font-size:.9rem;margin-top:12px;text-align:center;padding:8px 12px;background:rgba(46,204,113,.1);border:1px solid rgba(46,204,113,.3);border-radius:8px"></div>
+      <button type="button" onclick="cancelForgotPassword()"
+        style="display:block;width:100%;background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:.8rem;margin-top:10px;padding:4px 0;touch-action:manipulation">
+        ← Back to login
+      </button>
+    </div>
+    <!-- ═══ END FORGOT PASSWORD PANEL ═══ -->
+
+    <!-- ═══ MUST CHANGE PASSWORD PANEL ═══ -->
+    <div id="form-change-pw" style="display:none">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:2rem;margin-bottom:8px">🔒</div>
+        <h3 style="color:var(--gold);margin:0 0 6px;font-size:1.1rem">Set New Password</h3>
+        <p style="color:var(--text-dim);font-size:.85rem;margin:0">You logged in with a temporary password. Please set a permanent password to continue.</p>
+      </div>
+      <div class="form-group">
+        <label>New Password</label>
+        <div style="display:flex;align-items:center;background:#1a2a1a;border:1px solid #3a5a3a;border-radius:8px;padding:0 12px">
+          <input id="chpw-new" type="password" placeholder="Min 6 characters" minlength="6"
+            autocomplete="new-password"
+            style="flex:1;background:none;border:none;outline:none;color:#fff;font-size:16px;padding:14px 0;min-height:48px">
+          <button type="button"
+            onclick="var i=document.getElementById('chpw-new');i.type=i.type==='password'?'text':'password';this.textContent=i.type==='password'?'👁':'🙈'"
+            style="background:none;border:none;cursor:pointer;font-size:1.3rem;padding:8px;min-width:44px;min-height:44px;touch-action:manipulation">👁</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Confirm New Password</label>
+        <input id="chpw-confirm" type="password" placeholder="Repeat new password" minlength="6"
+          autocomplete="new-password"
+          style="width:100%;padding:14px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:16px;outline:none;box-sizing:border-box">
+      </div>
+      <button type="button" id="btn-chpw" onclick="doSetNewPassword()"
+        style="width:100%;padding:14px;background:linear-gradient(135deg,#d4af37,#a08020);color:#1a1a1a;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;margin-top:4px">
+        Set Password &amp; Continue
+      </button>
+      <div id="chpw-error" style="display:none;color:#e74c3c;font-size:.9rem;margin-top:12px;text-align:center;padding:8px 12px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.3);border-radius:8px"></div>
+    </div>
+    <!-- ═══ END MUST CHANGE PASSWORD PANEL ═══ -->
 
     <div id="host-apply-link" style="text-align:center;margin-top:10px;font-size:.82rem;color:var(--text-dim)">
       Interested in hosting tables?
@@ -275,6 +340,12 @@
         return;
       }
 
+      if (data.mustChangePassword) {
+        btn.disabled = false;
+        btn.innerHTML = 'Sign In';
+        showMustChangePassword(data.token, data.user);
+        return;
+      }
       console.log('[doLogin] success, saving auth and redirecting');
       saveAuth(data.token, data.user);
       window.location.href = '/lobby.html';
@@ -354,6 +425,92 @@
     document.getElementById('form-2fa').style.display    = 'none';
     document.getElementById('form-login').style.display  = '';
     document.getElementById('host-apply-link').style.display = '';
+  }
+
+  // ── FORGOT PASSWORD ────────────────────────────────────────────────────────
+  function showForgotPassword() {
+    document.getElementById('form-login').style.display     = 'none';
+    document.getElementById('host-apply-link').style.display = 'none';
+    document.getElementById('form-forgot').style.display    = '';
+    document.getElementById('forgot-identifier').focus();
+    document.getElementById('forgot-error').style.display   = 'none';
+    document.getElementById('forgot-success').style.display = 'none';
+  }
+
+  function cancelForgotPassword() {
+    document.getElementById('form-forgot').style.display  = 'none';
+    document.getElementById('form-login').style.display   = '';
+    document.getElementById('host-apply-link').style.display = '';
+  }
+
+  async function doForgotPassword() {
+    var btn = document.getElementById('btn-forgot');
+    var identifier = document.getElementById('forgot-identifier').value.trim();
+    var errEl = document.getElementById('forgot-error');
+    var okEl  = document.getElementById('forgot-success');
+    errEl.style.display = 'none';
+    okEl.style.display  = 'none';
+    if (!identifier) { errEl.textContent = 'Please enter your username or email.'; errEl.style.display = 'block'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+    try {
+      await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier })
+      });
+      okEl.textContent = 'If your account exists, a temporary password has been sent to your registered email. Check your inbox.';
+      okEl.style.display = 'block';
+    } catch {
+      okEl.textContent = 'If your account exists, a temporary password has been sent to your registered email.';
+      okEl.style.display = 'block';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Send Temporary Password';
+    }
+  }
+
+  // ── MUST CHANGE PASSWORD ───────────────────────────────────────────────────
+  var _changePwToken = null;
+  var _changePwUser  = null;
+
+  function showMustChangePassword(token, user) {
+    _changePwToken = token;
+    _changePwUser  = user;
+    document.getElementById('form-login').style.display     = 'none';
+    document.getElementById('form-2fa').style.display       = 'none';
+    document.getElementById('host-apply-link').style.display = 'none';
+    document.getElementById('form-change-pw').style.display = '';
+    document.getElementById('chpw-new').focus();
+    document.getElementById('chpw-error').style.display     = 'none';
+  }
+
+  async function doSetNewPassword() {
+    var btn  = document.getElementById('btn-chpw');
+    var np   = document.getElementById('chpw-new').value;
+    var conf = document.getElementById('chpw-confirm').value;
+    var errEl = document.getElementById('chpw-error');
+    errEl.style.display = 'none';
+    if (!np || np.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+    if (np !== conf) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+    try {
+      var res = await fetch('/api/me/password/set-new', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _changePwToken },
+        body: JSON.stringify({ newPassword: np })
+      });
+      var data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to set password');
+      saveAuth(_changePwToken, _changePwUser);
+      window.location.href = '/lobby.html';
+    } catch (e) {
+      errEl.textContent = e.message;
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Set Password & Continue';
+    }
   }
 
   function showBackupCodeForm() {

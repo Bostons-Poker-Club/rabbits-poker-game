@@ -8,7 +8,7 @@ const rateLimit  = require('express-rate-limit');
 const { supabaseAdmin } = require('../db/supabase');
 const appEvents  = require('../events');
 const { logTransaction } = require('../transactions');
-const { send2FACode } = require('../mail');
+const { send2FACode, sendPlayerEmail } = require('../mail');
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
@@ -41,15 +41,19 @@ function _prunePending2FA() {
 }
 
 // ─── Login rate limiter ────────────────────────────────────────────────────────
-// Counts only failed attempts (skipSuccessfulRequests). Blocks after 5 failures.
+// Counts only failed attempts (skipSuccessfulRequests). Blocks after 10 failures.
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 5,
+  windowMs: 30 * 60 * 1000,
+  limit: 10,
   skipSuccessfulRequests: true,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  handler: (_req, res) => {
-    res.status(429).json({ error: 'Too many login attempts. Please try again in 15 minutes.' });
+  handler: (req, res) => {
+    const ms = req.rateLimit?.resetTime ? req.rateLimit.resetTime - Date.now() : 30 * 60 * 1000;
+    const mins = Math.max(1, Math.ceil(ms / 60000));
+    res.status(429).json({
+      error: `Too many attempts. Please wait ${mins} minute${mins !== 1 ? 's' : ''} or contact admin at bostonspokerclub.amitureflops@gmail.com or text (508) 521-9176`
+    });
   },
 });
 
@@ -274,7 +278,8 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
 
     await _audit(user.id, true, null);
     const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
-    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin } });
+    const mustChange = user.must_change_password === true;
+    return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin }, mustChangePassword: mustChange || undefined });
   }
 
   // Supabase unavailable or user not found — fall back to local admin bypass
@@ -388,6 +393,58 @@ router.post('/auth/2fa/verify', async (req, res) => {
   const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
   const backupCodesLeft = (user.two_fa_backup_codes || []).filter(c => !c.used).length;
   return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin }, backupCodesLeft });
+});
+
+router.post('/auth/forgot-password', async (req, res) => {
+  const { identifier } = req.body;
+  if (!identifier) return res.status(400).json({ error: 'Username or email required' });
+
+  let user = null;
+  try {
+    const idClean = String(identifier).trim().toLowerCase();
+    const { data: byEmail } = await supabaseAdmin.from('users')
+      .select('id, username, email').eq('email', idClean).maybeSingle();
+    if (byEmail) {
+      user = byEmail;
+    } else {
+      const { data: byUser } = await supabaseAdmin.from('users')
+        .select('id, username, email').ilike('username', identifier.trim()).maybeSingle();
+      user = byUser;
+    }
+  } catch {}
+
+  // Always return ok — never reveal whether account exists
+  if (!user?.email) return res.json({ ok: true });
+
+  const tempPassword = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const hash = await bcrypt.hash(tempPassword, 10);
+  try {
+    await supabaseAdmin.from('users')
+      .update({ password_hash: hash, must_change_password: true })
+      .eq('id', user.id);
+  } catch {
+    await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', user.id);
+  }
+
+  try {
+    await sendPlayerEmail({
+      to: user.email,
+      subject: 'Your temporary password — Boston Poker Club',
+      text: `Hi ${user.username},\n\nYour temporary password is: ${tempPassword}\n\nLog in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#1a7a3f">🔑 Temporary Password</h2>
+        <p>Hi <strong>${user.username}</strong>,</p>
+        <p>Here is your temporary password:</p>
+        <div style="font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
+        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a new password immediately.</p>
+        <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
+      </div>`
+    });
+  } catch (e) {
+    console.error('[forgot-password] Email send error:', e.message);
+  }
+
+  res.json({ ok: true });
 });
 
 // ─── 2FA Resend Code ───────────────────────────────────────────────────────────
@@ -1218,6 +1275,44 @@ router.post('/admin/players/:id/2fa/unlock', authMiddleware, adminMiddleware, as
     .eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
   res.json({ ok: true });
+});
+
+router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { data: user } = await supabaseAdmin.from('users')
+    .select('username, email').eq('id', id).single();
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  if (!user.email) return res.status(400).json({ error: 'Player has no email on file' });
+
+  const tempPassword = crypto.randomBytes(4).toString('hex').toUpperCase();
+  const hash = await bcrypt.hash(tempPassword, 10);
+  try {
+    await supabaseAdmin.from('users')
+      .update({ password_hash: hash, must_change_password: true })
+      .eq('id', id);
+  } catch {
+    await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', id);
+  }
+
+  try {
+    await sendPlayerEmail({
+      to: user.email,
+      subject: 'Your password has been reset — Boston Poker Club',
+      text: `Hi ${user.username},\n\nAn admin has reset your password.\n\nTemporary password: ${tempPassword}\n\nLog in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
+      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#c8a84b">🔑 Password Reset by Admin</h2>
+        <p>Hi <strong>${user.username}</strong>,</p>
+        <p>An admin has reset your account password.</p>
+        <div style="font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
+        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a new password immediately.</p>
+        <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
+      </div>`
+    });
+  } catch (e) {
+    console.error('[admin reset-password] Email error:', e.message);
+  }
+
+  res.json({ ok: true, email: user.email });
 });
 
 router.get('/admin/players/:id/backup-codes', authMiddleware, adminMiddleware, async (req, res) => {
@@ -2589,6 +2684,25 @@ router.post('/me/avatar', authMiddleware, async (req, res) => {
 });
 
 // ─── Change Password ──────────────────────────────────────────────────────────
+
+router.post('/me/password/set-new', authMiddleware, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+
+  const { data: user } = await supabaseAdmin.from('users')
+    .select('must_change_password').eq('id', req.user.id).single();
+  if (!user?.must_change_password) return res.status(403).json({ error: 'No password change required' });
+
+  const hash = await bcrypt.hash(newPassword, 10);
+  try {
+    await supabaseAdmin.from('users')
+      .update({ password_hash: hash, must_change_password: false })
+      .eq('id', req.user.id);
+  } catch {
+    await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', req.user.id);
+  }
+  res.json({ ok: true });
+});
 
 router.put('/me/password', authMiddleware, async (req, res) => {
   const userId = req.user.id;

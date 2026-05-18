@@ -2750,6 +2750,19 @@ async function unlock2FA() {
   } catch (e) { toast(e.message, 'error'); }
 }
 
+async function resetPlayerPassword() {
+  const id = _currentPdPlayerId;
+  if (!id) return;
+  let username = '';
+  try { username = (await apiFetch(`/api/admin/players/${id}`)).username; } catch {}
+  if (!confirm(`Reset password for ${username || 'this player'}? They will receive a temporary password by email and must change it on next login.`)) return;
+  try {
+    const result = await apiFetch(`/api/admin/players/${id}/reset-password`, { method: 'POST' });
+    toast(`Temporary password sent to ${result.email || 'player email'}`);
+    closeModal('player-detail-modal');
+  } catch (e) { toast(e.message, 'error'); }
+}
+
 async function downloadBackupCodes() {
   if (!_currentPdPlayerId) return;
   const p = allPlayers.find(x => x.id === _currentPdPlayerId);
