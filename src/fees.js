@@ -165,7 +165,8 @@ async function suspendOverdueAccounts() {
 }
 
 function startFeeScheduler() {
-  _loadFeeSuspended();
+  // Defer DB call so it doesn't compete with server startup / health check
+  setTimeout(_loadFeeSuspended, 5000);
   // setInterval disabled temporarily — re-enable once Supabase query compatibility confirmed
   // setInterval(runDailyFeeCheck, 6 * 60 * 60 * 1000);
   // setTimeout(runDailyFeeCheck, 30 * 1000);

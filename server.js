@@ -32,6 +32,10 @@ const io = new Server(server, {
 // Trust Railway's proxy so req.ip reflects the real client IP
 app.set('trust proxy', 1);
 
+// Health check must come before HTTPS redirect — Railway probes the container
+// directly over HTTP, so a redirect here would return 301 instead of 200.
+app.get('/health', (req, res) => res.json({ ok: true }));
+
 // Security headers via helmet
 app.use(helmet({
   contentSecurityPolicy: {
@@ -62,10 +66,6 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
-
-// Health check endpoint for Railway / uptime monitors — always 200 so Railway
-// confirms the new deployment is alive before routing traffic to it.
-app.get('/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // Public maintenance state — clients poll this to show/hide the banner
 app.get('/api/maintenance', (req, res) => res.json(maintenance.getState()));
