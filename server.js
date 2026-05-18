@@ -20,7 +20,7 @@ const helmet = require('helmet');
 const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
-const { sendStartupTestEmail } = require('./src/mail');
+const { sendStartupTestEmail, sendStartupTestSMS } = require('./src/mail');
 const maintenance = require('./src/maintenance');
 
 const app = express();
@@ -96,4 +96,5 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🃏 Rabbits Poker running on port ${PORT}`);
   console.log('[mail] SendGrid configured:', !!process.env.SENDGRID_API_KEY, '| from:', 'bostonspokerclub.amitureflops@gmail.com');
   sendStartupTestEmail();
+  sendStartupTestSMS();
 });

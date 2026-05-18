@@ -37,7 +37,12 @@ async function _send(msg) {
   }
 }
 
-// ─── Startup test ────────────────────────────────────────────────────────────
+// ─── Startup tests ───────────────────────────────────────────────────────────
+async function sendStartupTestSMS() {
+  console.log('[SMS] Sending startup test SMS to 8572308682');
+  await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started at ${new Date().toISOString()} - SMS working` });
+}
+
 async function sendStartupTestEmail() {
   await _send({
     from: FROM,
@@ -124,29 +129,39 @@ async function sendPlayerEmail({ to, subject, text, html }) {
 // Sends to both vtext.com (SMS) and vzwpix.com (MMS) in parallel as belt-and-suspenders.
 // Text is hard-truncated to 160 chars to avoid SMS gateway rejection.
 async function sendPlayerSMS({ phone, text }) {
-  if (!phone) return;
+  console.log('[SMS] sendPlayerSMS called | phone:', phone, '| configured:', CONFIGURED);
+  if (!phone) {
+    console.warn('[SMS] Skipped — no phone provided');
+    return;
+  }
   const digits = phone.replace(/\D/g, '');
   if (digits.length !== 10) {
-    console.warn(`[mail] SMS skipped — invalid phone "${phone}" (${digits.length} digits)`);
+    console.warn(`[SMS] Skipped — invalid phone "${phone}" (${digits.length} digits after stripping)`);
     return;
   }
 
-  // Truncate to 160 chars — carrier gateways often silently drop longer messages
   const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
-  if (text.length > 160) {
-    console.log(`[mail] SMS text truncated from ${text.length} to 160 chars`);
-  }
+  if (text.length > 160) console.log(`[SMS] Text truncated from ${text.length} to 160 chars`);
 
-  const vtextAddr  = `${digits}@vtext.com`;   // Verizon SMS gateway
-  const vzwpixAddr = `${digits}@vzwpix.com`;  // Verizon MMS gateway (backup)
+  const vtextAddr  = `${digits}@vtext.com`;
+  const vzwpixAddr = `${digits}@vzwpix.com`;
 
-  console.log(`[mail] SMS attempt → ${vtextAddr} and ${vzwpixAddr} | length: ${truncated.length} chars`);
+  console.log('[SMS] Attempting to send to:', phone);
+  console.log('[SMS] Gateway addresses:', vtextAddr, vzwpixAddr);
+  console.log('[SMS] Message:', truncated.substring(0, 50));
 
-  // Fire both in parallel — whichever Verizon routes first wins
-  await Promise.allSettled([
+  const results = await Promise.allSettled([
     _send({ from: FROM, to: vtextAddr,  subject: '', text: truncated }),
     _send({ from: FROM, to: vzwpixAddr, subject: '', text: truncated })
   ]);
+
+  console.log('[SMS] SendGrid result vtext:', results[0].status, results[0].reason?.message || 'ok');
+  console.log('[SMS] SendGrid result vzwpix:', results[1].status, results[1].reason?.message || 'ok');
+}
+
+async function sendAdminSMS(text) {
+  console.log('[SMS] sendAdminSMS called | text:', text.substring(0, 50));
+  return sendPlayerSMS({ phone: '8572308682', text });
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
@@ -445,6 +460,8 @@ async function send2FACode({ to, phone, username, code }) {
 
 module.exports = {
   sendStartupTestEmail,
+  sendStartupTestSMS,
+  sendAdminSMS,
   sendTableRequestEmail,
   sendBroadcastEmail,
   sendAdminEmail,
