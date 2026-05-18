@@ -503,12 +503,25 @@ router.get('/health', async (req, res) => {
 // ─── Profile ────────────────────────────────────────────────────────────────
 
 router.get('/profile', authMiddleware, async (req, res) => {
-  const { data, error } = await supabaseAdmin
+  let data, error;
+  ({ data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, is_admin, created_at')
+    .select('id, username, email, chips, is_admin, is_host, avatar_url, nickname, created_at')
     .eq('id', req.user.id)
-    .single();
-  if (error) return res.status(404).json({ error: 'User not found' });
+    .single());
+  // Retry with base columns if extended columns don't exist yet
+  if (!data) {
+    console.warn(`[profile] Extended select failed (${error?.message}), retrying base columns for ${req.user.id}`);
+    ({ data, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, email, chips, is_admin, created_at')
+      .eq('id', req.user.id)
+      .single());
+  }
+  if (!data) {
+    console.error(`[profile] User ${req.user.id} not found: ${error?.message}`);
+    return res.status(404).json({ error: 'User not found' });
+  }
 
   // Auto-refill admin chips when low
   if (data.is_admin && data.chips < ADMIN_CHIP_LOW_THRESHOLD) {

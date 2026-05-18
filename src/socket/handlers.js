@@ -434,11 +434,30 @@ function setupSocketHandlers(io) {
 
         if (!table) return socket.emit('error', { message: 'Table not found' });
 
-        const { data: dbUser } = await supabaseAdmin
-          .from('users')
-          .select('chips, is_banned, phone, email, avatar_url, is_host')
-          .eq('id', userId)
-          .single();
+        // Try with extended columns first; fall back to base columns if any don't exist yet
+        let dbUser = null;
+        {
+          const { data: d1, error: e1 } = await supabaseAdmin
+            .from('users')
+            .select('id, chips, is_banned, email, phone, avatar_url, is_host, nickname')
+            .eq('id', userId)
+            .single();
+          if (d1) {
+            dbUser = d1;
+          } else {
+            console.warn(`[join_table] Extended user fetch failed for ${userId} (${e1?.message}) — retrying base columns`);
+            const { data: d2, error: e2 } = await supabaseAdmin
+              .from('users')
+              .select('id, chips, is_banned, email, phone')
+              .eq('id', userId)
+              .single();
+            if (d2) {
+              dbUser = d2;
+            } else {
+              console.error(`[join_table] User ${userId} (${username}) not found after retry: ${e2?.message}`);
+            }
+          }
+        }
 
         // Local admin bypass only — all real players must exist in DB
         const isLocalAdmin = userId === 'local-admin-000';
