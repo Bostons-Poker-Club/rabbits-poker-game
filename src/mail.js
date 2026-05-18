@@ -2,7 +2,7 @@
 
 const sgMail = require('@sendgrid/mail');
 
-const FROM         = 'bostonspokerclub.amitureflops@gmail.com';
+const FROM         = 'noreply@rabbsroom.com';
 const ADMIN_EMAIL  = 'bostonspokerclub.amitureflops@gmail.com';
 
 // ─── One-time initialisation ──────────────────────────────────────────────────
