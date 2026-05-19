@@ -92,8 +92,12 @@ async function sendAdminPush(text, title) {
 
 // ─── Startup tests ───────────────────────────────────────────────────────────
 async function sendStartupTestSMS() {
-  console.log('[ntfy] Sending startup push notification');
-  await sendAdminPush(`RabbsRoom server started ${new Date().toISOString()} — push notifications active`, 'RabbsRoom Started');
+  const ts = new Date().toISOString();
+  await sendAdminPush(`RabbsRoom server started ${ts} — push notifications active`, 'RabbsRoom Started');
+  if (TWILIO_OK) {
+    console.log('[SMS] Sending Twilio startup test to +18572308682');
+    await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started ${ts} — Twilio SMS working` });
+  }
 }
 
 async function sendStartupTestEmail() {
