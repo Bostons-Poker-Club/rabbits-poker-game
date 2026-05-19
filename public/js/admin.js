@@ -660,10 +660,16 @@ async function sendAdminMessage() {
     console.log('[admin] send-message result:', result);
     document.getElementById('msg-text').value = '';
     if (status) {
-      const q = result.queued || 0;
       const d = result.delivered || 0;
-      status.textContent = `Sent! ${d} online${q > 0 ? ` + ${q} queued for offline` : ''}`;
-      setTimeout(() => { status.textContent = ''; }, 5000);
+      const q = result.queued || 0;
+      const e = result.emailsSent || 0;
+      const s = result.smsSent || 0;
+      const parts = [`${d} via app`];
+      if (q > 0) parts.push(`${q} queued`);
+      if (e > 0) parts.push(`${e} emails`);
+      if (s > 0) parts.push(`${s} SMS`);
+      status.textContent = `Message delivered — ${parts.join(' · ')}`;
+      setTimeout(() => { status.textContent = ''; }, 8000);
     }
     loadMessages();
     if (adminSocket) adminSocket.emit('admin:get_messages');

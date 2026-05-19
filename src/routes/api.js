@@ -1481,25 +1481,29 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
     console.warn('[broadcast/api] io not available on app');
   }
 
-  // Email + SMS all players, queue offline ones for banner on next login
+  // Email + SMS all players (broadcast only — not for targeted single-user messages)
+  let emailsSent = 0;
+  let smsSent = 0;
+  let emailRecipients = [];
+  let smsRecipients = [];
+
   try {
-    const { sendBroadcastEmail, sendPlayerSMS } = require('../mail');
+    const { sendPlayerEmail, sendPlayerSMS, sendAdminEmail } = require('../mail');
 
     // neq('is_banned', true) includes rows where is_banned IS NULL (most players)
     const { data: allUsers, error: usersErr } = await supabaseAdmin
       .from('users')
-      .select('id, email, username, phone, nickname, full_name')
+      .select('id, email, username, phone, nickname')
       .neq('is_banned', true);
-    if (usersErr) console.warn('[broadcast/api] users query error:', usersErr.message);
+    if (usersErr) console.warn('[broadcast] users query error:', usersErr.message);
 
     const onlineIds = new Set();
     if (io) { for (const [, s] of io.sockets.sockets) { if (s.user) onlineIds.add(s.user.id); } }
 
     const others = (allUsers || []).filter(u => u.id !== req.user.id);
-    console.log(`[broadcast/api] total players found: ${others.length}`);
 
+    // Queue offline players for banner on next login
     if (!targetUserId) {
-      // Queue offline players for banner on next login
       for (const u of others.filter(u => !onlineIds.has(u.id))) {
         if (!pendingMessages.has(u.id)) pendingMessages.set(u.id, []);
         pendingMessages.get(u.id).push(msg);
@@ -1507,59 +1511,74 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
       }
     }
 
-    // Send emails
-    const emailRecipients = others.filter(u => u.email);
-    let emailsSent = 0;
-    if (emailRecipients.length > 0) {
-      try {
-        emailsSent = await sendBroadcastEmail({ from: req.user.username, message: msg.message, recipients: emailRecipients });
-      } catch (e) { console.warn('[broadcast/api] email error:', e.message); }
-      console.log(`[broadcast/api] Broadcast sent to ${emailsSent}/${emailRecipients.length} emails: ${emailRecipients.map(u => u.email).join(', ')}`);
-    } else {
-      console.warn('[broadcast/api] No email recipients found — check users have email column populated');
-    }
+    // Only email + SMS for broadcasts, not targeted messages
+    if (!targetUserId) {
+      emailRecipients = others.filter(u => u.email);
+      smsRecipients   = others.filter(u => u.phone);
 
-    // Send SMS to all players with a phone number
-    const smsRecipients = others.filter(u => u.phone);
-    let smsSent = 0;
-    if (smsRecipients.length > 0) {
-      const smsText = `RabbsRoom message from ${req.user.username}: ${msg.message}`;
+      console.log(`[broadcast] Sending to ${others.length} players — ${emailRecipients.length} with email, ${smsRecipients.length} with phone`);
+
+      const emailSubject = `📨 Message from ${req.user.username} — RabbsRoom`;
+      const emailBodyText = (name) =>
+        `Hi ${name},\n\n${req.user.username} sent a message:\n\n"${msg.message}"\n\nLog in at https://rabbsroom.com\n\n— Boston Poker Club`;
+      const emailBodyHtml = (name) => `
+        <div style="font-family:sans-serif;max-width:500px;margin:0 auto">
+          <h2 style="color:#1a7a3f">📨 Message from ${req.user.username}</h2>
+          <p>Hi <strong>${name}</strong>,</p>
+          <p style="background:#f5f5f5;padding:16px;border-radius:8px;font-size:1rem;line-height:1.6">${msg.message.replace(/\n/g, '<br>')}</p>
+          <p style="color:#666;font-size:.85rem">Log in to <a href="https://rabbsroom.com" style="color:#1a7a3f">RabbsRoom</a> to see your message inbox.</p>
+          <p style="color:#999;font-size:.8rem">— Boston Poker Club · noreply@rabbsroom.com</p>
+        </div>`;
+
+      for (const u of emailRecipients) {
+        const name = u.nickname || u.username || 'there';
+        try {
+          await sendPlayerEmail({ to: u.email, subject: emailSubject, text: emailBodyText(name), html: emailBodyHtml(name) });
+          emailsSent++;
+          console.log('[broadcast] Email sent to:', u.email);
+        } catch (e) {
+          console.warn('[broadcast] Email failed for', u.email, ':', e.message);
+        }
+      }
+
+      const smsText = `RabbsRoom msg from ${req.user.username}: ${msg.message}`.slice(0, 160);
       for (const u of smsRecipients) {
         try {
           await sendPlayerSMS({ phone: u.phone, text: smsText });
           smsSent++;
-        } catch (e) { console.warn(`[broadcast/api] SMS error for ${u.phone}:`, e.message); }
+          console.log('[broadcast] SMS sent to:', u.phone);
+        } catch (e) {
+          console.warn('[broadcast] SMS failed for', u.phone, ':', e.message);
+        }
       }
-      console.log(`[broadcast/api] SMS sent to ${smsSent}/${smsRecipients.length} phones: ${smsRecipients.map(u => u.phone).join(', ')}`);
-    } else {
-      console.warn('[broadcast/api] No SMS recipients found — check users have phone column populated');
+
+      console.log(`[broadcast] Done — ${emailsSent}/${emailRecipients.length} emails, ${smsSent}/${smsRecipients.length} SMS`);
+
+      // Admin confirmation copy
+      try {
+        const adminSubject = `📢 Broadcast sent — "${msg.message.slice(0, 60)}${msg.message.length > 60 ? '…' : ''}"`;
+        const adminText = `Broadcast by ${req.user.username}:\n\n"${msg.message}"\n\nDelivered: ${emailsSent} emails, ${smsSent} SMS.\nEmails: ${emailRecipients.map(u => u.email).join(', ') || 'none'}\nPhones: ${smsRecipients.map(u => u.phone).join(', ') || 'none'}`;
+        await sendAdminEmail({ subject: adminSubject, text: adminText, html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${adminText}</pre>` });
+        console.log('[broadcast] Admin email copy sent to bostonspokerclub.amitureflops@gmail.com');
+        await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom broadcast: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms` });
+        console.log('[broadcast] Admin SMS copy sent to 8572308682');
+      } catch (e) {
+        console.warn('[broadcast] Admin copy error:', e.message);
+      }
     }
 
-    // Attach delivery audit to message so admin can review
+    // Attach delivery audit to message object for history view
     msg.delivery = {
       emailCount: emailsSent,
       smsCount: smsSent,
       emails: emailRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', email: u.email })),
       phones: smsRecipients.map(u => ({ username: u.username, nickname: u.nickname || '', phone: u.phone }))
     };
-
-    // Send admin copy: email + SMS confirming the broadcast was delivered
-    try {
-      const { sendAdminEmail } = require('../mail');
-      const adminSubject = `📢 Broadcast sent — "${msg.message.slice(0, 60)}${msg.message.length > 60 ? '…' : ''}"`;
-      const adminText = `Broadcast by ${req.user.username}:\n\n"${msg.message}"\n\nDelivered to: ${emailsSent} emails, ${smsSent} SMS.\nRecipient emails: ${emailRecipients.map(u => u.email).join(', ') || 'none'}\nRecipient phones: ${smsRecipients.map(u => u.phone).join(', ') || 'none'}`;
-      await sendAdminEmail({ subject: adminSubject, text: adminText, html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${adminText}</pre>` });
-      console.log(`[broadcast/api] Admin copy sent to bostonspokerclub.amitureflops@gmail.com`);
-      const smsText = `RabbsRoom broadcast sent: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms`;
-      await sendPlayerSMS({ phone: '8572308682', text: smsText });
-    } catch (e) {
-      console.warn('[broadcast/api] Admin copy error:', e.message);
-    }
   } catch (e) {
-    console.warn('[broadcast/api] delivery error:', e.message);
+    console.warn('[broadcast] delivery error:', e.message);
   }
 
-  res.json({ ok: true, delivered, queued, message: msg });
+  res.json({ ok: true, delivered, queued, emailsSent, smsSent, message: msg });
 });
 
 // Test endpoint — sends a test broadcast to all connected sockets
