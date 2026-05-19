@@ -1565,111 +1565,225 @@ input, select, textarea { font-family: inherit; }
   text-align: center;
 }
 
-/* ─── Landscape Mobile: Compact Table Layout ─────────────────────────────── */
+/* ─── Landscape Mobile: Full-screen no-scroll layout ─────────────────────── */
+/*
+ * Target: phones in true landscape (Android + orientation-lock PWA).
+ * iPhone 14 landscape = 844×390px  →  100dvh = 390px
+ * Samsung Galaxy S21   = 915×412px  →  100dvh = 412px
+ *
+ * Height budget (390px example):
+ *   28px  header
+ *   222px oval  (calc(100dvh - 168px) = 390 - 168)
+ *   60px  action bar
+ *   ─────────────
+ *   310px subtotal, leaving 80px for seat overflow above/below the oval
+ *   (seats-container inset -22px + seat box ~18px half-height = 40px each side)
+ */
 @media (max-height: 500px) and (orientation: landscape) {
+
+  /* 1 ─ Lock body to exactly one viewport, flex column */
+  body.table-page {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  /* 2 ─ Header: 28px single row */
   body.table-page .table-header {
-    padding: 2px 8px;
-    font-size: 0.65rem;
+    flex-shrink: 0;
+    height: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0 8px;
+    font-size: 0.6rem;
     flex-wrap: nowrap;
     gap: 4px;
+    align-items: center;
+    overflow: hidden;
   }
   body.table-page .table-header .table-info-bar {
-    font-size: 0.62rem;
+    font-size: 0.58rem;
     gap: 4px;
     flex-wrap: nowrap;
+    min-width: 0;
+    overflow: hidden;
   }
   body.table-page #hdr-jackpot-timer { display: none; }
-  body.table-page .table-main { grid-template-columns: 1fr; }
+  body.table-page .jackpot-mini { font-size: 0.6rem; }
+  body.table-page #host-hh-btn { display: none !important; }
+
+  /* 3 ─ Table-main fills all space between header and action bar */
+  body.table-page .table-main {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: visible;   /* let seats overflow into header/action bar margins */
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+  }
   body.table-page .chat-panel { display: none !important; }
 
-  body.table-page .poker-area { padding: 2px 4px; }
-  body.table-page .poker-table-wrap { max-width: 100%; }
-  body.table-page .seats-container { inset: -34px; }
+  /* 4 ─ Poker area: fills table-main, centers the wrap */
+  body.table-page .poker-area {
+    height: 100%;
+    overflow: visible;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* 5 ─ Oval: height-driven 2:1 sizing
+   *   oval-height = 100dvh − 28(header) − 60(actions) − 80(seat buffer) = 100dvh − 168px
+   *   oval-width  = 2 × oval-height
+   *   max-width caps it if the screen is unusually narrow
+   */
+  body.table-page .poker-table-wrap {
+    position: relative;
+    height: calc(100dvh - 168px);
+    width: calc(2 * (100dvh - 168px));
+    max-width: calc(100dvw - 80px);
+    flex-shrink: 0;
+    margin: 0 auto;
+  }
+  body.table-page .poker-table-oval {
+    width: 100%;
+    height: 100%;
+    aspect-ratio: unset;
+    border-width: 4px;
+    border-radius: 50%;
+  }
+
+  /* 6 ─ Seats: small enough to fit in available margin around oval */
+  body.table-page .seats-container { inset: -22px; }
   body.table-page .seat-box {
-    min-width: 86px;
-    padding: 2px 4px;
-    font-size: 0.58rem;
+    min-width: 68px;
+    padding: 2px 5px;
+    font-size: 0.52rem;
     border-radius: 6px;
   }
-  body.table-page .seat-name { max-width: 78px; font-size: 0.58rem; }
-  body.table-page .seat-chips { font-size: 0.54rem; }
-  body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
-  body.table-page .chip-total { font-size: 0.66rem; }
-  body.table-page .seat-bet { font-size: 0.5rem; min-height: 10px; }
-  body.table-page .seat-cards .card { width: 24px; height: 36px; font-size: 0.54rem; }
-  body.table-page .dealer-puck { width: 16px; height: 16px; font-size: 0.48rem; top: -8px; right: -8px; }
-  body.table-page .money-puck { min-width: 28px; height: 18px; font-size: 0.5rem; }
-  body.table-page .community-cards .card { width: 32px; height: 46px; font-size: 0.66rem; }
-  body.table-page .pot-display .pot-amount { font-size: 0.9rem; }
+  body.table-page .seat-name { max-width: 60px; font-size: 0.52rem; }
+  body.table-page .seat-chips { font-size: 0.5rem; }
+  body.table-page .seat-bet { font-size: 0.48rem; min-height: 9px; }
+  body.table-page .seat-cards .card { width: 20px; height: 30px; font-size: 0.46rem; }
+  body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.44rem; top: -7px; right: -7px; }
+  body.table-page .money-puck { min-width: 26px; height: 16px; font-size: 0.44rem; top: -8px; left: -8px; }
+  body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
+  body.table-page .chip-total { font-size: 0.6rem; }
+  body.table-page .seat-avatar { width: 24px; height: 24px; }
+  body.table-page .seat-initials { font-size: 0.58rem; }
+  body.table-page .seat-cam-video { border-radius: 50%; }
 
+  /* 7 ─ Community cards: readable but small */
+  body.table-page .community-area { gap: 4px; }
+  body.table-page .community-cards { gap: 3px; }
+  body.table-page .community-cards .card { width: 26px; height: 38px; font-size: 0.54rem; }
+  body.table-page .pot-display .pot-amount { font-size: 0.85rem; }
+  body.table-page .pot-display .pot-label { font-size: 0.58rem; }
+
+  /* 8 ─ Action bar: 60px fixed, single unwrapped row, no scroll */
   body.table-page .my-cards-area {
-    padding: 3px 8px 4px;
+    flex-shrink: 0;
+    height: 60px;
+    min-height: 60px;
+    max-height: 60px;
+    padding: 4px 8px;
     gap: 5px;
     flex-wrap: nowrap;
-    align-items: center;
     flex-direction: row;
+    align-items: center;
+    overflow: hidden;
+    border-top: 1px solid var(--border);
   }
-  body.table-page .my-hole-cards { gap: 4px; }
-  body.table-page .card.large { width: 44px; height: 62px; font-size: 0.82rem; }
-  body.table-page .shot-clock { width: 34px; height: 34px; }
-  body.table-page .shot-clock-number { font-size: 0.72rem; }
+  body.table-page .my-hole-cards { gap: 3px; flex-shrink: 0; }
+  body.table-page .card.large { width: 36px; height: 52px; font-size: 0.72rem; }
+  body.table-page .shot-clock { width: 32px; height: 32px; flex-shrink: 0; }
+  body.table-page .shot-clock-number { font-size: 0.65rem; }
 
+  /* 9 ─ FOLD / CHECK / CALL / RAISE all on one row */
   body.table-page .action-area {
     flex-wrap: nowrap;
     gap: 4px;
     flex: 1;
+    min-width: 0;
     align-items: center;
+    overflow: hidden;
+    height: 100%;
   }
   body.table-page .action-btn {
-    flex: 1;
-    min-height: 40px;
+    flex: 1 1 0;
+    height: 48px;
+    min-height: 48px;
     min-width: 0;
-    font-size: 0.72rem;
-    padding: 4px 2px;
+    font-size: 0.7rem;
+    padding: 2px 3px;
     border-radius: 8px;
   }
   body.table-page .raise-controls {
     flex-wrap: nowrap;
-    gap: 4px;
-    flex: 2;
+    gap: 3px;
     align-items: center;
+    flex-shrink: 1;
+    min-width: 0;
+    height: 100%;
   }
   body.table-page .raise-controls input[type=range] {
-    height: 26px;
-    min-width: 60px;
+    height: 22px;
+    min-width: 48px;
+    max-width: 72px;
     flex: 1;
+    accent-color: var(--blue);
   }
   body.table-page .raise-controls input[type=number] {
-    width: 52px;
-    padding: 4px;
-    font-size: 0.78rem;
-  }
-  body.table-page .ptt-btn {
-    flex: 0 0 auto;
-    min-height: 34px;
-    padding: 4px 10px;
+    width: 44px;
+    padding: 3px 4px;
     font-size: 0.68rem;
-    border-radius: 8px;
+    height: 26px;
   }
-  body.table-page .break-btn {
-    font-size: 0.58rem;
-    padding: 3px 5px;
-    min-height: 30px;
+  body.table-page #btn-allin {
+    font-size: 0.58rem !important;
+    padding: 0 5px !important;
+    min-width: 44px !important;
+    height: 48px !important;
   }
-  body.table-page #mic-test-btn { display: none; }
 
-  #host-controls {
-    top: 4px !important;
+  /* 10 ─ Hide non-essential items to keep action bar clean */
+  body.table-page .ptt-btn { display: none; }
+  body.table-page .break-btn { display: none; }
+  body.table-page #mic-test-btn { display: none; }
+  body.table-page #sound-toggle-btn { display: none; }
+  body.table-page #cam-toggle-btn { display: none; }
+
+  /* 11 ─ Host panel: collapsed by default (header only), positioned below table header */
+  body.table-page #host-controls {
+    top: 32px !important;
     right: 4px !important;
-    padding: 5px 8px !important;
-    min-width: 130px !important;
-    font-size: 0.68rem;
+    padding: 4px 8px !important;
+    min-width: 0 !important;
+    font-size: 0.6rem;
+    z-index: 50;
   }
-  #mic-controls-panel {
-    top: 4px !important;
+  body.table-page #host-controls #host-controls-inner { display: none; }
+
+  /* 12 ─ Mic panel: collapsed by default */
+  body.table-page #mic-controls-panel {
+    top: 32px !important;
     left: 4px !important;
-    max-height: 80vh;
+    max-height: calc(100dvh - 100px);
+    max-width: 200px;
+    padding: 4px 8px !important;
+    min-width: 0 !important;
+    font-size: 0.6rem;
   }
+  body.table-page #mic-controls-panel #mic-controls-inner { display: none; }
+
+  /* 13 ─ Blind timer: compact floating pill */
+  body.table-page #blind-timer-panel {
+    padding: 3px 6px !important;
+    font-size: 0.58rem;
+  }
+  body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
@@ -1758,8 +1872,8 @@ input, select, textarea { font-family: inherit; }
   .seat-initials { font-size: 1.4rem; }
 }
 @media (max-height: 500px) and (orientation: landscape) {
-  .seat-avatar { width: 80px; height: 80px; }
-  .seat-initials { font-size: 1.8rem; }
+  .seat-avatar { width: 24px !important; height: 24px !important; }
+  .seat-initials { font-size: 0.58rem !important; }
 }
 
 /* ─── Split Pot Hand Result ──────────────────────────────────────────────── */

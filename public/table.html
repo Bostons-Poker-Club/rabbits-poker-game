@@ -15,40 +15,47 @@
   <style>
     /* ── Force landscape on portrait mobile/iPad ──────────────────────────────
      * screen.orientation.lock() handles Android/Chrome.
-     * The CSS transform handles iOS Safari which ignores the API.
-     * Rotates the entire body 90deg clockwise so portrait viewport
-     * renders as landscape content. Only applies ≤1024px (tablets/phones). */
+     * The CSS transform is a fallback for iOS Safari which ignores the API.
+     * Rotates the body 90° clockwise so portrait viewport looks landscape.
+     * Only applies ≤1024px wide (phones/tablets). */
     @media screen and (orientation: portrait) and (max-width: 1024px) {
       body.table-page {
         position: fixed;
         overflow: hidden;
-        /* Swap dimensions: width=viewport height, height=viewport width */
-        width: 100vh;
-        height: 100vw;
-        /* Center the element before rotating so it stays centered after */
-        top: calc(50vh - 50vw);
-        left: calc(50vw - 50vh);
+        width: 100dvh;
+        height: 100dvw;
+        top: calc(50dvh - 50dvw);
+        left: calc(50dvw - 50dvh);
         transform: rotate(90deg);
         transform-origin: 50% 50%;
-        transition: transform 0.35s ease;
-      }
-    }
-    @media screen and (orientation: landscape) and (max-width: 1024px) {
-      body.table-page {
-        transition: transform 0.35s ease;
       }
     }
   </style>
   <script>
-    // Orientation lock via API (works on Android Chrome, some iPads)
     (function () {
+      // Lock to landscape — works on Android Chrome and installed PWAs
       try {
         if (screen.orientation && typeof screen.orientation.lock === 'function') {
-          screen.orientation.lock('landscape').catch(function () {
-            // Silently ignored — CSS rotation handles it for iOS
-          });
+          screen.orientation.lock('landscape').catch(function () {});
         }
       } catch (_) {}
+
+      // Collapse host + mic panels when starting in landscape so they don't
+      // block the table. Panels can still be expanded by tapping their header.
+      function collapsePanelsForLandscape() {
+        if (window.innerWidth > window.innerHeight) {
+          var hostInner = document.getElementById('host-controls-inner');
+          var micInner  = document.getElementById('mic-controls-inner');
+          if (hostInner) hostInner.style.display = 'none';
+          if (micInner)  micInner.style.display  = 'none';
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', collapsePanelsForLandscape);
+      } else {
+        collapsePanelsForLandscape();
+      }
+      window.addEventListener('resize', collapsePanelsForLandscape);
     })();
   </script>
 </head>
