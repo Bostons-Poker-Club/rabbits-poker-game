@@ -5,6 +5,7 @@ const sgMail   = require('@sendgrid/mail');
 
 const FROM         = 'noreply@rabbsroom.com';
 const ADMIN_EMAIL  = 'bostonspokerclub.amitureflops@gmail.com';
+const ADMIN_PHONE  = process.env.ADMIN_PHONE || '+18572308682';
 
 // ─── One-time initialisation ──────────────────────────────────────────────────
 const SENDGRID_API_KEY = process.env.SENDGRID_API_KEY || '';
@@ -95,8 +96,8 @@ async function sendStartupTestSMS() {
   const ts = new Date().toISOString();
   await sendAdminPush(`RabbsRoom server started ${ts} — push notifications active`, 'RabbsRoom Started');
   if (TWILIO_OK) {
-    console.log('[SMS] Sending Twilio startup test to +18572308682');
-    await sendPlayerSMS({ phone: '+18572308682', text: `RabbsRoom server started ${ts} — Twilio SMS working` });
+    console.log('[SMS] Sending Twilio startup test to', ADMIN_PHONE);
+    await sendPlayerSMS({ phone: ADMIN_PHONE, text: `RabbsRoom server started ${ts} — Twilio SMS working` });
   }
 }
 
@@ -199,12 +200,12 @@ async function sendPlayerSMS({ phone, text }) {
 
   if (TWILIO_OK) {
     const truncated = text.length > 1600 ? text.slice(0, 1597) + '...' : text;
-    console.log('[SMS] Twilio sending | to:', e164, '| text:', truncated.substring(0, 60));
+    console.log('[SMS] Twilio sending | from:', TWILIO_FROM, '| to:', e164, '| text:', truncated.substring(0, 60));
     try {
       const msg = await _twilio.messages.create({ body: truncated, from: TWILIO_FROM, to: e164 });
-      console.log('[SMS] Twilio delivered | sid:', msg.sid, '| status:', msg.status, '| to:', e164);
+      console.log('[SMS] Twilio OK | sid:', msg.sid, '| status:', msg.status, '| to:', e164, '| price:', msg.price || 'pending');
     } catch (e) {
-      console.error('[SMS] Twilio error | to:', e164, '| error:', e.message);
+      console.error('[SMS] Twilio FAILED | to:', e164, '| message:', e.message, '| code:', e.code || 'n/a', '| status:', e.status || 'n/a', '| moreInfo:', e.moreInfo || 'n/a');
     }
     return;
   }
@@ -230,7 +231,7 @@ async function sendPlayerSMS({ phone, text }) {
 async function sendAdminSMS(text) {
   console.log('[SMS] sendAdminSMS | text:', text.substring(0, 50));
   await sendAdminPush(text, 'RabbsRoom Admin');
-  if (TWILIO_OK) await sendPlayerSMS({ phone: '+18572308682', text });
+  if (TWILIO_OK) await sendPlayerSMS({ phone: ADMIN_PHONE, text });
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
