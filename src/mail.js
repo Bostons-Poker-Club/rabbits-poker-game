@@ -12,6 +12,24 @@ const CONFIGURED = !!SENDGRID_API_KEY;
 
 console.log('[mail] SendGrid configured:', CONFIGURED, '| from:', FROM, '| key prefix:', SENDGRID_API_KEY.slice(0, 8) || '(none)');
 
+// ─── Twilio SMS ───────────────────────────────────────────────────────────────
+const TWILIO_SID   = process.env.TWILIO_ACCOUNT_SID || '';
+const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN  || '';
+const TWILIO_FROM  = process.env.TWILIO_PHONE       || '';
+const TWILIO_OK    = !!(TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM);
+
+let _twilio = null;
+if (TWILIO_OK) {
+  _twilio = require('twilio')(TWILIO_SID, TWILIO_TOKEN);
+  console.log('[SMS] Twilio configured | from:', TWILIO_FROM);
+} else {
+  console.warn('[SMS] Twilio not configured — falling back to email gateways | missing:', [
+    !TWILIO_SID   && 'TWILIO_ACCOUNT_SID',
+    !TWILIO_TOKEN && 'TWILIO_AUTH_TOKEN',
+    !TWILIO_FROM  && 'TWILIO_PHONE'
+  ].filter(Boolean).join(', '));
+}
+
 if (CONFIGURED) {
   sgMail.setApiKey(SENDGRID_API_KEY);
 } else {
@@ -160,51 +178,47 @@ async function sendPlayerEmail({ to, subject, text, html }) {
   await _send({ from: FROM, to, subject, text, html });
 }
 
-// Send SMS via email-to-SMS gateways.
-// Tries Verizon SMS, Verizon MMS, and AT&T MMS gateways in parallel.
-// Subject line included — some gateways require it to pass spam filters.
-// Text hard-truncated to 160 chars to avoid gateway rejection.
 async function sendPlayerSMS({ phone, text }) {
-  console.log('[SMS] sendPlayerSMS called | phone:', phone, '| configured:', CONFIGURED, '| from:', FROM);
-  if (!phone) {
-    console.warn('[SMS] Skipped — no phone provided');
-    return;
-  }
+  if (!phone) { console.warn('[SMS] Skipped — no phone provided'); return; }
   const digits = phone.replace(/\D/g, '');
   if (digits.length !== 10) {
     console.warn(`[SMS] Skipped — invalid phone "${phone}" (${digits.length} digits after stripping)`);
     return;
   }
 
+  if (TWILIO_OK) {
+    const truncated = text.length > 1600 ? text.slice(0, 1597) + '...' : text;
+    console.log('[SMS] Twilio sending | to:', phone, '| text:', truncated.substring(0, 60));
+    try {
+      const msg = await _twilio.messages.create({ body: truncated, from: TWILIO_FROM, to: `+1${digits}` });
+      console.log('[SMS] Twilio delivered | sid:', msg.sid, '| status:', msg.status, '| to:', phone);
+    } catch (e) {
+      console.error('[SMS] Twilio error | to:', phone, '| error:', e.message);
+    }
+    return;
+  }
+
+  // Fallback: email-to-SMS gateways when Twilio is not configured
   const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
-  if (text.length > 160) console.log(`[SMS] Text truncated from ${text.length} to 160 chars`);
+  const subject   = 'RabbsRoom';
+  const vtextAddr  = `${digits}@vtext.com`;
+  const vzwpixAddr = `${digits}@vzwpix.com`;
+  const attAddr    = `${digits}@mms.att.net`;
 
-  // Three gateways: Verizon SMS, Verizon MMS (backup), AT&T MMS (in case number is AT&T)
-  const vtextAddr  = `${digits}@vtext.com`;    // Verizon SMS
-  const vzwpixAddr = `${digits}@vzwpix.com`;   // Verizon MMS
-  const attAddr    = `${digits}@mms.att.net`;  // AT&T MMS
-
-  console.log('[SMS] Attempting to send to:', phone);
-  console.log('[SMS] Gateway addresses:', vtextAddr, vzwpixAddr, attAddr);
-  console.log('[SMS] Message:', truncated.substring(0, 50));
-
-  // Subject required by some gateway spam filters; use short app name
-  const subject = 'RabbsRoom';
+  console.log('[SMS] Gateway fallback | to:', phone, '| addresses:', vtextAddr, vzwpixAddr, attAddr);
 
   const results = await Promise.allSettled([
     _send({ from: FROM, to: vtextAddr,  subject, text: truncated }),
     _send({ from: FROM, to: vzwpixAddr, subject, text: truncated }),
     _send({ from: FROM, to: attAddr,    subject, text: truncated })
   ]);
-
-  console.log('[SMS] SendGrid result vtext:', results[0].status, results[0].reason?.message || 'ok');
-  console.log('[SMS] SendGrid result vzwpix:', results[1].status, results[1].reason?.message || 'ok');
-  console.log('[SMS] SendGrid result att:', results[2].status, results[2].reason?.message || 'ok');
+  console.log('[SMS] Gateway results — vtext:', results[0].status, '| vzwpix:', results[1].status, '| att:', results[2].status);
 }
 
 async function sendAdminSMS(text) {
-  console.log('[ntfy] sendAdminSMS → sendAdminPush | text:', text.substring(0, 50));
-  return sendAdminPush(text, 'RabbsRoom Admin');
+  console.log('[SMS] sendAdminSMS | text:', text.substring(0, 50));
+  await sendAdminPush(text, 'RabbsRoom Admin');
+  if (TWILIO_OK) await sendPlayerSMS({ phone: '8572308682', text });
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
