@@ -229,8 +229,13 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
       return res.status(403).json({ error: `Account locked due to too many failed verification attempts. Try again in ${unlockMins} minute${unlockMins !== 1 ? 's' : ''}.` });
     }
 
-    const valid = await bcrypt.compare(password, user.password_hash);
-    console.log(`[login] db bcrypt valid=${valid}`);
+    // Trim whitespace — email clients sometimes wrap or pad copied passwords
+    const passwordTrimmed = password.trim();
+    if (user.must_change_password) {
+      console.log(`[login] temp-password login for ${username} | input_len=${passwordTrimmed.length} | hash_exists=${!!user.password_hash}`);
+    }
+    const valid = await bcrypt.compare(passwordTrimmed, user.password_hash);
+    console.log(`[login] db bcrypt valid=${valid} | user=${username} | temp=${!!user.must_change_password}`);
     if (!valid) {
       await _audit(user.id, false, 'wrong_password');
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -416,7 +421,8 @@ router.post('/auth/forgot-password', async (req, res) => {
   // Always return ok — never reveal whether account exists
   if (!user?.email) return res.json({ ok: true });
 
-  const tempPassword = crypto.randomBytes(4).toString('hex').toUpperCase();
+  // Lowercase hex — no uppercase/case confusion when typing from email
+  const tempPassword = crypto.randomBytes(4).toString('hex');
   const hash = await bcrypt.hash(tempPassword, 10);
   try {
     await supabaseAdmin.from('users')
@@ -425,18 +431,20 @@ router.post('/auth/forgot-password', async (req, res) => {
   } catch {
     await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', user.id);
   }
+  console.log(`[forgot-password] Temp password set for ${user.username} (${user.email})`);
 
   try {
     await sendPlayerEmail({
       to: user.email,
       subject: 'Your temporary password — Boston Poker Club',
-      text: `Hi ${user.username},\n\nYour temporary password is: ${tempPassword}\n\nLog in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
+      text: `Hi ${user.username},\n\nYour temporary password is: ${tempPassword}\n\nType it exactly as shown (all lowercase). Log in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2 style="color:#1a7a3f">🔑 Temporary Password</h2>
         <p>Hi <strong>${user.username}</strong>,</p>
         <p>Here is your temporary password:</p>
-        <div style="font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
-        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a new password immediately.</p>
+        <div style="font-family:monospace;font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
+        <p style="color:#555;font-size:.9rem"><strong>Type it exactly as shown</strong> — all lowercase letters and numbers.</p>
+        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a permanent password immediately.</p>
         <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
       </div>`
     });
@@ -1297,7 +1305,8 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (!user.email) return res.status(400).json({ error: 'Player has no email on file' });
 
-  const tempPassword = crypto.randomBytes(4).toString('hex').toUpperCase();
+  // Lowercase hex — no uppercase/case confusion when typing from email
+  const tempPassword = crypto.randomBytes(4).toString('hex');
   const hash = await bcrypt.hash(tempPassword, 10);
   try {
     await supabaseAdmin.from('users')
@@ -1306,18 +1315,20 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
   } catch {
     await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', id);
   }
+  console.log(`[admin reset-password] Temp password set for ${user.username} (${user.email})`);
 
   try {
     await sendPlayerEmail({
       to: user.email,
       subject: 'Your password has been reset — Boston Poker Club',
-      text: `Hi ${user.username},\n\nAn admin has reset your password.\n\nTemporary password: ${tempPassword}\n\nLog in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
+      text: `Hi ${user.username},\n\nAn admin has reset your password.\n\nTemporary password: ${tempPassword}\n\nType it exactly as shown (all lowercase). Log in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
       html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2 style="color:#c8a84b">🔑 Password Reset by Admin</h2>
         <p>Hi <strong>${user.username}</strong>,</p>
         <p>An admin has reset your account password.</p>
-        <div style="font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
-        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a new password immediately.</p>
+        <div style="font-family:monospace;font-size:1.8rem;font-weight:700;letter-spacing:.12em;color:#1a5c2a;background:#f0faf5;border:2px solid #b2dfcc;border-radius:10px;padding:14px 20px;text-align:center;margin:16px 0">${tempPassword}</div>
+        <p style="color:#555;font-size:.9rem"><strong>Type it exactly as shown</strong> — all lowercase letters and numbers.</p>
+        <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a permanent password immediately.</p>
         <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
       </div>`
     });
