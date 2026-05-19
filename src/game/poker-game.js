@@ -37,7 +37,7 @@ class PokerGame {
     // Shot clock
     this.shotClockTimer = null;
     this.shotClockWarningTimer = null;
-    this.shotClockDuration = tableConfig.shotClockSeconds || 30;
+    this.shotClockDuration = tableConfig.shotClockSeconds || 40;
 
     // Callbacks
     this.onBroadcast = null;      // fn(event, data) - broadcast to all at table

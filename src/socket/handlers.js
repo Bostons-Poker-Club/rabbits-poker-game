@@ -12,7 +12,7 @@ const appEvents = require('../events');
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 const JACKPOT_INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 30) * 60 * 1000;
 const JACKPOT_CONTRIB = parseFloat(process.env.JACKPOT_CONTRIBUTION_PERCENT) || 1;
-const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 60;
+const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 40;
 
 // Tiered rake: keyed by big blind thresholds
 function getRakeConfig(bigBlind) {
@@ -189,7 +189,7 @@ function setupGameWatchdog(io, tableId, game) {
     }
 
     // Detect stuck hand: no lastActionAt update for longer than shot-clock + buffer
-    const staleThreshold = ((game.shotClockDuration || 30) + 20) * 1000;
+    const staleThreshold = ((game.shotClockDuration || 40) + 20) * 1000;
     const stuckMs = Date.now() - (game.lastActionAt || Date.now());
     if (stuckMs < staleThreshold) return;
 
