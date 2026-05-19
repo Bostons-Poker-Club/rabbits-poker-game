@@ -40,7 +40,7 @@ async function _send(msg) {
 }
 
 // ─── ntfy.sh admin push notifications ───────────────────────────────────────
-const NTFY_TOPIC = 'bostonpokerclub';
+const NTFY_TOPIC = 'bostonpokerclubrabbsroom2025';
 
 async function sendAdminPush(text, title) {
   const body = text.length > 4096 ? text.slice(0, 4093) + '...' : text;
