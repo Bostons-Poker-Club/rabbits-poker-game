@@ -96,7 +96,7 @@ async function sendStartupTestSMS() {
   await sendAdminPush(`RabbsRoom server started ${ts} — push notifications active`, 'RabbsRoom Started');
   if (TWILIO_OK) {
     console.log('[SMS] Sending Twilio startup test to +18572308682');
-    await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started ${ts} — Twilio SMS working` });
+    await sendPlayerSMS({ phone: '+18572308682', text: `RabbsRoom server started ${ts} — Twilio SMS working` });
   }
 }
 
@@ -182,34 +182,42 @@ async function sendPlayerEmail({ to, subject, text, html }) {
   await _send({ from: FROM, to, subject, text, html });
 }
 
+function _toE164(phone) {
+  let digits = phone.replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('1')) digits = digits.slice(1);
+  if (digits.length !== 10) return null;
+  return `+1${digits}`;
+}
+
 async function sendPlayerSMS({ phone, text }) {
   if (!phone) { console.warn('[SMS] Skipped — no phone provided'); return; }
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length !== 10) {
-    console.warn(`[SMS] Skipped — invalid phone "${phone}" (${digits.length} digits after stripping)`);
+  const e164 = _toE164(phone);
+  if (!e164) {
+    console.warn(`[SMS] Skipped — invalid phone "${phone}" (could not normalise to E.164)`);
     return;
   }
 
   if (TWILIO_OK) {
     const truncated = text.length > 1600 ? text.slice(0, 1597) + '...' : text;
-    console.log('[SMS] Twilio sending | to:', phone, '| text:', truncated.substring(0, 60));
+    console.log('[SMS] Twilio sending | to:', e164, '| text:', truncated.substring(0, 60));
     try {
-      const msg = await _twilio.messages.create({ body: truncated, from: TWILIO_FROM, to: `+1${digits}` });
-      console.log('[SMS] Twilio delivered | sid:', msg.sid, '| status:', msg.status, '| to:', phone);
+      const msg = await _twilio.messages.create({ body: truncated, from: TWILIO_FROM, to: e164 });
+      console.log('[SMS] Twilio delivered | sid:', msg.sid, '| status:', msg.status, '| to:', e164);
     } catch (e) {
-      console.error('[SMS] Twilio error | to:', phone, '| error:', e.message);
+      console.error('[SMS] Twilio error | to:', e164, '| error:', e.message);
     }
     return;
   }
 
   // Fallback: email-to-SMS gateways when Twilio is not configured
+  const digits10  = e164.slice(2); // strip +1
   const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
   const subject   = 'RabbsRoom';
-  const vtextAddr  = `${digits}@vtext.com`;
-  const vzwpixAddr = `${digits}@vzwpix.com`;
-  const attAddr    = `${digits}@mms.att.net`;
+  const vtextAddr  = `${digits10}@vtext.com`;
+  const vzwpixAddr = `${digits10}@vzwpix.com`;
+  const attAddr    = `${digits10}@mms.att.net`;
 
-  console.log('[SMS] Gateway fallback | to:', phone, '| addresses:', vtextAddr, vzwpixAddr, attAddr);
+  console.log('[SMS] Gateway fallback | to:', e164, '| addresses:', vtextAddr, vzwpixAddr, attAddr);
 
   const results = await Promise.allSettled([
     _send({ from: FROM, to: vtextAddr,  subject, text: truncated }),
@@ -222,7 +230,7 @@ async function sendPlayerSMS({ phone, text }) {
 async function sendAdminSMS(text) {
   console.log('[SMS] sendAdminSMS | text:', text.substring(0, 50));
   await sendAdminPush(text, 'RabbsRoom Admin');
-  if (TWILIO_OK) await sendPlayerSMS({ phone: '8572308682', text });
+  if (TWILIO_OK) await sendPlayerSMS({ phone: '+18572308682', text });
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
