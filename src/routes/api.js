@@ -1499,7 +1499,7 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
   let smsRecipients = [];
 
   try {
-    const { sendPlayerEmail, sendPlayerSMS, sendAdminEmail } = require('../mail');
+    const { sendPlayerEmail, sendPlayerSMS, sendAdminEmail, sendAdminPush } = require('../mail');
 
     // neq('is_banned', true) includes rows where is_banned IS NULL (most players)
     const { data: allUsers, error: usersErr } = await supabaseAdmin
@@ -1571,8 +1571,8 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
         const adminText = `Broadcast by ${req.user.username}:\n\n"${msg.message}"\n\nDelivered: ${emailsSent} emails, ${smsSent} SMS.\nEmails: ${emailRecipients.map(u => u.email).join(', ') || 'none'}\nPhones: ${smsRecipients.map(u => u.phone).join(', ') || 'none'}`;
         await sendAdminEmail({ subject: adminSubject, text: adminText, html: `<pre style="font-family:sans-serif;white-space:pre-wrap">${adminText}</pre>` });
         console.log('[broadcast] Admin email copy sent to bostonspokerclub.amitureflops@gmail.com');
-        await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom broadcast: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms` });
-        console.log('[broadcast] Admin SMS copy sent to 8572308682');
+        await sendAdminPush(`Broadcast: "${msg.message.slice(0, 80)}" — ${emailsSent}em/${smsSent}sms`, 'RabbsRoom Broadcast');
+        console.log('[broadcast] Admin push sent via ntfy');
       } catch (e) {
         console.warn('[broadcast] Admin copy error:', e.message);
       }
@@ -1707,9 +1707,9 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
     io.emit('admin:notification_buyin', request);
   }
 
-  // Send email + SMS to admin
+  // Send email + push to admin
   try {
-    const { sendAdminEmail, sendPlayerSMS } = require('../mail');
+    const { sendAdminEmail, sendAdminPush } = require('../mail');
     const displayName = nickname ? `${req.user.username} (${nickname})` : req.user.username;
     const subject = `💰 Buy-In Request — ${displayName} $${amount} chips`;
     const html = `
@@ -1727,7 +1727,7 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
       </div>`;
     const text = `Buy-In: ${displayName}${phone ? ' ' + phone : ''} wants $${amount} chips via ${request.paymentMethod}${notes ? '. ' + notes : ''}. Approve: rabbsroom.com/admin.html`;
     await sendAdminEmail({ subject, text, html });
-    await sendPlayerSMS({ phone: '8572308682', text });
+    await sendAdminPush(text, `Buy-In: ${displayName}`);
     console.log(`[buyin] Notification sent for ${displayName} $${amount}`);
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);

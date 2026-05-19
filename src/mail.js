@@ -1,6 +1,7 @@
 'use strict';
 
-const sgMail = require('@sendgrid/mail');
+const https    = require('https');
+const sgMail   = require('@sendgrid/mail');
 
 const FROM         = 'noreply@rabbsroom.com';
 const ADMIN_EMAIL  = 'bostonspokerclub.amitureflops@gmail.com';
@@ -38,10 +39,43 @@ async function _send(msg) {
   }
 }
 
+// ─── ntfy.sh admin push notifications ───────────────────────────────────────
+const NTFY_TOPIC = 'bostonpokerclub';
+
+async function sendAdminPush(text, title) {
+  const body = text.length > 4096 ? text.slice(0, 4093) + '...' : text;
+  const headers = {
+    'Content-Type': 'text/plain',
+    'Content-Length': Buffer.byteLength(body)
+  };
+  if (title) headers['Title'] = title;
+
+  console.log('[ntfy] Sending push to topic:', NTFY_TOPIC, '| title:', title || '(none)', '| text:', body.substring(0, 80));
+  return new Promise((resolve) => {
+    const req = https.request({
+      hostname: 'ntfy.sh',
+      port: 443,
+      path: `/${NTFY_TOPIC}`,
+      method: 'POST',
+      headers
+    }, (res) => {
+      console.log('[ntfy] Response status:', res.statusCode);
+      res.resume();
+      resolve();
+    });
+    req.on('error', (e) => {
+      console.error('[ntfy] Request error:', e.message);
+      resolve();
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
 // ─── Startup tests ───────────────────────────────────────────────────────────
 async function sendStartupTestSMS() {
-  console.log('[SMS] Sending startup test SMS to 8572308682 via vtext/vzwpix/att gateways');
-  await sendPlayerSMS({ phone: '8572308682', text: `RabbsRoom server started ${new Date().toISOString()} - if you see this, SMS works` });
+  console.log('[ntfy] Sending startup push notification');
+  await sendAdminPush(`RabbsRoom server started ${new Date().toISOString()} — push notifications active`, 'RabbsRoom Started');
 }
 
 async function sendStartupTestEmail() {
@@ -169,8 +203,8 @@ async function sendPlayerSMS({ phone, text }) {
 }
 
 async function sendAdminSMS(text) {
-  console.log('[SMS] sendAdminSMS called | text:', text.substring(0, 50));
-  return sendPlayerSMS({ phone: '8572308682', text });
+  console.log('[ntfy] sendAdminSMS → sendAdminPush | text:', text.substring(0, 50));
+  return sendAdminPush(text, 'RabbsRoom Admin');
 }
 
 async function sendHostApprovalEmail({ to, hostName, username, password, hostType }) {
@@ -470,6 +504,7 @@ async function send2FACode({ to, phone, username, code }) {
 module.exports = {
   sendStartupTestEmail,
   sendStartupTestSMS,
+  sendAdminPush,
   sendAdminSMS,
   sendTableRequestEmail,
   sendBroadcastEmail,
