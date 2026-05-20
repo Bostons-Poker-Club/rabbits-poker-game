@@ -100,6 +100,13 @@
       </div>
     </div>
 
+    <!-- Game Paused Banner -->
+    <div id="game-paused-banner" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:200;background:rgba(0,0,0,.88);border:2px solid var(--gold);border-radius:12px;padding:18px 28px;text-align:center;pointer-events:none">
+      <div style="font-size:1.5rem;font-weight:900;color:var(--gold);letter-spacing:.05em">⏸ GAME PAUSED</div>
+      <div id="pause-reason-text" style="color:rgba(255,255,255,.8);font-size:.85rem;margin-top:6px"></div>
+      <div style="color:rgba(255,255,255,.5);font-size:.75rem;margin-top:4px">You can chat and cash out. Waiting for host to resume.</div>
+    </div>
+
     <!-- Tournament Blind Timer -->
     <div id="blind-timer-panel">
       <div class="btp-level" id="btp-level">Level 1</div>

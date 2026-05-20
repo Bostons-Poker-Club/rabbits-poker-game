@@ -102,10 +102,13 @@ function chipStack(amount) {
     const n = Math.floor(rem / d.value);
     if (n > 0) { groups.push({ ...d, count: n }); rem -= n * d.value; }
   }
-  const dots = groups.slice(0, 4).map(g =>
+  const dots = groups.slice(0, 5).map(g =>
     `<span class="chip-dot" style="background:${g.bg};border-color:${g.border}" title="${g.count}×$${g.value}">${g.count > 1 ? `<span class="chip-dot-n" style="color:${g.text}">${g.count > 9 ? '9+' : g.count}</span>` : ''}</span>`
   ).join('');
-  return `<span class="chip-stack">${dots}<span class="chip-total">${fmt(amount)}</span></span>`;
+  const breakdown = groups.map(g =>
+    `<div class="chip-breakdown-row"><span class="chip-breakdown-dot" style="background:${g.bg};border-color:${g.border}"></span><span class="chip-breakdown-label">${g.count}×$${g.value}</span><span class="chip-breakdown-value">$${fmt(g.count * g.value)}</span></div>`
+  ).join('');
+  return `<span class="chip-stack" style="position:relative">${dots}<span class="chip-total">${fmt(amount)}</span><span class="chip-breakdown">${breakdown}<div style="border-top:1px solid rgba(255,255,255,.15);margin-top:4px;padding-top:4px;color:var(--chip-green);font-weight:700">Total: $${fmt(amount)}</div></span></span>`;
 }
 
 // ─── Seat Layout (positions as % of oval width/height offset from center) ──
@@ -423,6 +426,8 @@ function connect() {
     if (me != null) {
       document.getElementById('hdr-chips').textContent = fmt(me.chips);
     }
+    // Pause banner
+    _updatePauseBanner(state.isPaused, state.pauseReason);
   });
 
   socket.on('my_state', (state) => {
@@ -587,6 +592,16 @@ function connect() {
 
   socket.on('puck:straddle_required', ({ value, deadline }) => {
     showStraddlePrompt(value, deadline);
+  });
+
+  socket.on('game_paused', ({ reason, by }) => {
+    _updatePauseBanner(true, reason);
+    toast(`⏸ Game paused by ${by}${reason ? `: "${reason}"` : ''}`, 'warn');
+  });
+
+  socket.on('game_resumed', ({ by }) => {
+    _updatePauseBanner(false, null);
+    toast(`▶️ Game resumed by ${by}`);
   });
 
   socket.on('jackpot_state', (data) => {
@@ -932,13 +947,29 @@ function renderHostControls(state) {
   const others = allPlayers.filter(p => p.userId !== user.id);
 
   const src2 = src;
-  // Player chip controls + money puck + table options — all in one assignment
+  const isPaused = src2?.isPaused || false;
+
+  // Player chip controls + pause + money puck + table options
   document.getElementById('host-player-list').innerHTML = others.map(p => `
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.07)">
       <span style="color:var(--text)">${esc(p.username)}</span>
       <span style="color:var(--chip-green);font-size:.7rem">${fmt(p.chips)}</span>
       <button class="btn btn-sm btn-gold" style="padding:2px 7px;font-size:.7rem" onclick="hostAddChips('${p.userId}','${esc(p.username)}')">+Chips</button>
+      <button class="btn btn-sm btn-outline" style="padding:2px 7px;font-size:.7rem;color:var(--red)" onclick="hostCashOutPlayer('${p.userId}','${esc(p.username)}')">Cash Out</button>
     </div>`).join('') +
+    // Pause / Resume control
+    `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)">
+      <div style="color:var(--gold);font-size:.72rem;font-weight:700;margin-bottom:5px">⏸ GAME CONTROL</div>
+      ${isPaused
+        ? `<div style="color:#facc15;font-size:.7rem;margin-bottom:4px">Paused${src2.pauseReason ? `: "${esc(src2.pauseReason)}"` : ''}</div>
+           <button class="btn btn-sm btn-gold" style="font-size:.68rem;padding:3px 8px;width:100%" onclick="hostResumeGame()">▶️ Resume Game</button>`
+        : `<div style="display:flex;gap:4px;flex-wrap:wrap">
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px;color:var(--gold)" onclick="hostPauseGame('')">⏸ Pause</button>
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="hostPauseGame('Short break')">☕ Break</button>
+            <button class="btn btn-sm btn-outline" style="font-size:.68rem;padding:3px 7px" onclick="hostPauseGame('Waiting for players')">⏳ Waiting</button>
+           </div>`
+      }
+    </div>` +
     // Money puck controls
     `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)">
       <div style="color:var(--gold);font-size:.72rem;font-weight:700;margin-bottom:6px">💰 MONEY PUCK${moneyPuck ? ` — $${fmt(moneyPuck.value)} held by ${esc(moneyPuck.holderName)}` : ' — inactive'}</div>
@@ -977,6 +1008,25 @@ function hostAddChips(targetUserId, username) {
   const amt = parseInt(prompt(`Add chips for ${username}:`, '500'));
   if (!amt || amt <= 0) return;
   socket.emit('host:add_chips', { targetUserId, amount: amt });
+}
+
+function hostPauseGame(preset) {
+  let reason = preset;
+  if (reason === '') {
+    const r = prompt('Pause reason (optional):', '');
+    if (r === null) return; // cancelled
+    reason = r.trim();
+  }
+  socket.emit('host:pause_game', { tableId, reason: reason || null });
+}
+
+function hostResumeGame() {
+  socket.emit('host:resume_game', { tableId });
+}
+
+function hostCashOutPlayer(targetUserId, targetUsername) {
+  if (!confirm(`Cash out ${targetUsername} from this table?`)) return;
+  socket.emit('admin_action', { action: 'kick', tableId, targetUserId });
 }
 
 function dropPuck(autoDropMinutes) {
@@ -2429,6 +2479,14 @@ function animateChipToPot(seatNumber, amount = 0) {
 
 function openModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
 function closeModal(id) { document.getElementById(id)?.classList.add('hidden'); }
+
+function _updatePauseBanner(isPaused, reason) {
+  const banner = document.getElementById('game-paused-banner');
+  const reasonEl = document.getElementById('pause-reason-text');
+  if (!banner) return;
+  banner.style.display = isPaused ? 'block' : 'none';
+  if (reasonEl) reasonEl.textContent = reason ? `Reason: ${reason}` : '';
+}
 
 // ─── Showdown / Runout helpers ─────────────────────────────────────────────
 

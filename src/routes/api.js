@@ -1373,7 +1373,7 @@ router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => 
 
   let { data, error } = await supabaseAdmin
     .from('users')
-    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone')
+    .select('id, username, email, chips, is_admin, is_banned, created_at, full_name, nickname, phone, host_chip_budget, host_chips_used')
     .in('id', hostIds);
 
   if (error) return res.status(500).json({ error: error.message });
@@ -1416,6 +1416,35 @@ router.get('/admin/hosts', authMiddleware, adminMiddleware, async (req, res) => 
   } catch {
     res.json((data || []).map(h => ({ ...h, is_host: true, tableRequests: [], pendingCount: 0, sessionRakeContrib: 0, totalRakeEarned: 0 })));
   }
+});
+
+// Admin: set or reset host chip budget
+router.post('/admin/hosts/:id/budget', authMiddleware, adminMiddleware, async (req, res) => {
+  const { budget, reset_used } = req.body;
+  const update = {};
+  if (budget !== undefined) update.host_chip_budget = Math.max(0, parseInt(budget) || 0);
+  if (reset_used) update.host_chips_used = 0;
+  if (!Object.keys(update).length) return res.status(400).json({ error: 'Nothing to update' });
+  const { error } = await supabaseAdmin.from('users').update(update).eq('id', req.params.id);
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
+// Admin: get host chip-add transactions
+router.get('/admin/hosts/:id/transactions', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('transactions')
+    .select('id, user_id, username, type, amount, table_name, notes, created_at')
+    .eq('type', 'host_add_chips')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) return res.status(500).json({ error: error.message });
+  // Filter to rows where this host was the actor
+  const hostId = req.params.id;
+  const filtered = (data || []).filter(row => {
+    try { return JSON.parse(row.notes || '{}').actorId === hostId; } catch { return false; }
+  });
+  res.json(filtered);
 });
 
 router.get('/admin/players/contacts', authMiddleware, adminMiddleware, async (req, res) => {

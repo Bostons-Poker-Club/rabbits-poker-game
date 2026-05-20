@@ -176,9 +176,9 @@ function setupGameWatchdog(io, tableId, game) {
       return;
     }
 
-    // No active hand but players are seated — start one
+    // No active hand but players are seated — start one (skip if paused)
     if (!game.handActive) {
-      if (game.canStartHand()) {
+      if (!game.isPaused && game.canStartHand()) {
         const idleMs = Date.now() - (game.lastActionAt || 0);
         if (idleMs > 8000) {
           console.log(`[watchdog] ${tableId}: idle ${Math.round(idleMs/1000)}s, no hand — starting`);
@@ -967,6 +967,26 @@ function setupSocketHandlers(io) {
       if (!hostSet.has(userId) && !isAdmin) return socket.emit('error', { message: 'Host access required' });
       if (!amount || amount <= 0) return socket.emit('error', { message: 'Amount must be positive' });
 
+      // Budget check for non-admin hosts
+      if (!isAdmin) {
+        try {
+          const { data: hostData } = await supabaseAdmin
+            .from('users').select('host_chip_budget, host_chips_used').eq('id', userId).single();
+          const budget = hostData?.host_chip_budget || 0;
+          const used   = hostData?.host_chips_used   || 0;
+          if (budget > 0 && (used + amount) > budget) {
+            return socket.emit('error', {
+              message: `Budget exceeded. You have $${(budget - used).toLocaleString()} remaining of your $${budget.toLocaleString()} budget.`
+            });
+          }
+          // Update chips used
+          await supabaseAdmin.from('users')
+            .update({ host_chips_used: used + amount }).eq('id', userId);
+        } catch (budgetErr) {
+          console.warn('[host:add_chips] budget check failed:', budgetErr.message);
+        }
+      }
+
       const tId = socket.currentTableId;
       const game = tId ? activeGames.get(tId) : null;
 
@@ -977,21 +997,73 @@ function setupSocketHandlers(io) {
         broadcastGameState(io, tId, game);
       }
 
+      // Log transaction with actor info
+      logTransaction({
+        userId: targetUserId,
+        username: '',
+        type: 'host_add_chips',
+        amount,
+        tableName: game?.tableName || tId || null,
+        notes: JSON.stringify({ actorId: userId, actorName: username })
+      });
+
       // Persist to DB and notify player
       try {
         const { data: pu } = await supabaseAdmin.from('users').select('chips, phone, email, username').eq('id', targetUserId).single();
         if (pu) {
           await supabaseAdmin.from('users').update({ chips: pu.chips + amount }).eq('id', targetUserId);
-          const notifText = `Boston Poker Club: $${amount.toLocaleString()} chips added to your account. You can now join a table!`;
-          const notifHtml = `<p>Hi <strong>${pu.username || 'there'}</strong>,</p><p><strong>$${amount.toLocaleString()} chips</strong> have been added to your account by the host.</p><p>New balance: <strong>$${(pu.chips + amount).toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— Boston Poker Club</p>`;
+          const notifText = `Boston Poker Club: $${amount.toLocaleString()} chips added to your account by ${username}. You can now join a table!`;
+          const notifHtml = `<p>Hi <strong>${pu.username || 'there'}</strong>,</p><p><strong>$${amount.toLocaleString()} chips</strong> have been added to your account by <strong>${username}</strong>.</p><p>New balance: <strong>$${(pu.chips + amount).toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— Boston Poker Club</p>`;
           if (pu.phone) sendPlayerSMS({ phone: pu.phone, text: notifText }).catch(() => {});
           if (pu.email) sendPlayerEmail({ to: pu.email, subject: `$${amount.toLocaleString()} chips added — Boston Poker Club`, text: notifText, html: notifHtml }).catch(() => {});
         }
       } catch {}
 
+      console.log(`[host:add_chips] ${username} (${isAdmin ? 'admin' : 'host'}) added ${amount} chips to user ${targetUserId}`);
       socket.emit('chips_added', { targetUserId, amount, by: username });
       const targetSid = userSockets.get(targetUserId);
       if (targetSid) io.to(targetSid).emit('chips_received', { amount, from: username });
+    });
+
+    // ─── Game Pause / Resume ──────────────────────────────────────────────
+
+    socket.on('host:pause_game', ({ tableId: tId, reason }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = tIdFinal ? activeGames.get(tIdFinal) : null;
+      if (!game) return socket.emit('error', { message: 'No active game' });
+
+      game.isPaused    = true;
+      game.pauseReason = reason || null;
+      game.pausedAt    = Date.now();
+      game.pausedBy    = username;
+
+      broadcastGameState(io, tIdFinal, game);
+      io.to(tIdFinal).emit('game_paused', { reason: reason || null, by: username });
+      io.to(tIdFinal).emit('chat', { username: 'system', message: `⏸ Game paused by ${username}${reason ? `: "${reason}"` : ''}. Current hand will finish; no new hands until resumed.` });
+      console.log(`[pause] ${tIdFinal} paused by ${username}: ${reason || '(no reason)'}`);
+    });
+
+    socket.on('host:resume_game', ({ tableId: tId }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host or admin required' });
+      const game = tIdFinal ? activeGames.get(tIdFinal) : null;
+      if (!game) return socket.emit('error', { message: 'No active game' });
+
+      game.isPaused    = false;
+      game.pauseReason = null;
+      game.pausedAt    = null;
+      game.pausedBy    = null;
+
+      broadcastGameState(io, tIdFinal, game);
+      io.to(tIdFinal).emit('game_resumed', { by: username });
+      io.to(tIdFinal).emit('chat', { username: 'system', message: `▶️ Game resumed by ${username}. New hands will deal normally.` });
+      console.log(`[pause] ${tIdFinal} resumed by ${username}`);
+
+      // Auto-start if no hand running
+      if (!game.handActive && game.canStartHand()) {
+        setTimeout(() => startNewHand(io, tIdFinal, game), 2000);
+      }
     });
 
     // ─── Money Puck Events ────────────────────────────────────────────────
@@ -1121,6 +1193,10 @@ function setupSocketHandlers(io) {
         body: `${username} cashed out $${chips.toLocaleString()} chips from ${tableName}`,
         data: { userId, username, chips, tableId: tIdFinal, tableName }
       });
+      sendAdminPush(
+        `Cashout: ${username} cashed out $${chips.toLocaleString()} chips from ${tableName}.`,
+        'Player Cashout'
+      ).catch(() => {});
     });
 
     // ─── Rail / Waiting Room ──────────────────────────────────────────────
@@ -1147,6 +1223,10 @@ function setupSocketHandlers(io) {
         body: `${username}${profile.nickname ? ` (${profile.nickname})` : ''} is waiting for a seat (buy-in: $${(buyin || 0).toLocaleString()})`,
         data: { userId, username, buyin }
       });
+      sendAdminPush(
+        `Buy-in request: ${username}${profile.nickname ? ` (${profile.nickname})` : ''} wants $${(buyin || 0).toLocaleString()} chips.`,
+        'Buy-In Request'
+      ).catch(() => {});
 
       // Broadcast updated queue positions to all in rail
       railQueue.forEach((entry, i) => {
@@ -1788,6 +1868,8 @@ function enrichPlayers(players) {
 function broadcastGameState(io, tableId, game) {
   const publicState = game.getPublicState();
   publicState.players = enrichPlayers(publicState.players);
+  publicState.isPaused   = !!game.isPaused;
+  publicState.pauseReason = game.pauseReason || null;
   io.to(tableId).emit('game_state', publicState);
 
   // Send personalized state with hole cards to each player
@@ -1821,7 +1903,7 @@ function sendPersonalizedState(io, socket, game, userId) {
 // ─── Hand Flow ─────────────────────────────────────────────────────────────────
 
 async function startNewHand(io, tableId, game) {
-  if (game.handActive || !game.canStartHand()) return;
+  if (game.handActive || !game.canStartHand() || game.isPaused) return;
   // Guard against concurrent calls (e.g. two setTimeout callbacks firing close together)
   if (game._startingHand) return;
   game._startingHand = true;
@@ -1959,6 +2041,8 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
         body: `${player.username} went all-in with ${player.totalBetThisHand} chips at ${game.tableName || tableId}`,
         data: { userId: player.userId, username: player.username, amount: player.totalBetThisHand, tableId }
       });
+      const allInMsg = `${player.username} is ALL IN ($${(player.totalBetThisHand || 0).toLocaleString()}) at ${game.tableName || tableId}. Rebuy opportunity!`;
+      sendAdminPush(allInMsg, 'Player All-In').catch(() => {});
     }
   }
 

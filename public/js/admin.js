@@ -510,9 +510,22 @@ function renderHosts(hosts) {
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;min-width:120px">
           <button class="btn btn-sm btn-gold" onclick="openChipsModal('${h.id}','${esc(h.username)}')">Add Chips</button>
+          <button class="btn btn-sm btn-outline" onclick="openHostBudgetModal('${h.id}','${esc(h.username)}',${h.host_chip_budget||0},${h.host_chips_used||0})">💰 Budget</button>
+          <button class="btn btn-sm btn-outline" onclick="viewHostTransactions('${h.id}','${esc(h.username)}')">📋 Chip Log</button>
           <button class="btn btn-sm btn-red" onclick="revokeHostById('${h.id}','${esc(h.username)}')">Revoke Host</button>
           <button class="btn btn-sm btn-outline" onclick="viewPlayer('${h.id}')">View Profile</button>
         </div>
+      </div>
+      <div style="margin-top:8px;padding:6px 8px;background:rgba(255,255,255,.03);border-radius:6px;font-size:.78rem;display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+        <span style="color:var(--text-dim)">Chip Budget:</span>
+        ${(h.host_chip_budget||0) > 0
+          ? `<span style="color:var(--chip-green);font-weight:700">$${fmt(h.host_chip_budget)}</span>
+             <span style="color:var(--text-dim)">Used:</span>
+             <span style="color:${(h.host_chips_used||0) >= (h.host_chip_budget||0) ? 'var(--red)' : 'var(--gold)'}">$${fmt(h.host_chips_used||0)}</span>
+             <span style="color:var(--text-dim)">Remaining:</span>
+             <span style="color:var(--chip-green)">$${fmt(Math.max(0,(h.host_chip_budget||0)-(h.host_chips_used||0)))}</span>`
+          : '<span style="color:var(--text-dim)">Unlimited</span>'
+        }
       </div>
       ${pending > 0 ? `
       <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08)">
@@ -562,6 +575,37 @@ async function revokeHostById(id, username) {
     await apiFetch(`/api/admin/players/${id}/host`, { method: 'POST', body: { isHost: false } });
     toast(`Host access revoked for ${username}`);
     await Promise.all([loadPlayers(), loadHosts()]);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+// ─── Host Budget ─────────────────────────────────────────────────────────
+
+function openHostBudgetModal(hostId, hostUsername, currentBudget, currentUsed) {
+  const newBudget = prompt(
+    `Set chip budget for ${hostUsername}.\n` +
+    `Current: $${fmt(currentBudget)} budget / $${fmt(currentUsed)} used.\n` +
+    `Enter new budget amount (0 = unlimited):`,
+    currentBudget
+  );
+  if (newBudget === null) return;
+  const budget = parseInt(newBudget) || 0;
+  const resetUsed = budget > 0 && confirm(`Also reset the used-chips counter ($${fmt(currentUsed)}) to $0?`);
+  apiFetch(`/api/admin/hosts/${hostId}/budget`, { method: 'POST', body: { budget, reset_used: resetUsed } })
+    .then(() => { toast(`Budget set to $${fmt(budget)} for ${hostUsername}`); loadHosts(); })
+    .catch(e => toast(e.message, 'error'));
+}
+
+async function viewHostTransactions(hostId, hostUsername) {
+  try {
+    const txs = await apiFetch(`/api/admin/hosts/${hostId}/transactions`);
+    if (!txs.length) { alert(`No chip-add transactions found for ${hostUsername}.`); return; }
+    const lines = txs.slice(0, 50).map(t => {
+      const d = new Date(t.created_at).toLocaleString();
+      const target = t.username || t.user_id?.slice(0,8) || '?';
+      return `${d}  +$${fmt(t.amount)} → ${target}  [${t.table_name || 'no table'}]`;
+    });
+    const total = txs.reduce((s, t) => s + (t.amount || 0), 0);
+    alert(`Chip log for ${hostUsername} (${txs.length} transactions, total $${fmt(total)}):\n\n${lines.join('\n')}`);
   } catch (e) { toast(e.message, 'error'); }
 }
 

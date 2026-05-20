@@ -457,40 +457,77 @@ input, select, textarea { font-family: inherit; }
 .seat-box.empty { border: 1px dashed rgba(255,255,255,0.2); color: #555; cursor: pointer; }
 .seat-box.empty:hover { border-color: var(--gold); color: var(--gold); }
 .seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; margin-top: 5px; }
-.seat-chips { font-size: 0.80rem; line-height: 1.4; }
+.seat-chips { font-size: 0.80rem; line-height: 1.4; position: relative; }
 .seat-bet { color: var(--chip-green); font-size: 0.78rem; min-height: 14px; }
 .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
 .seat-cards .card { width: 40px; height: 58px; font-size: 0.82rem; border-radius: 5px; }
 
 /* ─── Chip Stack visuals ─────────────────────────────────────────────────── */
-.chip-stack { display: inline-flex; align-items: center; gap: 2px; vertical-align: middle; }
+.chip-stack { display: inline-flex; align-items: center; gap: 3px; vertical-align: middle; flex-wrap: wrap; }
 .chip-dot {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   border: 2px solid transparent;
-  box-shadow: inset 0 2px 3px rgba(255,255,255,.25), inset 0 -2px 3px rgba(0,0,0,.45), 0 1px 4px rgba(0,0,0,.6);
+  box-shadow:
+    inset 0 2px 4px rgba(255,255,255,.30),
+    inset 0 -2px 4px rgba(0,0,0,.50),
+    0 2px 6px rgba(0,0,0,.7),
+    0 0 0 1px rgba(255,255,255,.08);
   flex-shrink: 0;
   position: relative;
+  cursor: default;
+}
+.chip-dot::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  border-radius: 50%;
+  border: 1px dashed rgba(255,255,255,.18);
 }
 .chip-dot::after {
   content: '';
   position: absolute;
-  inset: 3px;
+  inset: 4px;
   border-radius: 50%;
-  border: 1px solid rgba(255,255,255,.15);
+  border: 1px solid rgba(255,255,255,.10);
 }
 .chip-dot-n {
   font-size: 7px;
   font-weight: 900;
   line-height: 1;
-  text-shadow: 0 1px 2px rgba(0,0,0,.8);
+  text-shadow: 0 1px 3px rgba(0,0,0,.9);
   z-index: 1;
+  letter-spacing: -.5px;
 }
-.chip-total { color: var(--gold); font-size: 0.78rem; font-weight: 700; margin-left: 2px; }
+.chip-total { color: var(--gold); font-size: 0.80rem; font-weight: 700; margin-left: 3px; }
+
+/* Chip breakdown panel (shown on hover) */
+.chip-breakdown {
+  display: none;
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10,20,14,.97);
+  border: 1px solid rgba(0,200,80,.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  z-index: 300;
+  min-width: 150px;
+  font-size: .72rem;
+  box-shadow: 0 4px 20px rgba(0,0,0,.7);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.seat-chips:hover .chip-breakdown { display: block; }
+.chip-breakdown-row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+.chip-breakdown-dot { width:11px;height:11px;border-radius:50%;border:1.5px solid transparent;flex-shrink:0; }
+.chip-breakdown-label { color: rgba(255,255,255,.7); flex:1; }
+.chip-breakdown-value { color: var(--gold); font-weight: 700; }
 
 .dealer-puck {
   position: absolute;
@@ -1186,8 +1223,9 @@ input, select, textarea { font-family: inherit; }
   .seat-box { min-width: 72px; padding: 2px 4px; font-size: 0.58rem; }
   .seat-name { max-width: 62px; font-size: 0.58rem; }
   .seat-chips { font-size: 0.52rem; }
-  .chip-dot { width: 11px; height: 11px; }
+  .chip-dot { width: 12px; height: 12px; }
   .chip-total { font-size: 0.70rem; }
+  .chip-breakdown { display: none !important; }
   .seat-cards .card { width: 26px; height: 38px; font-size: 0.56rem; }
   .card.large { width: 62px; height: 90px; font-size: 1.1rem; }
   .action-btn { min-height: 54px; font-size: 0.78rem; }
@@ -1669,8 +1707,9 @@ input, select, textarea { font-family: inherit; }
   body.table-page .seat-cards .card { width: 20px; height: 30px; font-size: 0.46rem; }
   body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.44rem; top: -7px; right: -7px; }
   body.table-page .money-puck { min-width: 26px; height: 16px; font-size: 0.44rem; top: -8px; left: -8px; }
-  body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
+  body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
   body.table-page .chip-total { font-size: 0.6rem; }
+  body.table-page .chip-breakdown { display: none !important; }
   body.table-page .seat-avatar { width: 24px; height: 24px; }
   body.table-page .seat-initials { font-size: 0.58rem; }
   body.table-page .seat-cam-video { border-radius: 50%; }
