@@ -1754,6 +1754,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page #mic-test-btn { display: none; }
   body.table-page #sound-toggle-btn { display: none; }
   body.table-page #cam-toggle-btn { display: none; }
+  body.table-page #voice-toggle-btn { display: none; }
 
   /* 11 ─ Host panel: collapsed by default (header only), positioned below table header */
   body.table-page #host-controls {

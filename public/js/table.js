@@ -433,6 +433,7 @@ function connect() {
 
   socket.on('hand_started', ({ handNumber, dealerSeat }) => {
     console.log('[hand_started] hand:', handNumber, 'dealer seat:', dealerSeat);
+    if (window.DealerVoice) DealerVoice.onHandStarted({ handNumber, dealerSeat }, gameState);
     _clearShowdownHighlights();
     currentRunoutCards = null;
     if (window.Sound) Sound.newHand();
@@ -450,6 +451,7 @@ function connect() {
 
   socket.on('action_required', ({ seatNumber, userId: actingUserId, callAmount, pot }) => {
     console.log('[action_required] seat:', seatNumber, 'userId:', actingUserId, 'callAmt:', callAmount);
+    if (window.DealerVoice) DealerVoice.onActionRequired({ seatNumber }, gameState);
     const isMe = actingUserId === user.id;
     if (isMe) {
       toast('Your turn!');
@@ -458,6 +460,7 @@ function connect() {
   });
 
   socket.on('player_acted', ({ action, amount, username: actorName, isAllIn }) => {
+    if (window.DealerVoice) DealerVoice.onPlayerActed({ action, username: actorName, isAllIn });
     if (!window.Sound) return;
     if (isAllIn) { Sound.allIn(); return; }
     switch (action) {
@@ -481,6 +484,7 @@ function connect() {
 
   socket.on('street_changed', ({ street, communityCards, allInRunout, allHoleCards }) => {
     console.log('[street_changed]', street, '|', communityCards?.map(c => c.rank + c.suit).join(' '), allInRunout ? '(all-in runout)' : '');
+    if (window.DealerVoice) DealerVoice.onStreetChanged({ street });
     if (gameState) {
       gameState.currentStreet = street;
       gameState.communityCards = communityCards;
@@ -519,6 +523,7 @@ function connect() {
 
   socket.on('hand_ended', (result) => {
     console.log('[hand_ended] winners:', result.winners?.map(w => w.username), 'folded:', result.folded, 'rake:', result.rakeCollected);
+    if (window.DealerVoice) DealerVoice.onHandEnded(result);
     stopShotClock();
     clearSeatTimer();
     prevBets = {};

@@ -212,6 +212,7 @@
     <button id="cam-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleCamera()" title="Camera off — click to enable" style="font-size:.75rem;padding:4px 8px;opacity:.5">📷</button>
     <button class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
+    <button id="voice-toggle-btn" class="btn btn-sm btn-outline" onclick="DealerVoice.toggle()" title="Dealer voice on — click to mute" style="font-size:.75rem;padding:4px 8px">🔈 Voice</button>
     <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
 </div>
@@ -300,6 +301,7 @@
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/auth.js"></script>
 <script src="/js/sounds.js"></script>
+<script src="/js/dealerVoice.js"></script>
 <script src="/js/table.js"></script>
 <script src="/js/pwa.js"></script>
 <script src="/js/maintenance-banner.js"></script>
