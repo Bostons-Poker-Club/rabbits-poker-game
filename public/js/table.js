@@ -1234,6 +1234,8 @@ function updateActionButtons(state) {
   btnRaise.disabled = !isMyTurn;
   if (btnAllIn) btnAllIn.disabled = !isMyTurn;
 
+  const allinAmountEl = document.getElementById('allin-amount');
+
   if (isMyTurn) {
     const callAmt = state.callAmount || 0;
     callAmountEl.textContent = callAmt ? `$${fmt(callAmt)}` : '';
@@ -1242,6 +1244,8 @@ function updateActionButtons(state) {
     const max = state.maxRaiseAmount || 0;  // always = player.chips + player.currentBet
     currentMinRaise = min;
     currentMaxRaise = max;
+
+    if (allinAmountEl) allinAmountEl.textContent = max ? `$${fmt(max)}` : '';
 
     // Set slider bounds to exact chip stack
     raiseSlider.min = min;
@@ -1253,13 +1257,13 @@ function updateActionButtons(state) {
     updateRaiseDisplay();
 
     if (state.potLimitMax) {
-      // PLO: show pot-limit cap but still enforce chip stack
       document.getElementById('raise-display').textContent = `up to $${fmt(Math.min(state.potLimitMax, max))}`;
     }
   } else {
-    // Not our turn — reset limits so stale values don't leak into validation
     currentMinRaise = 0;
     currentMaxRaise = 0;
+    if (allinAmountEl) allinAmountEl.textContent = '';
+    callAmountEl.textContent = '';
   }
 }
 

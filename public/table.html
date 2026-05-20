@@ -179,29 +179,19 @@
   <!-- Action buttons -->
   <div class="action-area" id="action-area">
     <button class="action-btn btn-fold" id="btn-fold"
-      ontouchstart="actTouch('fold',event)" onclick="act('fold')" disabled>
-      FOLD
-    </button>
+      ontouchstart="actTouch('fold',event)" onclick="act('fold')" disabled>FOLD</button>
     <button class="action-btn btn-check" id="btn-check"
-      ontouchstart="actTouch('check',event)" onclick="act('check')" disabled>
-      CHECK
-    </button>
+      ontouchstart="actTouch('check',event)" onclick="act('check')" disabled>CHECK</button>
     <button class="action-btn btn-call" id="btn-call"
-      ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>
-      CALL<span class="sub" id="call-amount"></span>
-    </button>
-    <div class="raise-controls">
-      <button class="action-btn btn-raise" id="btn-raise"
-        ontouchstart="actTouch('raise',event)" onclick="act('raise')" disabled>
-        RAISE<span class="sub" id="raise-display">–</span>
-      </button>
+      ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>CALL<span class="sub" id="call-amount"></span></button>
+    <button class="action-btn btn-raise" id="btn-raise"
+      ontouchstart="actTouch('raise',event)" onclick="act('raise')" disabled>RAISE<span class="sub" id="raise-display">–</span></button>
+    <button class="action-btn btn-allin" id="btn-allin"
+      ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled>ALL IN<span class="sub" id="allin-amount"></span></button>
+    <!-- Raise slider panel — in landscape this becomes a floating overlay above the bar -->
+    <div class="raise-controls" id="raise-controls">
       <input type="range" id="raise-slider" min="0" max="0" value="0" oninput="onRaiseSlider()" style="touch-action:none">
       <input type="number" id="raise-input" inputmode="numeric" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
-      <button class="action-btn btn-allin" id="btn-allin"
-        ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled
-        style="background:linear-gradient(135deg,#8b0000,#c0392b);border-color:#e74c3c;font-size:.75rem;padding:0 10px;min-width:60px">
-        ALL IN
-      </button>
     </div>
     <button class="break-btn" id="btn-break" onclick="requestBreak()">☕ Break (3)</button>
     <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()" ontouchcancel="stopPTT()">🎙 Hold to Talk</button>
@@ -214,6 +204,9 @@
     <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
 </div>
+
+<!-- Chat bubble: landscape mobile only, fixed bottom-right -->
+<button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
 
 <!-- Portrait rotate overlay (only shown in portrait on mobile) -->
 <div id="rotate-overlay" class="rotate-overlay">

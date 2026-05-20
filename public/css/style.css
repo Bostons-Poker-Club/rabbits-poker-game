@@ -652,6 +652,8 @@ input, select, textarea { font-family: inherit; }
 .btn-check:hover:not(:disabled) { background: linear-gradient(160deg,#607d8b,#455a64); }
 .btn-raise { background: linear-gradient(160deg,#c8930a,#9a6e08); color: #fff; box-shadow: 0 3px 10px rgba(200,147,10,.4); }
 .btn-raise:hover:not(:disabled) { background: linear-gradient(160deg,#d4a017,#b8860b); }
+.btn-allin { background: linear-gradient(160deg,#8b0000,#c0392b); color: #fff; box-shadow: 0 3px 10px rgba(192,57,43,.4); }
+.btn-allin:hover:not(:disabled) { background: linear-gradient(160deg,#a00000,#d44a39); }
 
 .raise-controls {
   display: flex;
@@ -1610,23 +1612,48 @@ input, select, textarea { font-family: inherit; }
   text-align: center;
 }
 
-/* ─── Landscape Mobile: Full-screen no-scroll layout ─────────────────────── */
+/* ─── Seat glow animation (active player's turn) ────────────────────────── */
+@keyframes rpSeatGlow {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(212,175,55,0.45), 0 0 10px rgba(212,175,55,0.6); }
+  50%       { box-shadow: 0 0 0 3px rgba(212,175,55,0.65), 0 0 18px rgba(212,175,55,0.9); }
+}
+
+/* ─── Chat bubble button (landscape mobile only) ─────────────────────────── */
+.chat-bubble-btn {
+  display: none; /* only shown via landscape media query */
+  position: fixed;
+  bottom: 88px;
+  right: 10px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(200,168,75,0.18);
+  border: 2px solid rgba(200,168,75,0.55);
+  color: #fff;
+  font-size: 1.15rem;
+  cursor: pointer;
+  z-index: 140;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 2px 14px rgba(0,0,0,0.55);
+  transition: background 0.15s, transform 0.1s;
+}
+.chat-bubble-btn:active { transform: scale(0.92); background: rgba(200,168,75,0.3); }
+
+/* ─── Landscape Mobile: Clean modern layout ──────────────────────────────── */
 /*
- * Target: phones in true landscape (Android + orientation-lock PWA).
- * iPhone 14 landscape = 844×390px  →  100dvh = 390px
- * Samsung Galaxy S21   = 915×412px  →  100dvh = 412px
- *
- * Height budget (390px example):
- *   28px  header
- *   222px oval  (calc(100dvh - 168px) = 390 - 168)
- *   60px  action bar
- *   ─────────────
- *   310px subtotal, leaving 80px for seat overflow above/below the oval
- *   (seats-container inset -22px + seat box ~18px half-height = 40px each side)
+ * Layout tiers (390px iPhone 14 landscape):
+ *   40px  top bar
+ *   270px oval area  (100dvh − 40 − 80 = 270px, seats overflow ±28px)
+ *   80px  bottom bar  left=80px hole cards | right=1fr action buttons
+ * Seats: 42px circular avatar + name label below (no box background)
+ * Raise slider: absolute panel that floats above the bottom bar
  */
 @media (max-height: 500px) and (orientation: landscape) {
 
-  /* 1 ─ Lock body to exactly one viewport, flex column */
+  /* 1 ─ Full-screen flex column */
   body.table-page {
     display: flex;
     flex-direction: column;
@@ -1635,41 +1662,59 @@ input, select, textarea { font-family: inherit; }
     overflow: hidden;
   }
 
-  /* 2 ─ Header: 28px single row */
+  /* 2 ─ Top bar: 40px */
   body.table-page .table-header {
     flex-shrink: 0;
-    height: 28px;
-    min-height: 28px;
-    max-height: 28px;
-    padding: 0 8px;
-    font-size: 0.6rem;
+    height: 40px;
+    min-height: 40px;
+    max-height: 40px;
+    padding: 0 10px;
+    font-size: 0.68rem;
     flex-wrap: nowrap;
-    gap: 4px;
+    gap: 6px;
     align-items: center;
     overflow: hidden;
+    background: rgba(0,0,0,0.9);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
   }
   body.table-page .table-header .table-info-bar {
-    font-size: 0.58rem;
-    gap: 4px;
+    font-size: 0.62rem;
+    gap: 6px;
     flex-wrap: nowrap;
     min-width: 0;
     overflow: hidden;
   }
   body.table-page #hdr-jackpot-timer { display: none; }
-  body.table-page .jackpot-mini { font-size: 0.6rem; }
+  body.table-page .jackpot-mini { font-size: 0.62rem; }
   body.table-page #host-hh-btn { display: none !important; }
+  body.table-page #chat-toggle { display: none; }
 
-  /* 3 ─ Table-main fills all space between header and action bar */
+  /* 3 ─ Table-main fills space between top bar and bottom bar */
   body.table-page .table-main {
     flex: 1 1 0;
     min-height: 0;
-    overflow: visible;   /* let seats overflow into header/action bar margins */
+    overflow: visible;
     grid-template-columns: 1fr;
     grid-template-rows: 1fr;
   }
-  body.table-page .chat-panel { display: none !important; }
 
-  /* 4 ─ Poker area: fills table-main, centers the wrap */
+  /* Chat: fixed side panel, toggled via chat-bubble-btn */
+  body.table-page .chat-panel {
+    display: none;
+    position: fixed !important;
+    top: 40px;
+    bottom: 80px;
+    right: 0;
+    width: min(260px, 65vw);
+    z-index: 150;
+    background: rgba(5,12,8,0.97) !important;
+    border-left: 1px solid var(--border) !important;
+    box-shadow: -6px 0 20px rgba(0,0,0,0.5);
+    flex-direction: column;
+  }
+  body.table-page .chat-panel.open { display: flex !important; }
+
+  /* 4 ─ Poker area */
   body.table-page .poker-area {
     height: 100%;
     overflow: visible;
@@ -1679,16 +1724,16 @@ input, select, textarea { font-family: inherit; }
     justify-content: center;
   }
 
-  /* 5 ─ Oval: height-driven 2:1 sizing
-   *   oval-height = 100dvh − 28(header) − 60(actions) − 80(seat buffer) = 100dvh − 168px
-   *   oval-width  = 2 × oval-height
-   *   max-width caps it if the screen is unusually narrow
+  /* 5 ─ Oval: height-driven 2:1
+   *   oval-height = 100dvh − 40(header) − 80(bottom) − 70(seat margins) = 100dvh − 190px
+   *   iPhone 14 (390px): 200px height → 400px width ✓
+   *   Galaxy S21 (412px): 222px height → 444px width ✓
    */
   body.table-page .poker-table-wrap {
     position: relative;
-    height: calc(100dvh - 168px);
-    width: calc(2 * (100dvh - 168px));
-    max-width: calc(100dvw - 80px);
+    height: calc(100dvh - 190px);
+    width: calc(2 * (100dvh - 190px));
+    max-width: calc(100dvw - 56px);
     flex-shrink: 0;
     margin: 0 auto;
   }
@@ -1696,105 +1741,169 @@ input, select, textarea { font-family: inherit; }
     width: 100%;
     height: 100%;
     aspect-ratio: unset;
-    border-width: 4px;
+    border-width: 5px;
     border-radius: 50%;
   }
 
-  /* 6 ─ Seats: small enough to fit in available margin around oval */
-  body.table-page .seats-container { inset: -22px; }
+  /* 6 ─ Circular seat design */
+  body.table-page .seats-container { inset: -28px; }
+  /* Strip the rectangle — seat is just a circle + label */
   body.table-page .seat-box {
-    min-width: 68px;
-    padding: 2px 5px;
-    font-size: 0.52rem;
-    border-radius: 6px;
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0;
+    min-width: 0;
+    gap: 1px;
   }
-  body.table-page .seat-name { max-width: 60px; font-size: 0.52rem; }
-  body.table-page .seat-chips { font-size: 0.5rem; }
-  body.table-page .seat-bet { font-size: 0.48rem; min-height: 9px; }
-  body.table-page .seat-cards .card { width: 20px; height: 30px; font-size: 0.46rem; }
-  body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.44rem; top: -7px; right: -7px; }
-  body.table-page .money-puck { min-width: 26px; height: 16px; font-size: 0.44rem; top: -8px; left: -8px; }
-  body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
-  body.table-page .chip-total { font-size: 0.6rem; }
+  body.table-page .seat-avatar {
+    width: 42px;
+    height: 42px;
+    border-width: 2px;
+    border-color: rgba(255,255,255,0.22);
+  }
+  /* Gold glow ring when it's this player's turn */
+  body.table-page .seat-box.active-player .seat-avatar {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 2px rgba(212,175,55,0.45), 0 0 12px rgba(212,175,55,0.75) !important;
+    animation: rpSeatGlow 1.4s ease-in-out infinite;
+  }
+  body.table-page .seat-box.folded { opacity: 0.28; }
+  body.table-page .seat-box.empty {
+    width: 38px !important;
+    height: 38px !important;
+    min-width: 0 !important;
+    border-radius: 50% !important;
+    border: 1px dashed rgba(255,255,255,0.22) !important;
+    background: rgba(0,0,0,0.28) !important;
+    padding: 0 !important;
+    font-size: 0 !important;
+    overflow: hidden;
+  }
+  body.table-page .seat-box.empty:hover {
+    border-color: rgba(212,175,55,0.7) !important;
+    background: rgba(212,175,55,0.08) !important;
+  }
+  body.table-page .seat-initials { font-size: 1.05rem; }
+  body.table-page .seat-name {
+    font-size: 0.46rem;
+    max-width: 52px;
+    margin-top: 2px;
+    font-weight: 600;
+    text-align: center;
+    color: rgba(255,255,255,0.92);
+    letter-spacing: 0;
+  }
+  body.table-page .seat-chips { font-size: 0.42rem; text-align: center; line-height: 1; }
+  body.table-page .seat-bet { font-size: 0.40rem; min-height: 8px; }
+  body.table-page .seat-cards .card { width: 16px; height: 24px; font-size: 0.36rem; border-radius: 2px; }
+  body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.44rem; top: -5px; right: -5px; }
+  body.table-page .money-puck { min-width: 22px; height: 13px; font-size: 0.40rem; top: -6px; left: -6px; }
+  body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
+  body.table-page .chip-total { font-size: 0.56rem; }
   body.table-page .chip-breakdown { display: none !important; }
-  body.table-page .seat-avatar { width: 24px; height: 24px; }
-  body.table-page .seat-initials { font-size: 0.58rem; }
-  body.table-page .seat-cam-video { border-radius: 50%; }
 
-  /* 7 ─ Community cards: readable but small */
-  body.table-page .community-area { gap: 4px; }
+  /* 7 ─ Community cards */
+  body.table-page .community-area { gap: 3px; }
   body.table-page .community-cards { gap: 3px; }
-  body.table-page .community-cards .card { width: 26px; height: 38px; font-size: 0.54rem; }
-  body.table-page .pot-display .pot-amount { font-size: 0.85rem; }
+  body.table-page .community-cards .card { width: 28px; height: 42px; font-size: 0.62rem; }
+  body.table-page .pot-display .pot-amount { font-size: 0.9rem; }
   body.table-page .pot-display .pot-label { font-size: 0.58rem; }
 
-  /* 8 ─ Action bar: 60px fixed, single unwrapped row, no scroll */
+  /* 8 ─ Bottom bar: 80px, 2-column grid */
   body.table-page .my-cards-area {
     flex-shrink: 0;
-    height: 60px;
-    min-height: 60px;
-    max-height: 60px;
-    padding: 4px 8px;
-    gap: 5px;
-    flex-wrap: nowrap;
-    flex-direction: row;
-    align-items: center;
-    overflow: hidden;
-    border-top: 1px solid var(--border);
+    height: 80px;
+    min-height: 80px;
+    max-height: 80px;
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    align-items: stretch;
+    padding: 0;
+    gap: 0;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.92);
+    position: relative;
+    overflow: visible;
   }
-  body.table-page .my-hole-cards { gap: 3px; flex-shrink: 0; }
-  body.table-page .card.large { width: 36px; height: 52px; font-size: 0.72rem; }
-  body.table-page .shot-clock { width: 32px; height: 32px; flex-shrink: 0; }
-  body.table-page .shot-clock-number { font-size: 0.65rem; }
 
-  /* 9 ─ FOLD / CHECK / CALL / RAISE all on one row */
-  body.table-page .action-area {
-    flex-wrap: nowrap;
-    gap: 4px;
-    flex: 1;
-    min-width: 0;
+  /* Shot clock: floats above the bottom bar at the left edge */
+  body.table-page .shot-clock {
+    position: absolute;
+    top: -44px;
+    left: 6px;
+    width: 34px;
+    height: 34px;
+    z-index: 20;
+  }
+  body.table-page .shot-clock-number { font-size: 0.62rem; }
+
+  /* Left column: hole cards */
+  body.table-page .my-hole-cards {
+    display: flex;
     align-items: center;
-    overflow: hidden;
+    justify-content: center;
+    gap: 5px;
+    padding: 6px 5px;
+    border-right: 1px solid rgba(255,255,255,0.09);
+    background: rgba(0,0,0,0.25);
+  }
+  body.table-page .card.large { width: 38px; height: 56px; font-size: 0.78rem; }
+
+  /* 9 ─ Right column: action buttons */
+  body.table-page .action-area {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 8px;
+    overflow: visible;
     height: 100%;
+    position: static;
+    flex-wrap: nowrap;
   }
   body.table-page .action-btn {
     flex: 1 1 0;
-    height: 48px;
-    min-height: 48px;
+    height: 56px;
+    min-height: 56px;
     min-width: 0;
-    font-size: 0.7rem;
+    font-size: 0.64rem;
     padding: 2px 3px;
-    border-radius: 8px;
-  }
-  body.table-page .raise-controls {
-    flex-wrap: nowrap;
-    gap: 3px;
-    align-items: center;
-    flex-shrink: 1;
-    min-width: 0;
-    height: 100%;
-  }
-  body.table-page .raise-controls input[type=range] {
-    height: 22px;
-    min-width: 48px;
-    max-width: 72px;
-    flex: 1;
-    accent-color: var(--blue);
-  }
-  body.table-page .raise-controls input[type=number] {
-    width: 44px;
-    padding: 3px 4px;
-    font-size: 0.68rem;
-    height: 26px;
-  }
-  body.table-page #btn-allin {
-    font-size: 0.58rem !important;
-    padding: 0 5px !important;
-    min-width: 44px !important;
-    height: 48px !important;
+    border-radius: 10px;
   }
 
-  /* 10 ─ Hide non-essential items to keep action bar clean */
+  /* 10 ─ Raise slider: absolute overlay above bottom bar */
+  body.table-page .raise-controls {
+    position: absolute;
+    bottom: 80px;
+    left: 0;
+    right: 0;
+    background: rgba(4,12,6,0.96);
+    border: 1px solid rgba(200,168,75,0.3);
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 6px 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 31;
+    flex-wrap: nowrap;
+  }
+  body.table-page .raise-controls input[type=range] {
+    flex: 1;
+    height: 26px;
+    min-width: 60px;
+    accent-color: var(--gold);
+    touch-action: none;
+  }
+  body.table-page .raise-controls input[type=number] {
+    width: 56px;
+    padding: 3px 5px;
+    font-size: 0.72rem;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  /* 11 ─ Hide utility buttons in landscape */
   body.table-page .ptt-btn { display: none; }
   body.table-page .break-btn { display: none; }
   body.table-page #mic-test-btn { display: none; }
@@ -1802,9 +1911,9 @@ input, select, textarea { font-family: inherit; }
   body.table-page #cam-toggle-btn { display: none; }
   body.table-page #voice-toggle-btn { display: none; }
 
-  /* 11 ─ Host panel: collapsed by default (header only), positioned below table header */
+  /* 12 ─ Host panel: collapsed */
   body.table-page #host-controls {
-    top: 32px !important;
+    top: 44px !important;
     right: 4px !important;
     padding: 4px 8px !important;
     min-width: 0 !important;
@@ -1813,11 +1922,11 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page #host-controls #host-controls-inner { display: none; }
 
-  /* 12 ─ Mic panel: collapsed by default */
+  /* 13 ─ Mic panel: collapsed */
   body.table-page #mic-controls-panel {
-    top: 32px !important;
+    top: 44px !important;
     left: 4px !important;
-    max-height: calc(100dvh - 100px);
+    max-height: calc(100dvh - 124px);
     max-width: 200px;
     padding: 4px 8px !important;
     min-width: 0 !important;
@@ -1825,12 +1934,12 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page #mic-controls-panel #mic-controls-inner { display: none; }
 
-  /* 13 ─ Blind timer: compact floating pill */
-  body.table-page #blind-timer-panel {
-    padding: 3px 6px !important;
-    font-size: 0.58rem;
-  }
+  /* 14 ─ Blind timer */
+  body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
   body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
+
+  /* 15 ─ Chat bubble visible in landscape */
+  body.table-page .chat-bubble-btn { display: flex; }
 }
 
 /* ─── PORTRAIT MOBILE: Bottom-heavy poker layout (≤600px wide, portrait) ─── */
@@ -1944,13 +2053,30 @@ input, select, textarea { font-family: inherit; }
     border-radius: 10px;
     width: 100%;
   }
-  /* Raise controls: full-width second row */
+  /* ALL IN: col 1 of row 2, raise-controls spans cols 2-4 of row 2 */
+  body.table-page #btn-allin {
+    grid-column: 1;
+    grid-row: 2;
+    min-height: 56px !important;
+    height: 56px;
+    font-size: 0.7rem !important;
+    padding: 4px !important;
+    min-width: 0 !important;
+    background: linear-gradient(160deg,#8b0000,#c0392b) !important;
+  }
   body.table-page .raise-controls {
-    grid-column: 1 / -1;
+    grid-column: 2 / -1;
+    grid-row: 2;
     display: flex;
     gap: 6px;
     align-items: center;
     flex-wrap: nowrap;
+    position: static;
+    background: none;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+    z-index: auto;
   }
   body.table-page .raise-controls input[type=range] {
     flex: 1;
@@ -1963,13 +2089,6 @@ input, select, textarea { font-family: inherit; }
     padding: 6px 4px;
     font-size: 0.88rem;
     height: 34px;
-  }
-  body.table-page #btn-allin {
-    min-height: 56px !important;
-    height: 56px;
-    font-size: 0.7rem !important;
-    padding: 4px !important;
-    min-width: 0 !important;
   }
 
   /* ── Hide non-essential controls ── */
