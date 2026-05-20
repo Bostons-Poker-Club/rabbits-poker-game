@@ -15,6 +15,8 @@ let socket = null;
 let gameState = null;
 let myState = null;
 let shotClockInterval = null;
+let _reconnectTimer = null;
+let _reconnectTapTimer = null;
 let shotClockEnd = 0;
 let chatOpen = false;
 let prevBets = {};       // seatNumber -> last known currentBet
@@ -365,13 +367,35 @@ function _escHl(s) {
 
 // ─── Connect ──────────────────────────────────────────────────────────────
 
+function manualReconnect() {
+  if (socket) {
+    socket.connect();
+  } else {
+    connect();
+  }
+}
+
 function connect() {
-  socket = io({ auth: { token: getToken() } });
+  socket = io({
+    transports: ['websocket'],
+    upgrade: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 5000,
+    timeout: 30000,
+    auth: { token: getToken() }
+  });
   window.tableSocket = socket; // expose globally for inline scripts
 
   socket.on('connect', () => {
     console.log('[socket] connected, socketId:', socket.id);
-    document.getElementById('reconnecting-banner').style.display = 'none';
+    clearTimeout(_reconnectTapTimer);
+    clearTimeout(_reconnectTimer);
+    // Hide banner after brief delay so user sees it restored
+    _reconnectTimer = setTimeout(() => {
+      document.getElementById('reconnecting-banner').style.display = 'none';
+    }, 500);
     if (spectateMode) {
       socket.emit('admin:spectate', { tableId });
       checkMicPermission();
@@ -383,7 +407,10 @@ function connect() {
   });
 
   socket.on('connect_error', (err) => {
-    toast(`Connection error: ${err.message}`, 'error');
+    // Only toast on first error — banner handles the ongoing reconnect state
+    if (document.getElementById('reconnecting-banner')?.style.display !== 'block') {
+      toast(`Connection error: ${err.message}`, 'error');
+    }
   });
 
   socket.on('joined_table', ({ seatNumber, chips, tableName, feltColor }) => {
@@ -762,8 +789,18 @@ function connect() {
     _showStraddleOffer(amount, deadline);
   });
 
-  socket.on('disconnect', () => {
-    document.getElementById('reconnecting-banner').style.display = 'block';
+  socket.on('disconnect', (reason) => {
+    const banner = document.getElementById('reconnecting-banner');
+    const status = document.getElementById('reconnect-status');
+    const tapBtn = document.getElementById('reconnect-tap-btn');
+    if (banner) banner.style.display = 'block';
+    if (tapBtn) tapBtn.style.display = 'none';
+    if (status) status.textContent = '⚠️ Connection lost — reconnecting…';
+    // Show tap-to-reconnect button after 10s
+    _reconnectTapTimer = setTimeout(() => {
+      if (tapBtn) tapBtn.style.display = '';
+      if (status) status.textContent = '⚠️ Connection lost —';
+    }, 10000);
   });
 
   // ─── WebRTC PTT ─────────────────────────────────────────────────────────

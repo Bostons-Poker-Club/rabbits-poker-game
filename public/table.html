@@ -280,8 +280,9 @@
 </div>
 
 <!-- Reconnecting banner -->
-<div id="reconnecting-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b8240a;color:#fff;font-weight:700;font-size:.9rem;text-align:center;padding:10px;letter-spacing:.03em">
-  ⚠️ Connection lost — reconnecting…
+<div id="reconnecting-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#b8240a;color:#fff;font-weight:700;font-size:.9rem;text-align:center;padding:10px 10px 10px;letter-spacing:.03em">
+  <span id="reconnect-status">⚠️ Connection lost — reconnecting…</span>
+  <button id="reconnect-tap-btn" onclick="manualReconnect()" style="display:none;margin-left:12px;background:rgba(255,255,255,.25);border:1px solid rgba(255,255,255,.5);border-radius:6px;color:#fff;font-weight:700;font-size:.85rem;padding:4px 14px;cursor:pointer">Tap to reconnect</button>
 </div>
 
 <!-- Toast container -->

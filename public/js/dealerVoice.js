@@ -1,34 +1,76 @@
 'use strict';
 /* ─── Dealer Voice Announcer ───────────────────────────────────────────────── *
- * Narrates game events using Web Speech API (SpeechSynthesis).
- * Prefer a deep male English voice (Google UK English Male, Microsoft David,
- * Alex on macOS, etc.).  Falls back gracefully when speech isn't supported.
+ * Narrates game events. Uses server-side Google TTS proxy (/api/tts) when
+ * available (Neural2-D voice), falls back to Web Speech API.
  *
- * Usage:
- *   DealerVoice.toggle()          — flip on/off, persists in localStorage
- *   DealerVoice.isEnabled()       — current state
- *   DealerVoice.onHandStarted()   — call from hand_started socket event
- *   DealerVoice.onActionRequired()— call from action_required socket event
- *   DealerVoice.onPlayerActed()   — call from player_acted socket event
- *   DealerVoice.onStreetChanged() — call from street_changed socket event
- *   DealerVoice.onHandEnded()     — call from hand_ended socket event
+ * Public API:
+ *   DealerVoice.toggle()            — flip on/off, persists in localStorage
+ *   DealerVoice.isEnabled()         — current state
+ *   DealerVoice.onHandStarted(data, gameState)
+ *   DealerVoice.onActionRequired(data, gameState)
+ *   DealerVoice.onPlayerActed(data)
+ *   DealerVoice.onStreetChanged(data)
+ *   DealerVoice.onHandEnded(result)
  *** */
 
 window.DealerVoice = (() => {
   const LS_KEY = 'rp_dealer_voice';
 
-  let _enabled   = localStorage.getItem(LS_KEY) !== 'false'; // default ON
-  let _voice     = null;
-  let _queue     = [];
-  let _busy      = false;
+  let _enabled    = localStorage.getItem(LS_KEY) !== 'false';
+  let _queue      = [];
+  let _busy       = false;
   let _lastHandNum = -1;
+  let _gttsAvail  = null; // null = unknown, true = working, false = unavailable
+  const _audioCache = new Map(); // text → blob URL
 
-  // ─── Voice selection ────────────────────────────────────────────────────
-  // Prefer natural-sounding male US voices first (best on mobile/Android).
-  const PREFERRED = [
+  // ─── Google TTS ─────────────────────────────────────────────────────────
+  async function _gttsSpeak(text) {
+    if (_gttsAvail === false) return false;
+
+    // Try cache first
+    if (_audioCache.has(text)) {
+      return _playUrl(_audioCache.get(text));
+    }
+
+    try {
+      const token = sessionStorage.getItem('rp_token');
+      const res = await fetch('/api/tts', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ text }),
+        signal: AbortSignal.timeout(4000)
+      });
+
+      if (res.status === 503) { _gttsAvail = false; return false; } // not configured
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      _gttsAvail = true;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      _audioCache.set(text, url);
+      return _playUrl(url);
+    } catch (e) {
+      if (_gttsAvail === null) _gttsAvail = false; // first failure = mark unavailable
+      return false;
+    }
+  }
+
+  function _playUrl(url) {
+    return new Promise((resolve) => {
+      const audio = new Audio(url);
+      audio.onended = audio.onerror = () => resolve(true);
+      audio.play().catch(() => resolve(false));
+    });
+  }
+
+  // ─── Web Speech fallback ─────────────────────────────────────────────────
+  const WEB_PREFERRED = [
     'Google US English',
-    'Alex',          // macOS
-    'Daniel',        // macOS UK
+    'Alex',
+    'Daniel',
     'Google UK English Male',
     'Microsoft David - English (United States)',
     'Microsoft David Desktop - English (United States)',
@@ -36,80 +78,83 @@ window.DealerVoice = (() => {
     'en-US-Neural2-D',
   ];
 
-  function _pickVoice() {
+  let _webVoice = null;
+
+  function _pickWebVoice() {
     if (!window.speechSynthesis) return null;
     const voices = speechSynthesis.getVoices();
     if (!voices.length) return null;
-
-    for (const name of PREFERRED) {
+    for (const name of WEB_PREFERRED) {
       const v = voices.find(v => v.name === name);
       if (v) return v;
     }
-    // Any male English voice
     const male = voices.find(v => v.lang.startsWith('en') && /male/i.test(v.name));
     if (male) return male;
-    // Any English voice
     return voices.find(v => v.lang.startsWith('en')) || voices[0] || null;
   }
 
-  function _initVoice() {
-    _voice = _pickVoice();
-  }
-
   if (window.speechSynthesis) {
-    speechSynthesis.onvoiceschanged = _initVoice;
-    _initVoice();
+    speechSynthesis.onvoiceschanged = () => { _webVoice = _pickWebVoice(); };
+    _webVoice = _pickWebVoice();
   }
 
-  // ─── Speech queue ────────────────────────────────────────────────────────
-  function _drain() {
+  function _webSpeak(text) {
+    return new Promise((resolve) => {
+      if (!window.speechSynthesis) return resolve(false);
+      const utt = new SpeechSynthesisUtterance(text);
+      if (_webVoice) utt.voice = _webVoice;
+      utt.rate = 0.82;
+      utt.pitch = 0.70;
+      utt.volume = 1.0;
+      utt.onend = utt.onerror = () => resolve(true);
+      speechSynthesis.speak(utt);
+    });
+  }
+
+  // ─── Queue ───────────────────────────────────────────────────────────────
+  async function _drain() {
     if (_busy || !_queue.length || !_enabled) return;
-    const text = _queue.shift();
-    const utt  = new SpeechSynthesisUtterance(text);
-    if (_voice) utt.voice = _voice;
-    utt.rate   = 0.85;
-    utt.pitch  = 0.80;
-    utt.volume = 1.0;
     _busy = true;
-    utt.onend = utt.onerror = () => { _busy = false; _drain(); };
-    speechSynthesis.speak(utt);
+    const text = _queue.shift();
+
+    const done = await _gttsSpeak(text);
+    if (!done) await _webSpeak(text);
+
+    _busy = false;
+    _drain();
   }
 
-  // speak(text, priority) — priority cancels current speech and clears queue
   function speak(text, priority) {
-    if (!_enabled || !window.speechSynthesis) return;
+    if (!_enabled) return;
     if (priority) {
-      speechSynthesis.cancel();
+      if (window.speechSynthesis) speechSynthesis.cancel();
       _queue = [];
       _busy  = false;
     }
     _queue.push(text);
-    // Small delay after cancel to let the engine settle (Chrome quirk)
     setTimeout(_drain, priority ? 80 : 0);
   }
 
-  // ─── Game event handlers ─────────────────────────────────────────────────
-
-  // hand_started fires AFTER game_state, so gameState already contains
-  // the new hand's data (blinds posted, dealer seat set).
+  // ─── Phrases ─────────────────────────────────────────────────────────────
   const DEAL_INTROS = [
-    'Cards in the air — let\'s get it',
-    'Shuffling up and dealing',
-    'New hand coming out',
-    'Alright, let\'s play some cards',
-    'Here we go, fresh hand',
+    "Cards in the air, let's get it",
+    "Shuffling up and dealing",
+    "New hand, let's go",
+    "Alright, let's play some cards",
+    "Here we go, fresh hand",
   ];
 
   const ACTION_PROMPTS = [
-    (name) => `${name} — whatchu gonna do?`,
-    (name) => `${name}, it's on you`,
-    (name) => `Action to ${name}`,
-    (name) => `${name}, your move`,
-    (name) => `Clock's ticking, ${name}`,
+    (n) => `${n}, whatchu gonna do`,
+    (n) => `${n}, it's on you`,
+    (n) => `Action to ${n}`,
+    (n) => `${n}, your move`,
+    (n) => `Clock's ticking, ${n}`,
   ];
 
   function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+  // ─── Game event handlers ─────────────────────────────────────────────────
   function onHandStarted({ handNumber, dealerSeat }, gameState) {
     if (_lastHandNum === handNumber) return;
     _lastHandNum = handNumber;
@@ -138,7 +183,6 @@ window.DealerVoice = (() => {
 
     const sbName = active[sbIdx]?.username;
     const bbName = active[bbIdx]?.username;
-
     if (sbName) speak(`${sbName}, small blind`);
     if (bbName) speak(`${bbName}, big blind`);
   }
@@ -153,7 +197,7 @@ window.DealerVoice = (() => {
   function onPlayerActed({ action, username, isAllIn, amount }) {
     if (!username) return;
     if (isAllIn) {
-      speak(`${username} is all in!`);
+      speak(`${username} is all in`);
     } else if (action === 'fold') {
       speak(`${username} folds`);
     } else if (action === 'raise' && amount) {
@@ -165,13 +209,13 @@ window.DealerVoice = (() => {
     switch (street) {
       case 'flop':  speak('Dealing the flop', true); break;
       case 'turn':  speak('Turn card', true);        break;
-      case 'river': speak('The river', true);         break;
+      case 'river': speak('The river', true);        break;
     }
   }
 
   function onHandEnded(result) {
     if (result.isSplitPot) {
-      speak('Split pot — chop it up', true);
+      speak('Split pot, chop it up', true);
     } else if (result.winners?.length) {
       speak(`${result.winners[0].username} wins`, true);
     }
@@ -181,8 +225,8 @@ window.DealerVoice = (() => {
   function toggle() {
     _enabled = !_enabled;
     localStorage.setItem(LS_KEY, _enabled ? 'true' : 'false');
-    if (!_enabled && window.speechSynthesis) {
-      speechSynthesis.cancel();
+    if (!_enabled) {
+      if (window.speechSynthesis) speechSynthesis.cancel();
       _queue = [];
       _busy  = false;
     }
@@ -200,7 +244,6 @@ window.DealerVoice = (() => {
     btn.title         = _enabled ? 'Dealer voice on — click to mute' : 'Dealer voice muted — click to enable';
   }
 
-  // Sync button once DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', _updateBtn);
   } else {

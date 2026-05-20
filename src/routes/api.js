@@ -2893,4 +2893,44 @@ router.delete('/highlights/:id/comments/:cid', authMiddleware, adminMiddleware, 
   res.json({ ok: true });
 });
 
+// ─── Google TTS proxy ─────────────────────────────────────────────────────────
+// Proxies text→speech requests to Google TTS, keeping the API key server-side.
+// Returns audio/mpeg (mp3). Client plays it via Audio element.
+// Requires GOOGLE_TTS_API_KEY env var. Returns 503 if not configured.
+router.post('/tts', authMiddleware, async (req, res) => {
+  const key = process.env.GOOGLE_TTS_API_KEY;
+  if (!key) return res.status(503).json({ error: 'TTS not configured' });
+  const { text } = req.body;
+  if (!text || typeof text !== 'string' || text.length > 500) {
+    return res.status(400).json({ error: 'Invalid text' });
+  }
+  try {
+    const ttsRes = await fetch(
+      `https://texttospeech.googleapis.com/v1/text:synthesize?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: { text },
+          voice: { languageCode: 'en-US', name: 'en-US-Neural2-D' },
+          audioConfig: { audioEncoding: 'MP3', speakingRate: 0.85, pitch: -3.0 }
+        })
+      }
+    );
+    if (!ttsRes.ok) {
+      const err = await ttsRes.text();
+      console.error('[TTS] Google API error:', err);
+      return res.status(502).json({ error: 'TTS API error' });
+    }
+    const data = await ttsRes.json();
+    const audio = Buffer.from(data.audioContent, 'base64');
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(audio);
+  } catch (e) {
+    console.error('[TTS] fetch error:', e.message);
+    res.status(500).json({ error: 'TTS request failed' });
+  }
+});
+
 module.exports = router;

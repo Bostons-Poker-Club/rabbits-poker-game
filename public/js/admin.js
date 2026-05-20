@@ -18,7 +18,14 @@ loadAll();
 
 let adminSocket = null;
 if (typeof io !== 'undefined') {
-  adminSocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
+  adminSocket = io({
+    transports: ['websocket'],
+    upgrade: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 2000,
+    auth: { token: sessionStorage.getItem('rp_token') }
+  });
   adminSocket.on('connect', () => { adminSocket.emit('lobby:join'); adminSocket.emit('admin:get_overview'); _loadMaintenanceState(); });
 
   adminSocket.on('admin:new_player', ({ username }) => {

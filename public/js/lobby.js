@@ -59,7 +59,16 @@ loadInbox();
 
 let lobbySocket = null;
 if (typeof io !== 'undefined') {
-  lobbySocket = io({ auth: { token: sessionStorage.getItem('rp_token') } });
+  lobbySocket = io({
+    transports: ['websocket'],
+    upgrade: false,
+    reconnection: true,
+    reconnectionAttempts: Infinity,
+    reconnectionDelay: 2000,
+    reconnectionDelayMax: 5000,
+    timeout: 30000,
+    auth: { token: sessionStorage.getItem('rp_token') }
+  });
   window.lobbySocket = lobbySocket; // expose globally for inline scripts
   lobbySocket.on('connect', () => {
     document.getElementById('reconnecting-banner').style.display = 'none';

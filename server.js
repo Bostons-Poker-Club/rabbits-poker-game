@@ -26,6 +26,9 @@ const maintenance = require('./src/maintenance');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
+  transports: ['websocket'],
+  pingInterval: 25000,
+  pingTimeout: 20000,
   cors: { origin: '*', methods: ['GET', 'POST'] }
 });
 
@@ -46,7 +49,7 @@ app.use(helmet({
       styleSrc:      ["'self'", "'unsafe-inline'"],  // inline styles used throughout app
       imgSrc:      ["'self'", 'data:', 'blob:', 'https://api.qrserver.com'],
       connectSrc:  ["'self'", 'wss:', 'ws:'],       // socket.io websocket
-      mediaSrc:    ["'self'"],
+      mediaSrc:    ["'self'", 'blob:'],
       workerSrc:   ["'self'", 'blob:'],             // service worker
       frameSrc:    ["'none'"],
     }
