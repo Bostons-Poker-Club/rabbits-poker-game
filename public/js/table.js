@@ -127,24 +127,12 @@ const SEAT_POSITIONS = {
 };
 
 // ─── Orientation Lock ─────────────────────────────────────────────────────
-
+// CSS rotation (style.css) handles portrait→landscape automatically.
+// screen.orientation.lock is still attempted for Android PWA installs.
 (function initOrientation() {
-  // Try to lock to landscape — works on Android Chrome and installed PWAs
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('landscape').catch(() => {});
   }
-
-  function checkOrientation() {
-    const overlay = document.getElementById('rotate-overlay');
-    if (!overlay) return;
-    const isPortrait = window.innerHeight > window.innerWidth;
-    const isMobile = Math.min(window.innerWidth, window.innerHeight) <= 500;
-    overlay.style.display = (isPortrait && isMobile) ? 'flex' : 'none';
-  }
-
-  window.addEventListener('resize', checkOrientation);
-  window.addEventListener('orientationchange', checkOrientation);
-  checkOrientation();
 })();
 
 // Initialise sound engine (reads mute preference from localStorage)

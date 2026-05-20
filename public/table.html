@@ -13,9 +13,8 @@
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* Portrait mobile uses the native bottom-heavy layout defined in style.css.
-     * The CSS rotation hack is removed — screen.orientation.lock() handles Android/PWA.
-     * iOS Safari shows the rotate overlay but lets users play in portrait. */
+    /* CSS rotation forces landscape on portrait phones — see style.css.
+     * screen.orientation.lock() is also attempted for Android PWA installs. */
   </style>
   <script>
     (function () {
@@ -208,15 +207,7 @@
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
 <button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
 
-<!-- Portrait rotate overlay (only shown in portrait on mobile) -->
-<div id="rotate-overlay" class="rotate-overlay">
-  <div style="text-align:center;padding:20px">
-    <div class="rotate-icon">↻</div>
-    <div class="rotate-title">Rotate Your Phone</div>
-    <div class="rotate-subtitle">Landscape mode gives you the best poker experience</div>
-    <button onclick="document.getElementById('rotate-overlay').style.display='none'" style="margin-top:20px;background:rgba(255,255,255,.12);border:1px solid var(--border);color:var(--text);padding:10px 24px;border-radius:20px;font-size:.88rem;cursor:pointer">Continue Anyway</button>
-  </div>
-</div>
+<!-- Rotate overlay removed: CSS transform handles portrait→landscape automatically -->
 
 <!-- Blind Schedule Modal -->
 <div class="modal-overlay hidden" id="blind-schedule-modal">

@@ -1612,6 +1612,33 @@ input, select, textarea { font-family: inherit; }
   text-align: center;
 }
 
+/* ─── Force landscape via CSS rotation on portrait phones (≤500px wide) ─── */
+/*
+ * When a phone is held portrait, rotate the entire page 90° CW so it fills
+ * the screen in landscape without requiring the user to physically rotate.
+ *
+ * Math: phone portrait = 390×844
+ *   body width = 100vh = 844px  (portrait height → visual landscape width)
+ *   body height = 100vw = 390px (portrait width  → visual landscape height)
+ *   top: 100% shifts element down 844px to correct the rotation origin offset
+ *
+ * The landscape layout media query also matches this portrait condition so the
+ * full landscape layout (oval, bottom bar, circular seats) is applied.
+ */
+@media (max-width: 500px) and (orientation: portrait) {
+  html { overflow: hidden; }
+  body.table-page {
+    transform: rotate(90deg);
+    transform-origin: left top;
+    width: 100vh;
+    height: 100vw;
+    overflow: hidden;
+    position: absolute;
+    top: 100%;
+    left: 0;
+  }
+}
+
 /* ─── Seat glow animation (active player's turn) ────────────────────────── */
 @keyframes rpSeatGlow {
   0%, 100% { box-shadow: 0 0 0 2px rgba(212,175,55,0.45), 0 0 10px rgba(212,175,55,0.6); }
@@ -1644,14 +1671,20 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Landscape Mobile: Clean modern layout ──────────────────────────────── */
 /*
- * Layout tiers (390px iPhone 14 landscape):
+ * Matches BOTH:
+ *   • true landscape phones  (max-height: 500px, orientation: landscape)
+ *   • portrait phones rotated by CSS  (max-width: 500px, orientation: portrait)
+ *     — the CSS rotation above makes them appear landscape; this block provides
+ *       the correct layout for both cases.
+ *
+ * Layout (390px visual height):
  *   40px  top bar
- *   270px oval area  (100dvh − 40 − 80 = 270px, seats overflow ±28px)
- *   80px  bottom bar  left=80px hole cards | right=1fr action buttons
- * Seats: 42px circular avatar + name label below (no box background)
- * Raise slider: absolute panel that floats above the bottom bar
+ *   270px oval  (100dvh − 40 − 80 − 80 = 190px seat margin → 200px oval height)
+ *   80px  bottom bar: 80px cards column | 1fr action buttons
+ * Seats: 80px circular avatar + name label, no box background
  */
-@media (max-height: 500px) and (orientation: landscape) {
+@media (max-height: 500px) and (orientation: landscape),
+       (max-width: 500px) and (orientation: portrait) {
 
   /* 1 ─ Full-screen flex column */
   body.table-page {
@@ -1725,14 +1758,15 @@ input, select, textarea { font-family: inherit; }
   }
 
   /* 5 ─ Oval: height-driven 2:1
-   *   oval-height = 100dvh − 40(header) − 80(bottom) − 70(seat margins) = 100dvh − 190px
-   *   iPhone 14 (390px): 200px height → 400px width ✓
-   *   Galaxy S21 (412px): 222px height → 444px width ✓
+   *   seat overhang = 80px avatar ÷ 2 = 40px each side = 80px total vertical margin
+   *   oval-height = 100dvh − 40(header) − 80(bottom) − 80(seat margin) = 100dvh − 200px
+   *   iPhone 14 (390px): 190px height → 380px width ✓
+   *   Galaxy S21 (412px): 212px height → 424px width ✓
    */
   body.table-page .poker-table-wrap {
     position: relative;
-    height: calc(100dvh - 190px);
-    width: calc(2 * (100dvh - 190px));
+    height: calc(100dvh - 200px);
+    width: calc(2 * (100dvh - 200px));
     max-width: calc(100dvw - 56px);
     flex-shrink: 0;
     margin: 0 auto;
@@ -1745,8 +1779,8 @@ input, select, textarea { font-family: inherit; }
     border-radius: 50%;
   }
 
-  /* 6 ─ Circular seat design */
-  body.table-page .seats-container { inset: -28px; }
+  /* 6 ─ Circular seat design — 80px avatars */
+  body.table-page .seats-container { inset: -44px; }
   /* Strip the rectangle — seat is just a circle + label */
   body.table-page .seat-box {
     background: transparent !important;
@@ -1754,12 +1788,12 @@ input, select, textarea { font-family: inherit; }
     box-shadow: none !important;
     padding: 0;
     min-width: 0;
-    gap: 1px;
+    gap: 2px;
   }
   body.table-page .seat-avatar {
-    width: 42px;
-    height: 42px;
-    border-width: 2px;
+    width: 80px;
+    height: 80px;
+    border-width: 3px;
     border-color: rgba(255,255,255,0.22);
   }
   /* Gold glow ring when it's this player's turn */
@@ -1770,11 +1804,11 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .seat-box.folded { opacity: 0.28; }
   body.table-page .seat-box.empty {
-    width: 38px !important;
-    height: 38px !important;
+    width: 80px !important;
+    height: 80px !important;
     min-width: 0 !important;
     border-radius: 50% !important;
-    border: 1px dashed rgba(255,255,255,0.22) !important;
+    border: 2px dashed rgba(255,255,255,0.22) !important;
     background: rgba(0,0,0,0.28) !important;
     padding: 0 !important;
     font-size: 0 !important;
@@ -1784,21 +1818,21 @@ input, select, textarea { font-family: inherit; }
     border-color: rgba(212,175,55,0.7) !important;
     background: rgba(212,175,55,0.08) !important;
   }
-  body.table-page .seat-initials { font-size: 1.05rem; }
+  body.table-page .seat-initials { font-size: 1.9rem; }
   body.table-page .seat-name {
-    font-size: 0.46rem;
-    max-width: 52px;
-    margin-top: 2px;
+    font-size: 0.54rem;
+    max-width: 82px;
+    margin-top: 3px;
     font-weight: 600;
     text-align: center;
     color: rgba(255,255,255,0.92);
     letter-spacing: 0;
   }
-  body.table-page .seat-chips { font-size: 0.42rem; text-align: center; line-height: 1; }
-  body.table-page .seat-bet { font-size: 0.40rem; min-height: 8px; }
-  body.table-page .seat-cards .card { width: 16px; height: 24px; font-size: 0.36rem; border-radius: 2px; }
-  body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.44rem; top: -5px; right: -5px; }
-  body.table-page .money-puck { min-width: 22px; height: 13px; font-size: 0.40rem; top: -6px; left: -6px; }
+  body.table-page .seat-chips { font-size: 0.48rem; text-align: center; line-height: 1; }
+  body.table-page .seat-bet { font-size: 0.46rem; min-height: 9px; }
+  body.table-page .seat-cards .card { width: 20px; height: 30px; font-size: 0.44rem; border-radius: 3px; }
+  body.table-page .dealer-puck { width: 18px; height: 18px; font-size: 0.52rem; top: -6px; right: -6px; }
+  body.table-page .money-puck { min-width: 28px; height: 16px; font-size: 0.46rem; top: -8px; left: -8px; }
   body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
   body.table-page .chip-total { font-size: 0.56rem; }
   body.table-page .chip-breakdown { display: none !important; }
@@ -1946,7 +1980,7 @@ input, select, textarea { font-family: inherit; }
 /* Replaces the old landscape-force CSS rotation.
  * Top ~58% = poker table + community cards + seats
  * Bottom ~42% = hole cards (large) + action buttons (tall) */
-@media (max-width: 600px) and (orientation: portrait) {
+@media (min-width: 501px) and (max-width: 768px) and (orientation: portrait) {
   body.table-page {
     height: 100dvh;
     display: flex;
