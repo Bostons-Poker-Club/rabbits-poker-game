@@ -8,13 +8,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="RabbsRoom">
+  <meta name="screen-orientation" content="landscape">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* CSS rotation forces landscape on portrait phones — see style.css.
-     * screen.orientation.lock() is also attempted for Android PWA installs. */
+    /* screen.orientation.lock('landscape') is attempted on page load.
+     * style.css landscape layout applies to all mobile (≤768px), no rotation tricks. */
   </style>
   <script>
     (function () {
