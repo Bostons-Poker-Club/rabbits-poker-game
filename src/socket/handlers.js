@@ -1835,7 +1835,9 @@ function buildTableOverview() {
       bigBlind: game.bigBlind,
       handsThisSession: stats.handsPlayed || 0,
       rakeThisSession: rakeData?.total || 0,
-      spectatorCount: tableSpectators.get(tableId)?.size || 0
+      spectatorCount: tableSpectators.get(tableId)?.size || 0,
+      isPaused: !!game.isPaused,
+      pauseReason: game.pauseReason || null
     });
   }
   return tables;

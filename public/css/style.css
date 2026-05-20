@@ -622,9 +622,9 @@ input, select, textarea { font-family: inherit; }
 
 .action-btn {
   min-width: 80px;
-  min-height: 48px;
+  min-height: 56px;
   font-size: 0.95rem;
-  font-weight: bold;
+  font-weight: 800;
   border-radius: var(--radius);
   border: none;
   display: flex;
@@ -632,19 +632,26 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
   gap: 2px;
-  transition: all 0.15s;
+  transition: opacity 0.1s, transform 0.1s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+  letter-spacing: 0.04em;
 }
-.action-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
-.action-btn .sub { font-size: 0.72rem; font-weight: normal; opacity: 0.85; }
+.action-btn:disabled { opacity: 0.3; cursor: not-allowed; transform: none !important; pointer-events: none; }
+.action-btn:active:not(:disabled) { transform: scale(0.94); opacity: 0.85; }
+.action-btn .sub { font-size: 0.78rem; font-weight: 600; opacity: 0.92; }
 
-.btn-fold { background: var(--red); color: #fff; }
-.btn-fold:hover:not(:disabled) { background: #c0202e; transform: translateY(-2px); }
-.btn-call { background: var(--chip-green); color: #1a1a1a; }
-.btn-call:hover:not(:disabled) { background: #27ae60; transform: translateY(-2px); }
-.btn-check { background: #5a8a5a; color: #fff; }
-.btn-check:hover:not(:disabled) { background: #4a7a4a; transform: translateY(-2px); }
-.btn-raise { background: var(--blue); color: #fff; }
-.btn-raise:hover:not(:disabled) { background: #3870b9; transform: translateY(-2px); }
+.btn-fold  { background: linear-gradient(160deg,#e53935,#b71c1c); color: #fff; box-shadow: 0 3px 10px rgba(229,57,53,.4); }
+.btn-fold:hover:not(:disabled)  { background: linear-gradient(160deg,#ef5350,#c62828); }
+.btn-call  { background: linear-gradient(160deg,#2e7d32,#1b5e20); color: #fff; box-shadow: 0 3px 10px rgba(46,125,50,.4); }
+.btn-call:hover:not(:disabled)  { background: linear-gradient(160deg,#388e3c,#2e7d32); }
+.btn-check { background: linear-gradient(160deg,#546e7a,#37474f); color: #fff; box-shadow: 0 3px 8px rgba(0,0,0,.35); }
+.btn-check:hover:not(:disabled) { background: linear-gradient(160deg,#607d8b,#455a64); }
+.btn-raise { background: linear-gradient(160deg,#c8930a,#9a6e08); color: #fff; box-shadow: 0 3px 10px rgba(200,147,10,.4); }
+.btn-raise:hover:not(:disabled) { background: linear-gradient(160deg,#d4a017,#b8860b); }
 
 .raise-controls {
   display: flex;
@@ -1824,6 +1831,166 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.58rem;
   }
   body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
+}
+
+/* ─── PORTRAIT MOBILE: Bottom-heavy poker layout (≤600px wide, portrait) ─── */
+/* Replaces the old landscape-force CSS rotation.
+ * Top ~58% = poker table + community cards + seats
+ * Bottom ~42% = hole cards (large) + action buttons (tall) */
+@media (max-width: 600px) and (orientation: portrait) {
+  body.table-page {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header: single compact row, ~36px ── */
+  body.table-page .table-header {
+    flex-shrink: 0;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 8px;
+    font-size: 0.65rem;
+    flex-wrap: nowrap;
+    overflow: hidden;
+    gap: 4px;
+  }
+  body.table-page .table-header .table-info-bar { flex-wrap: nowrap; overflow: hidden; gap: 4px; font-size: 0.6rem; }
+  body.table-page .table-header #hdr-jackpot-timer { display: none; }
+  body.table-page .table-header .jackpot-mini { font-size: 0.62rem; }
+  body.table-page .table-header #host-hh-btn { display: none !important; }
+
+  /* ── Poker area: fills all space between header and bottom bar ── */
+  body.table-page .table-main {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    grid-template-columns: unset;
+  }
+  body.table-page .chat-panel { display: none !important; }
+  body.table-page .poker-area {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: visible;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  body.table-page .poker-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    position: relative;
+  }
+  body.table-page .poker-table-oval {
+    width: 100%;
+    aspect-ratio: 2 / 1;
+    border-width: 4px;
+    border-radius: 50%;
+  }
+  body.table-page .seats-container { inset: -28px; }
+  body.table-page .seat-box { min-width: 68px; padding: 2px 5px; font-size: 0.56rem; border-radius: 6px; }
+  body.table-page .seat-name { max-width: 60px; font-size: 0.54rem; }
+  body.table-page .seat-chips { font-size: 0.52rem; }
+  body.table-page .seat-bet { font-size: 0.5rem; min-height: 10px; }
+  body.table-page .seat-cards .card { width: 22px; height: 32px; font-size: 0.48rem; }
+  body.table-page .seat-avatar { width: 22px; height: 22px; }
+  body.table-page .seat-initials { font-size: 0.6rem; }
+  body.table-page .dealer-puck { width: 14px; height: 14px; font-size: 0.46rem; top: -7px; right: -7px; }
+  body.table-page .chip-dot { width: 10px; height: 10px; border-width: 1px; }
+  body.table-page .chip-total { font-size: 0.58rem; }
+  body.table-page .chip-breakdown { display: none !important; }
+  body.table-page .community-cards .card { width: 34px; height: 50px; font-size: 0.68rem; }
+  body.table-page .pot-display .pot-amount { font-size: 0.95rem; }
+
+  /* ── Bottom bar: hole cards + action buttons ── */
+  body.table-page .my-cards-area {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    gap: 8px;
+    background: rgba(0,0,0,0.7);
+    border-top: 2px solid var(--border);
+  }
+  body.table-page .my-hole-cards {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  body.table-page .card.large { width: 64px; height: 92px; font-size: 1.05rem; }
+  body.table-page .shot-clock { width: 36px; height: 36px; align-self: center; flex-shrink: 0; }
+  body.table-page .shot-clock-number { font-size: 0.68rem; }
+
+  /* ── Action buttons: 4 columns, tall and finger-friendly ── */
+  body.table-page .action-area {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 6px;
+    width: 100%;
+    align-items: stretch;
+    flex-wrap: unset;
+  }
+  body.table-page .action-btn {
+    min-height: 56px;
+    font-size: 0.78rem;
+    padding: 4px 2px;
+    border-radius: 10px;
+    width: 100%;
+  }
+  /* Raise controls: full-width second row */
+  body.table-page .raise-controls {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+  }
+  body.table-page .raise-controls input[type=range] {
+    flex: 1;
+    height: 34px;
+    accent-color: var(--gold);
+    touch-action: none;
+  }
+  body.table-page .raise-controls input[type=number] {
+    width: 68px;
+    padding: 6px 4px;
+    font-size: 0.88rem;
+    height: 34px;
+  }
+  body.table-page #btn-allin {
+    min-height: 56px !important;
+    height: 56px;
+    font-size: 0.7rem !important;
+    padding: 4px !important;
+    min-width: 0 !important;
+  }
+
+  /* ── Hide non-essential controls ── */
+  body.table-page .ptt-btn { display: none; }
+  body.table-page .break-btn { display: none; }
+  body.table-page #mic-test-btn { display: none; }
+  body.table-page #sound-toggle-btn { display: none; }
+  body.table-page #cam-toggle-btn { display: none; }
+  body.table-page #voice-toggle-btn { display: none; }
+
+  /* ── Host panel: compact floating ── */
+  body.table-page #host-controls {
+    top: 40px !important;
+    right: 4px !important;
+    min-width: 0 !important;
+    max-width: 82vw;
+    max-height: 55vh;
+    overflow-y: auto;
+    font-size: 0.68rem;
+  }
+  body.table-page #host-controls #host-controls-inner { display: none; }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */

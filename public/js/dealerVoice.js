@@ -24,14 +24,14 @@ window.DealerVoice = (() => {
   let _lastHandNum = -1;
 
   // ─── Voice selection ────────────────────────────────────────────────────
-  // Ranked list of preferred deep/male voice names across platforms.
+  // Prefer natural-sounding male US voices first (best on mobile/Android).
   const PREFERRED = [
+    'Google US English',
+    'Alex',          // macOS
+    'Daniel',        // macOS UK
     'Google UK English Male',
     'Microsoft David - English (United States)',
     'Microsoft David Desktop - English (United States)',
-    'Alex',          // macOS
-    'Daniel',        // macOS UK
-    'Google US English',
     'Microsoft Mark - English (United States)',
     'en-US-Neural2-D',
   ];
@@ -67,8 +67,8 @@ window.DealerVoice = (() => {
     const text = _queue.shift();
     const utt  = new SpeechSynthesisUtterance(text);
     if (_voice) utt.voice = _voice;
-    utt.rate   = 0.88;   // deliberate pace
-    utt.pitch  = 0.80;   // lower = deeper
+    utt.rate   = 0.85;
+    utt.pitch  = 0.80;
     utt.volume = 1.0;
     _busy = true;
     utt.onend = utt.onerror = () => { _busy = false; _drain(); };
@@ -92,27 +92,43 @@ window.DealerVoice = (() => {
 
   // hand_started fires AFTER game_state, so gameState already contains
   // the new hand's data (blinds posted, dealer seat set).
+  const DEAL_INTROS = [
+    'Cards in the air — let\'s get it',
+    'Shuffling up and dealing',
+    'New hand coming out',
+    'Alright, let\'s play some cards',
+    'Here we go, fresh hand',
+  ];
+
+  const ACTION_PROMPTS = [
+    (name) => `${name} — whatchu gonna do?`,
+    (name) => `${name}, it's on you`,
+    (name) => `Action to ${name}`,
+    (name) => `${name}, your move`,
+    (name) => `Clock's ticking, ${name}`,
+  ];
+
+  function _rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
   function onHandStarted({ handNumber, dealerSeat }, gameState) {
     if (_lastHandNum === handNumber) return;
     _lastHandNum = handNumber;
 
-    speak('Shuffling up and dealing', true);
+    speak(_rand(DEAL_INTROS), true);
 
     if (!gameState) return;
 
-    // Identify SB and BB from dealer position + active player order
     const active = (gameState.players || [])
       .filter(p => !p.isSittingOut)
       .sort((a, b) => a.seatNumber - b.seatNumber);
 
     if (active.length < 2) return;
 
-    const seats    = active.map(p => p.seatNumber);
-    const dIdx     = seats.indexOf(dealerSeat);
+    const seats = active.map(p => p.seatNumber);
+    const dIdx  = seats.indexOf(dealerSeat);
     let sbIdx, bbIdx;
 
     if (active.length === 2) {
-      // Heads-up: dealer is SB
       sbIdx = dIdx >= 0 ? dIdx : 0;
       bbIdx = (sbIdx + 1) % active.length;
     } else {
@@ -123,39 +139,41 @@ window.DealerVoice = (() => {
     const sbName = active[sbIdx]?.username;
     const bbName = active[bbIdx]?.username;
 
-    if (sbName) speak(`${sbName}, you're the small blind`);
-    if (bbName) speak(`${bbName}, you're the big blind`);
+    if (sbName) speak(`${sbName}, small blind`);
+    if (bbName) speak(`${bbName}, big blind`);
   }
 
   function onActionRequired({ seatNumber }, gameState) {
     if (!gameState) return;
     const player = (gameState.players || []).find(p => p.seatNumber === seatNumber);
     if (!player) return;
-    speak(`${player.username}, it's on you`);
+    speak(_rand(ACTION_PROMPTS)(player.username));
   }
 
-  function onPlayerActed({ action, username, isAllIn }) {
+  function onPlayerActed({ action, username, isAllIn, amount }) {
     if (!username) return;
     if (isAllIn) {
       speak(`${username} is all in!`);
     } else if (action === 'fold') {
       speak(`${username} folds`);
+    } else if (action === 'raise' && amount) {
+      speak(`${username} raises`);
     }
   }
 
   function onStreetChanged({ street }) {
     switch (street) {
-      case 'flop':  speak('Here comes the flop', true); break;
-      case 'turn':  speak('The turn card',        true); break;
-      case 'river': speak('And the river',         true); break;
+      case 'flop':  speak('Dealing the flop', true); break;
+      case 'turn':  speak('Turn card', true);        break;
+      case 'river': speak('The river', true);         break;
     }
   }
 
   function onHandEnded(result) {
     if (result.isSplitPot) {
-      speak('We have a split pot', true);
+      speak('Split pot — chop it up', true);
     } else if (result.winners?.length) {
-      speak(`${result.winners[0].username} wins the pot`, true);
+      speak(`${result.winners[0].username} wins`, true);
     }
   }
 

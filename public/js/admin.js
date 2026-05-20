@@ -1416,9 +1416,15 @@ function renderLiveTableOverview(tables) {
           <span style="color:var(--text-dim)">Hand #${t.handNumber}</span>
         </div>
         <div style="margin-bottom:8px;max-height:120px;overflow-y:auto">${playerRows || '<div style="color:var(--text-dim);font-size:.78rem">No players seated</div>'}</div>
-        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,.08);padding-top:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:.75rem;color:var(--text-dim);border-top:1px solid rgba(255,255,255,.08);padding-top:6px;gap:6px;flex-wrap:wrap">
           <span>Hands: ${t.handsThisSession} | Rake: $${fmt(t.rakeThisSession)}</span>
-          <button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px" onclick="spectateTable('${t.tableId}')">👁 Spectate</button>
+          <div style="display:flex;gap:4px">
+            ${t.isPaused
+              ? `<button class="btn btn-sm btn-gold" style="font-size:.7rem;padding:2px 8px" onclick="adminResumeTable('${t.tableId}')">▶ Resume</button>`
+              : `<button class="btn btn-sm" style="font-size:.7rem;padding:2px 8px;background:#555" onclick="adminPauseTable('${t.tableId}')">⏸ Pause</button>`
+            }
+            <button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px" onclick="spectateTable('${t.tableId}')">👁 Spectate</button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -1426,6 +1432,18 @@ function renderLiveTableOverview(tables) {
 
 function spectateTable(tableId) {
   window.open(`/table.html?tableId=${tableId}&spectate=1`, '_blank');
+}
+
+function adminPauseTable(tableId) {
+  const reason = prompt('Pause reason (optional):', 'Admin pause') ?? '';
+  if (reason === null) return;
+  adminSocket?.emit('host:pause_game', { tableId, reason: reason.trim() || null });
+  toast('Table paused');
+}
+
+function adminResumeTable(tableId) {
+  adminSocket?.emit('host:resume_game', { tableId });
+  toast('Table resumed');
 }
 
 function renderTablesAdmin(list) {

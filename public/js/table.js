@@ -1236,6 +1236,23 @@ function updateHeader(state) {
 
 // ─── Actions ──────────────────────────────────────────────────────────────
 
+// Instant touch handler — fires before the click event on Android/iOS,
+// prevents the 300ms delay and avoids double-fire from the subsequent click.
+let _actTouchLock = false;
+function actTouch(action, event) {
+  event.preventDefault();
+  if (_actTouchLock) return;
+  _actTouchLock = true;
+  setTimeout(() => { _actTouchLock = false; }, 800);
+  // Disable all action buttons immediately for visual feedback
+  ['btn-fold','btn-check','btn-call','btn-raise','btn-allin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+  if (action === 'allin') { setAllIn(); act('raise'); }
+  else act(action);
+}
+
 function act(action) {
   if (!socket) return;
   let amount = undefined;

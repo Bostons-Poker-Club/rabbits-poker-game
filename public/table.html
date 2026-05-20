@@ -13,23 +13,9 @@
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* ── Force landscape on portrait mobile/iPad ──────────────────────────────
-     * screen.orientation.lock() handles Android/Chrome.
-     * The CSS transform is a fallback for iOS Safari which ignores the API.
-     * Rotates the body 90° clockwise so portrait viewport looks landscape.
-     * Only applies ≤1024px wide (phones/tablets). */
-    @media screen and (orientation: portrait) and (max-width: 1024px) {
-      body.table-page {
-        position: fixed;
-        overflow: hidden;
-        width: 100dvh;
-        height: 100dvw;
-        top: calc(50dvh - 50dvw);
-        left: calc(50dvw - 50dvh);
-        transform: rotate(90deg);
-        transform-origin: 50% 50%;
-      }
-    }
+    /* Portrait mobile uses the native bottom-heavy layout defined in style.css.
+     * The CSS rotation hack is removed — screen.orientation.lock() handles Android/PWA.
+     * iOS Safari shows the rotate overlay but lets users play in portrait. */
   </style>
   <script>
     (function () {
@@ -192,22 +178,27 @@
 
   <!-- Action buttons -->
   <div class="action-area" id="action-area">
-    <button class="action-btn btn-fold" id="btn-fold" onclick="act('fold')" disabled>
+    <button class="action-btn btn-fold" id="btn-fold"
+      ontouchstart="actTouch('fold',event)" onclick="act('fold')" disabled>
       FOLD
     </button>
-    <button class="action-btn btn-check" id="btn-check" onclick="act('check')" disabled>
+    <button class="action-btn btn-check" id="btn-check"
+      ontouchstart="actTouch('check',event)" onclick="act('check')" disabled>
       CHECK
     </button>
-    <button class="action-btn btn-call" id="btn-call" onclick="act('call')" disabled>
+    <button class="action-btn btn-call" id="btn-call"
+      ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>
       CALL<span class="sub" id="call-amount"></span>
     </button>
     <div class="raise-controls">
-      <button class="action-btn btn-raise" id="btn-raise" onclick="act('raise')" disabled>
+      <button class="action-btn btn-raise" id="btn-raise"
+        ontouchstart="actTouch('raise',event)" onclick="act('raise')" disabled>
         RAISE<span class="sub" id="raise-display">–</span>
       </button>
-      <input type="range" id="raise-slider" min="0" max="0" value="0" oninput="onRaiseSlider()">
-      <input type="number" id="raise-input" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
-      <button class="action-btn btn-allin" id="btn-allin" onclick="setAllIn();act('raise')" disabled
+      <input type="range" id="raise-slider" min="0" max="0" value="0" oninput="onRaiseSlider()" style="touch-action:none">
+      <input type="number" id="raise-input" inputmode="numeric" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
+      <button class="action-btn btn-allin" id="btn-allin"
+        ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled
         style="background:linear-gradient(135deg,#8b0000,#c0392b);border-color:#e74c3c;font-size:.75rem;padding:0 10px;min-width:60px">
         ALL IN
       </button>
