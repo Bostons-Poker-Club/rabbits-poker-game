@@ -53,13 +53,21 @@
 
 <!-- Header -->
 <header class="table-header">
+  <!-- Mobile: far-left leave button -->
+  <button class="hdr-leave-btn" onclick="leaveTable()">← Leave</button>
+  <!-- Center: table info -->
   <div class="table-info-bar">
-    <span><a href="/lobby.html" style="color:var(--gold)">← Lobby</a></span>
+    <span class="hdr-lobby-link"><a href="/lobby.html" style="color:var(--gold)">← Lobby</a></span>
     <span id="hdr-table-name" style="color:var(--text)">Loading…</span>
     <span id="hdr-blinds" style="color:var(--text-dim)"></span>
     <span id="hdr-street" style="color:var(--chip-green)"></span>
   </div>
-  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <!-- Mobile: pot + icon buttons -->
+  <span class="hdr-pot" id="hdr-pot">$0</span>
+  <button class="hdr-icon-btn" id="hdr-mic-btn" onclick="toggleMicPanel()" style="display:none" title="Mic Controls">🎙</button>
+  <button class="hdr-icon-btn" id="hdr-host-btn" onclick="toggleHostPanel()" style="display:none" title="Host Controls">⚙</button>
+  <!-- Desktop right section -->
+  <div class="hdr-right">
     <span class="jackpot-mini" id="hdr-jackpot">🏆 $0</span>
     <span style="color:var(--text-dim);font-size:.8rem" id="hdr-jackpot-timer"></span>
     <span style="color:var(--gold);font-size:.9rem">🪙 <strong id="hdr-chips">–</strong></span>
@@ -124,7 +132,7 @@
     </div>
 
     <!-- Host Controls Panel -->
-    <div id="host-controls" style="display:none;position:absolute;top:8px;right:8px;background:rgba(10,25,15,.95);border:1px solid var(--chip-green);border-radius:8px;padding:10px 14px;min-width:180px;z-index:50">
+    <div id="host-controls" style="display:none;position:fixed;top:8px;right:8px;background:rgba(10,25,15,.95);border:1px solid var(--chip-green);border-radius:8px;padding:10px 14px;min-width:180px;z-index:50">
       <div class="host-panel-header">
         <span class="host-panel-title">🎰 Host</span>
         <button class="host-collapse-btn" onclick="toggleHostPanel()" title="Minimize">−</button>
@@ -135,7 +143,7 @@
     </div>
 
     <!-- Mic Controls Panel (admin only, separate from host controls) -->
-    <div id="mic-controls-panel" style="display:none;position:absolute;top:8px;left:8px;background:rgba(8,18,12,.97);border:1px solid rgba(46,204,113,.45);border-radius:10px;padding:10px 12px;min-width:210px;max-width:260px;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.6)">
+    <div id="mic-controls-panel" style="display:none;position:fixed;top:8px;left:8px;background:rgba(8,18,12,.97);border:1px solid rgba(46,204,113,.45);border-radius:10px;padding:10px 12px;min-width:210px;max-width:260px;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.6)">
       <div class="mic-panel-header">
         <span class="mic-panel-title">🎙 Mic Controls</span>
         <button class="mic-collapse-btn" onclick="toggleMicPanel()" title="Collapse">−</button>
@@ -205,7 +213,7 @@
     <button class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
     <button id="voice-toggle-btn" class="btn btn-sm btn-outline" onclick="DealerVoice.toggle()" title="Dealer voice on — click to mute" style="font-size:.75rem;padding:4px 8px">🔈 Voice</button>
-    <button class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
+    <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
 </div>
 

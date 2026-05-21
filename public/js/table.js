@@ -940,7 +940,10 @@ function connect() {
 
 function renderTable(state) {
   renderCommunityCards(state.communityCards || []);
-  document.getElementById('pot-amount').textContent = `$${fmt(state.pot || 0)}`;
+  const potText = `$${fmt(state.pot || 0)}`;
+  document.getElementById('pot-amount').textContent = potText;
+  const hdrPot = document.getElementById('hdr-pot');
+  if (hdrPot) hdrPot.textContent = potText;
   renderSeats(state);
   renderHostControls(state);
 }
@@ -949,18 +952,21 @@ function renderHostControls(state) {
   const panel = document.getElementById('host-controls');
   if (!panel) return;
   const u = getUser();
-  if (!u?.isHost && !u?.isAdmin) { panel.style.display = 'none'; return; }
+  const hdrHostBtn = document.getElementById('hdr-host-btn');
+  if (!u?.isHost && !u?.isAdmin) { panel.style.display = 'none'; if (hdrHostBtn) hdrHostBtn.style.display = 'none'; return; }
   const src = state || gameState;
   if (!src) return;
 
   const allPlayers = src.players || [];
   if (!allPlayers.length) {
     panel.style.display = 'none';
+    if (hdrHostBtn) hdrHostBtn.style.display = 'none';
     const micPanel = document.getElementById('mic-controls-panel');
     if (micPanel) micPanel.style.display = 'none';
     return;
   }
   panel.style.display = '';
+  if (hdrHostBtn) hdrHostBtn.style.display = '';
 
   // Initialise collapse state once when panel first appears
   if (!panel.dataset.initialized) {
@@ -2346,6 +2352,8 @@ function renderAdminPttPanel(players, mode) {
     <div class="mic-mode-bar">Current mode: ${modeLabel}</div>`;
 
   panel.style.display = '';
+  const hdrMicBtn = document.getElementById('hdr-mic-btn');
+  if (hdrMicBtn) hdrMicBtn.style.display = '';
 
   // Apply saved collapse state; default to collapsed on mobile
   const saved = localStorage.getItem('micPanelCollapsed');

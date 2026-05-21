@@ -268,6 +268,25 @@ input, select, textarea { font-family: inherit; }
 }
 .table-header .table-info-bar { display: flex; align-items: center; gap: 12px; color: var(--text-dim); }
 .table-header .jackpot-mini { color: var(--gold); font-weight: bold; font-size: 0.95rem; }
+/* Desktop: hide mobile-only header elements */
+.hdr-leave-btn { display: none; }
+.hdr-pot { display: none; }
+.hdr-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hdr-icon-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 1rem;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
 
 .table-main {
   display: grid;
@@ -1682,16 +1701,43 @@ input, select, textarea { font-family: inherit; }
     border-bottom: 1px solid rgba(255,255,255,0.08);
   }
   body.table-page .table-header .table-info-bar {
+    flex: 1 1 0;
     font-size: 0.62rem;
-    gap: 6px;
+    gap: 4px;
     flex-wrap: nowrap;
     min-width: 0;
     overflow: hidden;
   }
+  /* Mobile header: show leave btn + pot, hide desktop right section */
+  body.table-page .hdr-leave-btn {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 6px;
+    color: var(--gold);
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 3px 7px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  body.table-page .hdr-lobby-link { display: none; }
+  body.table-page .hdr-pot {
+    display: inline;
+    flex-shrink: 0;
+    color: var(--chip-green);
+    font-size: 0.62rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  body.table-page .hdr-right { display: none; }
   body.table-page #hdr-jackpot-timer { display: none; }
   body.table-page .jackpot-mini { font-size: 0.62rem; }
   body.table-page #host-hh-btn { display: none !important; }
   body.table-page #chat-toggle { display: none; }
+  body.table-page #action-leave-btn { display: none; }
 
   /* 3 ─ Table-main fills space between top bar and bottom bar */
   body.table-page .table-main {
@@ -1917,25 +1963,31 @@ input, select, textarea { font-family: inherit; }
   body.table-page #cam-toggle-btn { display: none; }
   body.table-page #voice-toggle-btn { display: none; }
 
-  /* 12 ─ Host panel: positioned compactly; collapse state managed by JS */
+  /* 12 ─ Host panel: fixed position, compact, collapsed by default */
   body.table-page #host-controls {
+    position: fixed !important;
     top: 44px !important;
     right: 4px !important;
     padding: 4px 8px !important;
     min-width: 0 !important;
+    max-width: 180px !important;
     font-size: 0.6rem;
-    z-index: 50;
+    z-index: 200;
+    overflow: hidden;
   }
 
-  /* 13 ─ Mic panel: positioned compactly; collapse state managed by JS */
+  /* 13 ─ Mic panel: fixed position, compact, collapsed by default */
   body.table-page #mic-controls-panel {
+    position: fixed !important;
     top: 44px !important;
     left: 4px !important;
     max-height: calc(100dvh - 124px);
-    max-width: 200px;
+    max-width: 180px !important;
     padding: 4px 8px !important;
     min-width: 0 !important;
     font-size: 0.6rem;
+    z-index: 200;
+    overflow-y: auto;
   }
 
   /* 14 ─ Blind timer */
