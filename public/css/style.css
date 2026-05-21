@@ -1972,21 +1972,24 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .card.large { width: 28px; height: 40px; font-size: 0.7rem; }
 
-  /* 9 ─ Right column: action buttons — stretch to fill 48px bar */
+  /* 9 ─ Right column: action buttons — explicit grid placement + horizontal row */
   body.table-page .action-area {
-    display: flex;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
     align-items: stretch;
     gap: 4px;
     padding: 4px 8px;
-    overflow: visible;
+    overflow: hidden;
     height: 100%;
     position: static;
-    flex-wrap: nowrap;
+    grid-column: 2;
+    grid-row: 1;
   }
   body.table-page .action-btn {
     flex: 1 1 0;
     min-height: 0;
-    min-width: 0;
+    min-width: 0 !important;
     font-size: 0.65rem;
     padding: 2px 3px;
     border-radius: 8px;
@@ -2024,13 +2027,38 @@ input, select, textarea { font-family: inherit; }
     flex-shrink: 0;
   }
 
-  /* 11 ─ Hide utility buttons */
+  /* 11 ─ Hide utility buttons — keep action area to 5 main bet buttons only */
   body.table-page .ptt-btn { display: none; }
   body.table-page .break-btn { display: none; }
   body.table-page #mic-test-btn { display: none; }
   body.table-page #sound-toggle-btn { display: none; }
   body.table-page #cam-toggle-btn { display: none; }
   body.table-page #voice-toggle-btn { display: none; }
+  body.table-page #action-leave-btn { display: none; }
+  body.table-page #btn-hand-rankings { display: none; }
+  body.table-page #btn-hand-history { display: none; }
+
+  /* 11b ─ Mic panel: compact slide-UP drawer on mobile (overrides full-height slide-panel) */
+  body.table-page #mic-controls-panel {
+    top: auto;
+    bottom: 48px;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    max-height: 200px;
+    transform: translateY(110%);
+    transition: transform 0.22s ease;
+    border-left: none;
+    border-right: none;
+    border-top: 1px solid rgba(46,204,113,0.35);
+    border-radius: 12px 12px 0 0;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
+  }
+  body.table-page #mic-controls-panel.open {
+    transform: translateY(0);
+  }
 
   /* 12 ─ Blind timer */
   body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
@@ -2046,34 +2074,41 @@ input, select, textarea { font-family: inherit; }
   }
 }
 
-/* ─── Portrait force-landscape: rotate entire table page 90° ─────────────── */
-/*
- * html.table-mode is set only in table.html so this only affects the table page.
- *
- * Correct math for CW 90° rotation filling a portrait 390×844 viewport:
- *   Element: width=100dvh(=844), height=100dvw(=390), position:fixed at (0,0)
- *   transform: translateX(100dvw) rotate(90deg) with transform-origin: 0 0
- *   Maps corners: (0,0)→(390,0) (844,0)→(390,844) (844,390)→(0,844) (0,390)→(0,0)
- *   → exactly fills portrait viewport ✓
- *
- * Body height is overridden to 100dvw (=390px) so the flex column fits in the
- * landscape "height" dimension (the short axis after rotation).
- */
+/* ─── Portrait-mode blocker overlay ─────────────────────────────────────── */
+#portrait-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(4, 12, 6, 0.97);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 32px;
+}
+#portrait-overlay .po-icon {
+  font-size: 3.5rem;
+  animation: poRotate 2.2s ease-in-out infinite;
+}
+@keyframes poRotate {
+  0%, 30%, 100% { transform: rotate(0deg); }
+  55%, 80%      { transform: rotate(90deg); }
+}
+#portrait-overlay .po-title {
+  color: var(--gold);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+#portrait-overlay .po-sub {
+  color: rgba(255,255,255,0.5);
+  font-size: 0.9rem;
+}
+
 @media (max-width: 768px) and (orientation: portrait) {
-  html.table-mode {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100dvh;
-    height: 100dvw;
-    overflow: hidden;
-    transform-origin: 0 0;
-    transform: translateX(100dvw) rotate(90deg);
-  }
-  html.table-mode body.table-page {
-    height: 100dvw;
-    max-height: 100dvw;
-  }
+  #portrait-overlay { display: flex; }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */

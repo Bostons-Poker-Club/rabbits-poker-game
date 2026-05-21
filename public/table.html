@@ -35,6 +35,13 @@
 </head>
 <body class="table-page">
 
+<!-- Portrait-mode blocker: shown by CSS when device is in portrait -->
+<div id="portrait-overlay">
+  <div class="po-icon">📱</div>
+  <div class="po-title">Rotate your device</div>
+  <div class="po-sub">The table requires landscape orientation</div>
+</div>
+
 <!-- Header -->
 <header class="table-header">
   <!-- Mobile: far-left leave button -->
@@ -179,8 +186,8 @@
     <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px" id="mic-test-btn">🎚 Mic</button>
     <button id="sound-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleSoundThemePanel()" title="Sound settings" style="font-size:.75rem;padding:4px 8px">🔊</button>
     <button id="cam-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleCamera()" title="Camera off — click to enable" style="font-size:.75rem;padding:4px 8px;opacity:.5">📷</button>
-    <button class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
-    <button class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
+    <button id="btn-hand-rankings" class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
+    <button id="btn-hand-history" class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
     <button id="voice-toggle-btn" class="btn btn-sm btn-outline" onclick="DealerVoice.toggle()" title="Dealer voice on — click to mute" style="font-size:.75rem;padding:4px 8px">🔈 Voice</button>
     <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
