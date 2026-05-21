@@ -1442,7 +1442,7 @@ input, select, textarea { font-family: inherit; }
 /* ─── Panel FAB triggers ───────────────────────────────────────────────── */
 #panel-fabs {
   position: fixed;
-  top: 5vmin;
+  top: 36px;
   right: 0;
   z-index: 350;
   display: flex;
@@ -1740,18 +1740,15 @@ input, select, textarea { font-family: inherit; }
 }
 .chat-bubble-btn:active { transform: scale(0.92); background: rgba(200,168,75,0.3); }
 
-/* ─── Mobile Table Layout (≤768px, any orientation) ─────────────────────── */
+/* ─── Mobile Table Layout ────────────────────────────────────────────────── */
 /*
- * Three-zone layout using vmin/vmax for consistent scaling on any phone:
- *   vmin = short axis (visual height in landscape) ≈ 390px on iPhone 14
- *   vmax = long  axis (visual width  in landscape) ≈ 844px on iPhone 14
+ * Applies to any phone-sized viewport (≤768px) AND landscape phones with
+ * short viewport height (≤500px in landscape). Fixed-pixel bar heights give
+ * predictable game-app proportions; vmax/rem scale internal elements.
  *
- * These units are orientation-independent: vmin/vmax stay the same whether
- * the phone is physically landscape or portrait-rotated via CSS transform.
- *
- *   TOP BAR:    5vmin  ≈ 20px — Leave | table name | pot
- *   TABLE AREA: flex:1 ≈ 273px — oval with seats
- *   BOTTOM BAR: 25vmin ≈ 97px — hole cards | action buttons
+ *   TOP BAR:    36px  — Leave | table name | pot
+ *   TABLE AREA: flex:1 — oval fills remaining space
+ *   BOTTOM BAR: 48px  — hole cards left | action buttons right
  */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
 
@@ -1764,16 +1761,16 @@ input, select, textarea { font-family: inherit; }
     overflow: hidden;
   }
 
-  /* 2 ─ Top bar: 5vmin */
+  /* 2 ─ Top bar: 36px */
   body.table-page .table-header {
     flex-shrink: 0;
-    height: 5vmin;
-    min-height: 5vmin;
-    max-height: 5vmin;
-    padding: 0 1vmax;
-    font-size: 1.4vmax;
+    height: 36px;
+    min-height: 36px;
+    max-height: 36px;
+    padding: 0 10px;
+    font-size: 0.7rem;
     flex-wrap: nowrap;
-    gap: 0.8vmax;
+    gap: 8px;
     align-items: center;
     overflow: hidden;
     background: rgba(0,0,0,0.9);
@@ -1781,8 +1778,8 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .table-header .table-info-bar {
     flex: 1 1 0;
-    font-size: 1.3vmax;
-    gap: 0.6vmax;
+    font-size: 0.66rem;
+    gap: 5px;
     flex-wrap: nowrap;
     min-width: 0;
     overflow: hidden;
@@ -1793,11 +1790,11 @@ input, select, textarea { font-family: inherit; }
     flex-shrink: 0;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 0.5vmin;
+    border-radius: 4px;
     color: var(--gold);
-    font-size: 1.3vmax;
+    font-size: 0.66rem;
     font-weight: 700;
-    padding: 0.3vmin 0.8vmax;
+    padding: 3px 8px;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1806,13 +1803,13 @@ input, select, textarea { font-family: inherit; }
     display: inline;
     flex-shrink: 0;
     color: var(--chip-green);
-    font-size: 1.3vmax;
+    font-size: 0.66rem;
     font-weight: 700;
     white-space: nowrap;
   }
   body.table-page .hdr-right { display: none; }
   body.table-page #hdr-jackpot-timer { display: none; }
-  body.table-page .jackpot-mini { font-size: 1.3vmax; }
+  body.table-page .jackpot-mini { font-size: 0.66rem; }
   body.table-page #host-hh-btn { display: none !important; }
   body.table-page #chat-toggle { display: none; }
   body.table-page #action-leave-btn { display: none; }
@@ -1822,18 +1819,16 @@ input, select, textarea { font-family: inherit; }
     flex: 1 1 0;
     min-height: 0;
     overflow: visible;
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr;
   }
 
   /* Chat: fixed side panel, toggled via chat-bubble-btn */
   body.table-page .chat-panel {
     display: none;
     position: fixed !important;
-    top: 5vmin;
-    bottom: 25vmin;
+    top: 36px;
+    bottom: 48px;
     right: 0;
-    width: min(30vmax, 260px);
+    width: min(260px, 65vw);
     z-index: 150;
     background: rgba(5,12,8,0.97) !important;
     border-left: 1px solid var(--border) !important;
@@ -1852,17 +1847,17 @@ input, select, textarea { font-family: inherit; }
     justify-content: center;
   }
 
-  /* 5 ─ Oval: 2:1 aspect, scaled by vmin/vmax
-   *   Seat diameter: 8vmax  → overhang: 4vmax per side
-   *   Oval height = table-area(70vmin) − seat-overhang(8vmax)
-   *   iPhone 14 landscape: 70×3.9 − 8×8.44 = 273 − 67.5 = 205.5px height
-   *                        width = 411px  (fits in 844px) ✓
+  /* 5 ─ Oval: 2:1, sized to fill available table-area height.
+   *   Seat overhang = 3.5vmax per side (half of 7vmax seat circle)
+   *   min() constrains by viewport width so nothing spills sideways.
+   *   iPhone 14 landscape (844×390): table area = 390-84 = 306px
+   *     oval h = 306-56 = 250px, oval w = 500px ✓
    */
   body.table-page .poker-table-wrap {
     position: relative;
-    height: min(calc(70vmin - 8vmax), calc((100vmax - 4vmax) / 2));
-    width:  min(calc(2 * (70vmin - 8vmax)), calc(100vmax - 4vmax));
-    max-width: calc(100vmax - 4vmax);
+    height: min(calc(100% - 7vmax), calc((100vw - 56px) / 2));
+    width:  min(calc(2 * (100% - 7vmax)), calc(100vw - 56px));
+    max-width: calc(100vw - 56px);
     flex-shrink: 0;
     margin: 0 auto;
   }
@@ -1874,19 +1869,19 @@ input, select, textarea { font-family: inherit; }
     border-radius: 50%;
   }
 
-  /* 6 ─ Seats: 8vmax circles */
-  body.table-page .seats-container { inset: -4vmax; }
+  /* 6 ─ Seats: 7vmax circles (≈59px on 844px screen) */
+  body.table-page .seats-container { inset: -3.5vmax; }
   body.table-page .seat-box {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0;
     min-width: 0;
-    gap: 0.3vmin;
+    gap: 2px;
   }
   body.table-page .seat-avatar {
-    width: 8vmax;
-    height: 8vmax;
+    width: 7vmax;
+    height: 7vmax;
     border-width: 3px;
     border-color: rgba(255,255,255,0.22);
   }
@@ -1897,8 +1892,8 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .seat-box.folded { opacity: 0.28; }
   body.table-page .seat-box.empty {
-    width: 8vmax !important;
-    height: 8vmax !important;
+    width: 7vmax !important;
+    height: 7vmax !important;
     min-width: 0 !important;
     border-radius: 50% !important;
     border: 2px dashed rgba(255,255,255,0.22) !important;
@@ -1911,40 +1906,40 @@ input, select, textarea { font-family: inherit; }
     border-color: rgba(212,175,55,0.7) !important;
     background: rgba(212,175,55,0.08) !important;
   }
-  body.table-page .seat-initials { font-size: 2.5vmax; }
+  body.table-page .seat-initials { font-size: 1.9rem; }
   body.table-page .seat-name {
-    font-size: 1.5vmax;
-    max-width: 10vmax;
-    margin-top: 0.3vmin;
+    font-size: 0.54rem;
+    max-width: 64px;
+    margin-top: 2px;
     font-weight: 600;
     text-align: center;
     color: rgba(255,255,255,0.92);
     letter-spacing: 0;
   }
-  body.table-page .seat-chips { font-size: 1.3vmax; text-align: center; line-height: 1; }
-  body.table-page .seat-bet { font-size: 1.2vmax; min-height: 1.2vmax; }
-  body.table-page .seat-cards .card { width: 2.5vmax; height: 3.5vmax; font-size: 1.1vmax; border-radius: 0.3vmin; }
-  body.table-page .dealer-puck { width: 2vmax; height: 2vmax; font-size: 1.2vmax; top: -0.7vmax; right: -0.7vmax; }
-  body.table-page .money-puck { min-width: 3.5vmax; height: 2vmax; font-size: 1.1vmax; top: -1vmax; left: -1vmax; }
-  body.table-page .chip-dot { width: 1.1vmax; height: 1.1vmax; border-width: 1px; }
-  body.table-page .chip-total { font-size: 1.4vmax; }
+  body.table-page .seat-chips { font-size: 0.5rem; text-align: center; line-height: 1; }
+  body.table-page .seat-bet { font-size: 0.46rem; min-height: 9px; }
+  body.table-page .seat-cards .card { width: 18px; height: 28px; font-size: 0.42rem; border-radius: 3px; }
+  body.table-page .dealer-puck { width: 16px; height: 16px; font-size: 0.5rem; top: -5px; right: -5px; }
+  body.table-page .money-puck { min-width: 26px; height: 14px; font-size: 0.44rem; top: -7px; left: -7px; }
+  body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
+  body.table-page .chip-total { font-size: 0.54rem; }
   body.table-page .chip-breakdown { display: none !important; }
 
-  /* 7 ─ Community cards: 5vmax × 8vmin */
-  body.table-page .community-area { gap: 0.4vmax; }
-  body.table-page .community-cards { gap: 0.4vmax; }
-  body.table-page .community-cards .card { width: 5vmax; height: 8vmin; font-size: 1.8vmax; }
-  body.table-page .pot-display .pot-amount { font-size: 2vmin; }
-  body.table-page .pot-display .pot-label { font-size: 1.5vmin; }
+  /* 7 ─ Community cards */
+  body.table-page .community-area { gap: 3px; }
+  body.table-page .community-cards { gap: 3px; }
+  body.table-page .community-cards .card { width: 28px; height: 42px; font-size: 0.62rem; }
+  body.table-page .pot-display .pot-amount { font-size: 0.9rem; }
+  body.table-page .pot-display .pot-label { font-size: 0.58rem; }
 
-  /* 8 ─ Bottom bar: 25vmin, 2-column grid (12vmax cards | 1fr buttons) */
+  /* 8 ─ Bottom bar: 48px, 2-column grid (90px cards | 1fr buttons) */
   body.table-page .my-cards-area {
     flex-shrink: 0;
-    height: 25vmin;
-    min-height: 25vmin;
-    max-height: 25vmin;
+    height: 48px;
+    min-height: 48px;
+    max-height: 48px;
     display: grid;
-    grid-template-columns: 12vmax 1fr;
+    grid-template-columns: 90px 1fr;
     align-items: stretch;
     padding: 0;
     gap: 0;
@@ -1957,32 +1952,32 @@ input, select, textarea { font-family: inherit; }
   /* Shot clock: floats above the bottom bar */
   body.table-page .shot-clock {
     position: absolute;
-    top: -4.5vmin;
-    left: 0.8vmax;
-    width: 4vmin;
-    height: 4vmin;
+    top: -36px;
+    left: 6px;
+    width: 32px;
+    height: 32px;
     z-index: 20;
   }
-  body.table-page .shot-clock-number { font-size: 1.6vmin; }
+  body.table-page .shot-clock-number { font-size: 0.6rem; }
 
-  /* Left column: hole cards — 6vmax × 10vmin */
+  /* Left column: hole cards */
   body.table-page .my-hole-cards {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.6vmax;
-    padding: 0.5vmin 0.5vmax;
+    gap: 4px;
+    padding: 4px 5px;
     border-right: 1px solid rgba(255,255,255,0.09);
     background: rgba(0,0,0,0.25);
   }
-  body.table-page .card.large { width: 6vmax; height: 10vmin; font-size: 2vmax; }
+  body.table-page .card.large { width: 28px; height: 40px; font-size: 0.7rem; }
 
-  /* 9 ─ Right column: action buttons — flex fill, 8vmin height, 1.8vmax font */
+  /* 9 ─ Right column: action buttons — stretch to fill 48px bar */
   body.table-page .action-area {
     display: flex;
-    align-items: center;
-    gap: 0.5vmax;
-    padding: 0.8vmin 0.8vmax;
+    align-items: stretch;
+    gap: 4px;
+    padding: 4px 8px;
     overflow: visible;
     height: 100%;
     position: static;
@@ -1990,43 +1985,42 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .action-btn {
     flex: 1 1 0;
-    height: 8vmin;
-    min-height: 8vmin;
+    min-height: 0;
     min-width: 0;
-    font-size: 1.8vmax;
-    padding: 0;
-    border-radius: 1vmin;
+    font-size: 0.65rem;
+    padding: 2px 3px;
+    border-radius: 8px;
   }
 
   /* 10 ─ Raise slider: absolute overlay above bottom bar */
   body.table-page .raise-controls {
     position: absolute;
-    bottom: 25vmin;
+    bottom: 48px;
     left: 0;
     right: 0;
     background: rgba(4,12,6,0.96);
     border: 1px solid rgba(200,168,75,0.3);
     border-bottom: none;
-    border-radius: 1vmin 1vmin 0 0;
-    padding: 0.6vmin 1vmax;
+    border-radius: 6px 6px 0 0;
+    padding: 5px 10px;
     display: flex;
-    gap: 1vmax;
+    gap: 8px;
     align-items: center;
     z-index: 31;
     flex-wrap: nowrap;
   }
   body.table-page .raise-controls input[type=range] {
     flex: 1;
-    height: 3vmin;
-    min-width: 7vmax;
+    height: 24px;
+    min-width: 60px;
     accent-color: var(--gold);
     touch-action: none;
   }
   body.table-page .raise-controls input[type=number] {
-    width: 7vmax;
-    padding: 0.3vmin 0.5vmax;
-    font-size: 1.8vmax;
-    height: 3vmin;
+    width: 56px;
+    padding: 3px 5px;
+    font-size: 0.72rem;
+    height: 28px;
     flex-shrink: 0;
   }
 
@@ -2039,16 +2033,16 @@ input, select, textarea { font-family: inherit; }
   body.table-page #voice-toggle-btn { display: none; }
 
   /* 12 ─ Blind timer */
-  body.table-page #blind-timer-panel { padding: 0.3vmin 0.6vmax !important; font-size: 1.4vmax; }
-  body.table-page #blind-timer-panel .btp-level { font-size: 1.3vmax; }
+  body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
+  body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
 
-  /* 13 ─ Chat bubble: position relative to bottom bar */
+  /* 13 ─ Chat bubble */
   body.table-page .chat-bubble-btn {
     display: flex;
-    bottom: calc(25vmin + 0.5vmin);
-    right: 1vmax;
-    width: 5vmin;
-    height: 5vmin;
+    bottom: 56px;
+    right: 10px;
+    width: 38px;
+    height: 38px;
   }
 }
 
