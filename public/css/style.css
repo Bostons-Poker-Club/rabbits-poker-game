@@ -1917,7 +1917,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page #cam-toggle-btn { display: none; }
   body.table-page #voice-toggle-btn { display: none; }
 
-  /* 12 ─ Host panel: collapsed */
+  /* 12 ─ Host panel: positioned compactly; collapse state managed by JS */
   body.table-page #host-controls {
     top: 44px !important;
     right: 4px !important;
@@ -1926,9 +1926,8 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.6rem;
     z-index: 50;
   }
-  body.table-page #host-controls #host-controls-inner { display: none; }
 
-  /* 13 ─ Mic panel: collapsed */
+  /* 13 ─ Mic panel: positioned compactly; collapse state managed by JS */
   body.table-page #mic-controls-panel {
     top: 44px !important;
     left: 4px !important;
@@ -1938,7 +1937,6 @@ input, select, textarea { font-family: inherit; }
     min-width: 0 !important;
     font-size: 0.6rem;
   }
-  body.table-page #mic-controls-panel #mic-controls-inner { display: none; }
 
   /* 14 ─ Blind timer */
   body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
@@ -1948,7 +1946,35 @@ input, select, textarea { font-family: inherit; }
   body.table-page .chat-bubble-btn { display: flex; }
 }
 
-
+/* ─── Portrait force-landscape: rotate entire table page 90° ─────────────── */
+/*
+ * html.table-mode is set only in table.html so this only affects the table page.
+ *
+ * Correct math for CW 90° rotation filling a portrait 390×844 viewport:
+ *   Element: width=100dvh(=844), height=100dvw(=390), position:fixed at (0,0)
+ *   transform: translateX(100dvw) rotate(90deg) with transform-origin: 0 0
+ *   Maps corners: (0,0)→(390,0) (844,0)→(390,844) (844,390)→(0,844) (0,390)→(0,0)
+ *   → exactly fills portrait viewport ✓
+ *
+ * Body height is overridden to 100dvw (=390px) so the flex column fits in the
+ * landscape "height" dimension (the short axis after rotation).
+ */
+@media (max-width: 768px) and (orientation: portrait) {
+  html.table-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100dvh;
+    height: 100dvw;
+    overflow: hidden;
+    transform-origin: 0 0;
+    transform: translateX(100dvw) rotate(90deg);
+  }
+  html.table-mode body.table-page {
+    height: 100dvw;
+    max-height: 100dvw;
+  }
+}
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
 .seat-avatar {
