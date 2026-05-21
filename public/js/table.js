@@ -952,32 +952,27 @@ function renderHostControls(state) {
   const panel = document.getElementById('host-controls');
   if (!panel) return;
   const u = getUser();
-  const hdrHostBtn = document.getElementById('hdr-host-btn');
-  if (!u?.isHost && !u?.isAdmin) { panel.style.display = 'none'; if (hdrHostBtn) hdrHostBtn.style.display = 'none'; return; }
+  const hostFab = document.getElementById('host-fab-btn');
+  if (!u?.isHost && !u?.isAdmin) {
+    panel.style.display = 'none';
+    if (hostFab) hostFab.style.display = 'none';
+    return;
+  }
   const src = state || gameState;
   if (!src) return;
 
   const allPlayers = src.players || [];
   if (!allPlayers.length) {
     panel.style.display = 'none';
-    if (hdrHostBtn) hdrHostBtn.style.display = 'none';
+    if (hostFab) hostFab.style.display = 'none';
     const micPanel = document.getElementById('mic-controls-panel');
     if (micPanel) micPanel.style.display = 'none';
+    const micFab2 = document.getElementById('mic-fab-btn');
+    if (micFab2) micFab2.style.display = 'none';
     return;
   }
   panel.style.display = '';
-  if (hdrHostBtn) hdrHostBtn.style.display = '';
-
-  // Initialise collapse state once when panel first appears
-  if (!panel.dataset.initialized) {
-    panel.dataset.initialized = '1';
-    const saved = localStorage.getItem('rp_host_panel_collapsed');
-    const defaultCollapsed = window.innerWidth <= 768;
-    const shouldCollapse = saved !== null ? saved === '1' : defaultCollapsed;
-    panel.classList.toggle('collapsed', shouldCollapse);
-    const btn = panel.querySelector('.host-collapse-btn');
-    if (btn) btn.textContent = shouldCollapse ? '+' : '−';
-  }
+  if (hostFab) hostFab.style.display = '';
 
   const others = allPlayers.filter(p => p.userId !== user.id);
 
@@ -2352,34 +2347,22 @@ function renderAdminPttPanel(players, mode) {
     <div class="mic-mode-bar">Current mode: ${modeLabel}</div>`;
 
   panel.style.display = '';
-  const hdrMicBtn = document.getElementById('hdr-mic-btn');
-  if (hdrMicBtn) hdrMicBtn.style.display = '';
-
-  // Apply saved collapse state; default to collapsed on mobile
-  const saved = localStorage.getItem('micPanelCollapsed');
-  const defaultCollapsed = window.innerWidth <= 768;
-  const shouldCollapse = saved !== null ? saved === '1' : defaultCollapsed;
-  panel.classList.toggle('collapsed', shouldCollapse);
-  const collapseBtn = panel.querySelector('.mic-collapse-btn');
-  if (collapseBtn) collapseBtn.textContent = shouldCollapse ? '+' : '−';
+  const micFab = document.getElementById('mic-fab-btn');
+  if (micFab) micFab.style.display = '';
 }
 
 function toggleHostPanel() {
   const panel = document.getElementById('host-controls');
   if (!panel) return;
-  const collapsed = panel.classList.toggle('collapsed');
-  localStorage.setItem('rp_host_panel_collapsed', collapsed ? '1' : '0');
-  const btn = panel.querySelector('.host-collapse-btn');
-  if (btn) btn.textContent = collapsed ? '+' : '−';
+  const opening = panel.classList.toggle('open');
+  if (opening) document.getElementById('mic-controls-panel')?.classList.remove('open');
 }
 
 function toggleMicPanel() {
   const panel = document.getElementById('mic-controls-panel');
   if (!panel) return;
-  const collapsed = panel.classList.toggle('collapsed');
-  localStorage.setItem('micPanelCollapsed', collapsed ? '1' : '0');
-  const btn = panel.querySelector('.mic-collapse-btn');
-  if (btn) btn.textContent = collapsed ? '+' : '−';
+  const opening = panel.classList.toggle('open');
+  if (opening) document.getElementById('host-controls')?.classList.remove('open');
 }
 
 function adminMuteAll()   { socket?.emit('ptt:admin_mute_all'); }

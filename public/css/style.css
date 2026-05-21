@@ -1373,25 +1373,103 @@ input, select, textarea { font-family: inherit; }
   }
 }
 
-/* ─── Host controls panel: scrollable on mobile ─────────────────────── */
-@media (max-width: 480px) {
-  #host-controls {
-    max-height: 60vh;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-    top: 4px !important;
-    right: 4px !important;
-    min-width: 160px !important;
-    max-width: 85vw;
-  }
+/* ─── Slide Panels (host + mic — fixed right-side drawer) ────────────── */
+.slide-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 280px;
+  max-width: min(88vw, 88dvw);
+  height: 100%;
+  height: 100dvh;
+  background: rgba(8,20,12,0.98);
+  border-left: 1px solid rgba(46,204,113,0.35);
+  z-index: 400;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(110%);
+  transition: transform 0.22s ease;
+  box-shadow: -4px 0 28px rgba(0,0,0,0.75);
 }
+.slide-panel.open { transform: translateX(0); }
 
-/* ─── Mic Controls Panel ─────────────────────────────────────────────── */
-#mic-controls-panel {
-  max-height: 80vh;
+.slide-panel-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(46,204,113,0.25);
+  flex-shrink: 0;
+  background: rgba(8,20,12,0.98);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.slide-panel-title {
+  color: var(--chip-green);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.slide-panel-close {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: var(--text);
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 1;
+}
+.slide-panel-close:hover { background: rgba(255,255,255,0.18); }
+
+#host-controls-inner,
+#mic-controls-inner {
+  flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  padding: 10px 12px;
+  font-size: 0.78rem;
 }
+
+/* ─── Panel FAB triggers ───────────────────────────────────────────────── */
+#panel-fabs {
+  position: fixed;
+  top: 50px;
+  right: 0;
+  z-index: 350;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 3px 0;
+}
+.panel-fab {
+  width: 32px;
+  height: 32px;
+  background: rgba(8,20,12,0.95);
+  border: 1px solid rgba(46,204,113,0.5);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.panel-fab:active,
+.panel-fab:hover { background: rgba(46,204,113,0.22); }
+
+/* ─── Mic Controls Panel ─────────────────────────────────────────────── */
 
 .mic-panel-header {
   display: flex;
@@ -1963,34 +2041,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page #cam-toggle-btn { display: none; }
   body.table-page #voice-toggle-btn { display: none; }
 
-  /* 12 ─ Host panel: fixed position, compact, collapsed by default */
-  body.table-page #host-controls {
-    position: fixed !important;
-    top: 44px !important;
-    right: 4px !important;
-    padding: 4px 8px !important;
-    min-width: 0 !important;
-    max-width: 180px !important;
-    font-size: 0.6rem;
-    z-index: 200;
-    overflow: hidden;
-  }
-
-  /* 13 ─ Mic panel: fixed position, compact, collapsed by default */
-  body.table-page #mic-controls-panel {
-    position: fixed !important;
-    top: 44px !important;
-    left: 4px !important;
-    max-height: calc(100dvh - 124px);
-    max-width: 180px !important;
-    padding: 4px 8px !important;
-    min-width: 0 !important;
-    font-size: 0.6rem;
-    z-index: 200;
-    overflow-y: auto;
-  }
-
-  /* 14 ─ Blind timer */
+  /* 12 ─ Blind timer */
   body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
   body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
 

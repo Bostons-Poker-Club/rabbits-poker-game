@@ -30,22 +30,6 @@
         try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
       });
 
-      // Collapse host + mic panels when starting in landscape so they don't
-      // block the table. Panels can still be expanded by tapping their header.
-      function collapsePanelsForLandscape() {
-        if (window.innerWidth > window.innerHeight) {
-          var hostInner = document.getElementById('host-controls-inner');
-          var micInner  = document.getElementById('mic-controls-inner');
-          if (hostInner) hostInner.style.display = 'none';
-          if (micInner)  micInner.style.display  = 'none';
-        }
-      }
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', collapsePanelsForLandscape);
-      } else {
-        collapsePanelsForLandscape();
-      }
-      window.addEventListener('resize', collapsePanelsForLandscape);
     })();
   </script>
 </head>
@@ -64,8 +48,6 @@
   </div>
   <!-- Mobile: pot + icon buttons -->
   <span class="hdr-pot" id="hdr-pot">$0</span>
-  <button class="hdr-icon-btn" id="hdr-mic-btn" onclick="toggleMicPanel()" style="display:none" title="Mic Controls">🎙</button>
-  <button class="hdr-icon-btn" id="hdr-host-btn" onclick="toggleHostPanel()" style="display:none" title="Host Controls">⚙</button>
   <!-- Desktop right section -->
   <div class="hdr-right">
     <span class="jackpot-mini" id="hdr-jackpot">🏆 $0</span>
@@ -78,6 +60,12 @@
     <button class="btn btn-sm btn-outline" onclick="toggleChat()" id="chat-toggle">Chat</button>
   </div>
 </header>
+
+<!-- Panel FAB triggers: shown by JS for host/admin -->
+<div id="panel-fabs">
+  <button class="panel-fab" id="host-fab-btn" onclick="toggleHostPanel()" style="display:none" title="Host Controls">🎰</button>
+  <button class="panel-fab" id="mic-fab-btn" onclick="toggleMicPanel()" style="display:none" title="Mic Controls">🎙</button>
+</div>
 
 <!-- Main area: table + chat -->
 <div class="table-main">
@@ -131,25 +119,6 @@
       </div>
     </div>
 
-    <!-- Host Controls Panel -->
-    <div id="host-controls" style="display:none;position:fixed;top:8px;right:8px;background:rgba(10,25,15,.95);border:1px solid var(--chip-green);border-radius:8px;padding:10px 14px;min-width:180px;z-index:50">
-      <div class="host-panel-header">
-        <span class="host-panel-title">🎰 Host</span>
-        <button class="host-collapse-btn" onclick="toggleHostPanel()" title="Minimize">−</button>
-      </div>
-      <div id="host-controls-inner">
-        <div id="host-player-list" style="font-size:.8rem"></div>
-      </div>
-    </div>
-
-    <!-- Mic Controls Panel (admin only, separate from host controls) -->
-    <div id="mic-controls-panel" style="display:none;position:fixed;top:8px;left:8px;background:rgba(8,18,12,.97);border:1px solid rgba(46,204,113,.45);border-radius:10px;padding:10px 12px;min-width:210px;max-width:260px;z-index:50;box-shadow:0 4px 20px rgba(0,0,0,.6)">
-      <div class="mic-panel-header">
-        <span class="mic-panel-title">🎙 Mic Controls</span>
-        <button class="mic-collapse-btn" onclick="toggleMicPanel()" title="Collapse">−</button>
-      </div>
-      <div id="mic-controls-inner"></div>
-    </div>
   </div>
 
   <!-- Chat Panel -->
@@ -281,6 +250,26 @@
 </div>
 
 <!-- Toast container -->
+<!-- Host Controls Slide Panel -->
+<div id="host-controls" class="slide-panel" style="display:none">
+  <div class="slide-panel-hdr">
+    <span class="slide-panel-title">🎰 Host Controls</span>
+    <button class="slide-panel-close" onclick="toggleHostPanel()">✕</button>
+  </div>
+  <div id="host-controls-inner">
+    <div id="host-player-list"></div>
+  </div>
+</div>
+
+<!-- Mic Controls Slide Panel -->
+<div id="mic-controls-panel" class="slide-panel" style="display:none">
+  <div class="slide-panel-hdr">
+    <span class="slide-panel-title">🎙 Mic Controls</span>
+    <button class="slide-panel-close" onclick="toggleMicPanel()">✕</button>
+  </div>
+  <div id="mic-controls-inner"></div>
+</div>
+
 <div class="toast-container" id="toast-container"></div>
 
 <!-- Recording indicator -->
