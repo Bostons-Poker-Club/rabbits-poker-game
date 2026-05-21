@@ -127,12 +127,16 @@ const SEAT_POSITIONS = {
 };
 
 // ─── Orientation Lock ─────────────────────────────────────────────────────
-// CSS rotation (style.css) handles portrait→landscape automatically.
-// screen.orientation.lock is still attempted for Android PWA installs.
+// CSS rotation (style.css) handles portrait→landscape on iOS Safari.
+// screen.orientation.lock is attempted for Android/PWA installs.
 (function initOrientation() {
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('landscape').catch(() => {});
   }
+  // Unlock when leaving so other pages (lobby, etc.) rotate freely
+  window.addEventListener('pagehide', () => {
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
+  });
 })();
 
 // Initialise sound engine (reads mute preference from localStorage)

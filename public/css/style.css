@@ -1657,13 +1657,18 @@ input, select, textarea { font-family: inherit; }
  */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
 
-  /* 1 ─ Full-screen flex column */
+  /* 1 ─ Body clips overflow; #table-container is the flex layout root */
   body.table-page {
+    overflow: hidden;
+    height: 100%;
+  }
+  body.table-page #table-container {
     display: flex;
     flex-direction: column;
     height: 100dvh;
     max-height: 100dvh;
     overflow: hidden;
+    width: 100%;
   }
 
   /* 2 ─ Top bar: 40px */
@@ -1946,6 +1951,36 @@ input, select, textarea { font-family: inherit; }
 
   /* 15 ─ Chat bubble visible in landscape */
   body.table-page .chat-bubble-btn { display: flex; }
+}
+
+/* ─── iOS Safari portrait fallback: rotate only #table-container ────────── */
+/*
+ * screen.orientation.lock works on Android/PWA. On iOS Safari it's denied, so
+ * we rotate the game container 90° CW when in portrait. Modals/banners are
+ * outside #table-container and stay upright.
+ *
+ * Math (portrait 390×844):
+ *   width: 100dvh = 844px (landscape visual width)
+ *   height: 100dvw = 390px (landscape visual height)
+ *   position: fixed; top: 100dvh — rotation origin at screen (0, 844)
+ *   rotate(90deg) around that origin fills the portrait viewport exactly.
+ *
+ * When the player then tilts their phone to landscape, iOS rotates the viewport,
+ * the CSS portrait query no longer matches, and the normal landscape layout takes
+ * over with no rotation. Net visual effect: correct landscape view.
+ */
+@media (max-width: 500px) and (orientation: portrait) {
+  body.table-page #table-container {
+    position: fixed;
+    top: 100dvh;
+    left: 0;
+    width: 100dvh;
+    height: 100dvw;
+    max-height: 100dvw;
+    overflow: hidden;
+    transform: rotate(90deg);
+    transform-origin: top left;
+  }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */

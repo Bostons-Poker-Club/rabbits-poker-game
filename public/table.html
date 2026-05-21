@@ -8,23 +8,32 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="RabbsRoom">
-  <meta name="screen-orientation" content="landscape">
   <link rel="manifest" href="/manifest.json">
   <link rel="apple-touch-icon" href="/icons/icon-192.svg">
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* screen.orientation.lock('landscape') is attempted on page load.
-     * style.css landscape layout applies to all mobile (≤768px), no rotation tricks. */
+    /* screen.orientation.lock('landscape') is attempted on page load for Android/PWA.
+     * iOS Safari fallback: #table-container is CSS-rotated 90° in portrait — see style.css.
+     * Modals and banners live outside #table-container so they stay portrait-upright. */
   </style>
   <script>
     (function () {
+      // Keep html/body non-scrollable so the rotated container fills the viewport
+      document.documentElement.style.overflow = 'hidden';
+      document.documentElement.style.height = '100%';
+
       // Lock to landscape — works on Android Chrome and installed PWAs
       try {
         if (screen.orientation && typeof screen.orientation.lock === 'function') {
           screen.orientation.lock('landscape').catch(function () {});
         }
       } catch (_) {}
+
+      // Release lock when leaving the table page so other pages rotate normally
+      window.addEventListener('pagehide', function () {
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
+      });
 
       // Collapse host + mic panels when starting in landscape so they don't
       // block the table. Panels can still be expanded by tapping their header.
@@ -46,6 +55,10 @@
   </script>
 </head>
 <body class="table-page">
+
+<!-- #table-container wraps all game UI; rotated 90° on portrait iOS (see style.css).
+     Modals and fixed banners are kept outside so they remain portrait-upright. -->
+<div id="table-container">
 
 <!-- Header -->
 <header class="table-header">
@@ -208,7 +221,8 @@
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
 <button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
 
-<!-- Rotate overlay removed: CSS transform handles portrait→landscape automatically -->
+<!-- end #table-container — modals and banners below are outside the rotation -->
+</div>
 
 <!-- Blind Schedule Modal -->
 <div class="modal-overlay hidden" id="blind-schedule-modal">
