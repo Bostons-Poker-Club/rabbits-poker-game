@@ -13,16 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* screen.orientation.lock('landscape') is attempted on page load for Android/PWA.
-     * iOS Safari fallback: #table-container is CSS-rotated 90° in portrait — see style.css.
-     * Modals and banners live outside #table-container so they stay portrait-upright. */
+    /* screen.orientation.lock('landscape') fires on load for Android/PWA.
+     * Portrait phones see the #rotate-msg overlay until they tilt to landscape. */
   </style>
   <script>
     (function () {
-      // Keep html/body non-scrollable so the rotated container fills the viewport
-      document.documentElement.style.overflow = 'hidden';
-      document.documentElement.style.height = '100%';
-
       // Lock to landscape — works on Android Chrome and installed PWAs
       try {
         if (screen.orientation && typeof screen.orientation.lock === 'function') {
@@ -55,10 +50,6 @@
   </script>
 </head>
 <body class="table-page">
-
-<!-- #table-container wraps all game UI; rotated 90° on portrait iOS (see style.css).
-     Modals and fixed banners are kept outside so they remain portrait-upright. -->
-<div id="table-container">
 
 <!-- Header -->
 <header class="table-header">
@@ -221,7 +212,11 @@
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
 <button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
 
-<!-- end #table-container — modals and banners below are outside the rotation -->
+<!-- Portrait overlay: shown by CSS when phone is in portrait, hidden in landscape -->
+<div id="rotate-msg">
+  <div class="rm-icon">📱</div>
+  <div class="rm-text">Please rotate your phone</div>
+  <div class="rm-sub">This poker table is best viewed in landscape mode</div>
 </div>
 
 <!-- Blind Schedule Modal -->

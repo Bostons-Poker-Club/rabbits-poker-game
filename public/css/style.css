@@ -1657,18 +1657,13 @@ input, select, textarea { font-family: inherit; }
  */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
 
-  /* 1 ─ Body clips overflow; #table-container is the flex layout root */
+  /* 1 ─ Full-screen flex column */
   body.table-page {
-    overflow: hidden;
-    height: 100%;
-  }
-  body.table-page #table-container {
     display: flex;
     flex-direction: column;
     height: 100dvh;
     max-height: 100dvh;
     overflow: hidden;
-    width: 100%;
   }
 
   /* 2 ─ Top bar: 40px */
@@ -1953,33 +1948,30 @@ input, select, textarea { font-family: inherit; }
   body.table-page .chat-bubble-btn { display: flex; }
 }
 
-/* ─── iOS Safari portrait fallback: rotate only #table-container ────────── */
-/*
- * screen.orientation.lock works on Android/PWA. On iOS Safari it's denied, so
- * we rotate the game container 90° CW when in portrait. Modals/banners are
- * outside #table-container and stay upright.
- *
- * Math (portrait 390×844):
- *   width: 100dvh = 844px (landscape visual width)
- *   height: 100dvw = 390px (landscape visual height)
- *   position: fixed; top: 100dvh — rotation origin at screen (0, 844)
- *   rotate(90deg) around that origin fills the portrait viewport exactly.
- *
- * When the player then tilts their phone to landscape, iOS rotates the viewport,
- * the CSS portrait query no longer matches, and the normal landscape layout takes
- * over with no rotation. Net visual effect: correct landscape view.
- */
-@media (max-width: 500px) and (orientation: portrait) {
-  body.table-page #table-container {
+
+/* ─── Portrait-mode overlay for table page ──────────────────────────────── */
+#rotate-msg { display: none; }
+@media (max-width: 768px) and (orientation: portrait) {
+  #rotate-msg {
+    display: flex;
     position: fixed;
-    top: 100dvh;
-    left: 0;
-    width: 100dvh;
-    height: 100dvw;
-    max-height: 100dvw;
-    overflow: hidden;
-    transform: rotate(90deg);
-    transform-origin: top left;
+    inset: 0;
+    z-index: 9998;
+    background: #0a1a0e;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    color: #fff;
+    text-align: center;
+    padding: 32px;
+  }
+  #rotate-msg .rm-icon { font-size: 3rem; animation: rmSpin 2s ease-in-out infinite; }
+  #rotate-msg .rm-text { font-size: 1.15rem; font-weight: 700; color: #c8a84b; }
+  #rotate-msg .rm-sub  { font-size: 0.88rem; color: rgba(255,255,255,0.6); max-width: 260px; }
+  @keyframes rmSpin {
+    0%, 100% { transform: rotate(0deg); }
+    40%, 60% { transform: rotate(90deg); }
   }
 }
 
