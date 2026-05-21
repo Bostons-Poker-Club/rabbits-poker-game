@@ -13,8 +13,8 @@
   <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
   <style>
-    /* screen.orientation.lock('landscape') fires on load for Android/PWA.
-     * Portrait phones see the #rotate-msg overlay until they tilt to landscape. */
+    /* Mobile layout (style.css) applies at ≤768px regardless of orientation.
+     * screen.orientation.lock fires on load as a best-effort bonus for Android/PWA. */
   </style>
   <script>
     (function () {
@@ -211,13 +211,6 @@
 
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
 <button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
-
-<!-- Portrait overlay: shown by CSS when phone is in portrait, hidden in landscape -->
-<div id="rotate-msg">
-  <div class="rm-icon">📱</div>
-  <div class="rm-text">Please rotate your phone</div>
-  <div class="rm-sub">This poker table is best viewed in landscape mode</div>
-</div>
 
 <!-- Blind Schedule Modal -->
 <div class="modal-overlay hidden" id="blind-schedule-modal">
