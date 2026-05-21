@@ -1442,7 +1442,7 @@ input, select, textarea { font-family: inherit; }
 /* ─── Panel FAB triggers ───────────────────────────────────────────────── */
 #panel-fabs {
   position: fixed;
-  top: 50px;
+  top: 5vmin;
   right: 0;
   z-index: 350;
   display: flex;
@@ -1742,15 +1742,16 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Mobile Table Layout (≤768px, any orientation) ─────────────────────── */
 /*
- * Always applied on mobile regardless of portrait/landscape.
- * The oval min() formula keeps the table within the viewport in either
- * orientation. screen.orientation.lock fires on load as a best-effort bonus.
+ * Three-zone layout using vmin/vmax for consistent scaling on any phone:
+ *   vmin = short axis (visual height in landscape) ≈ 390px on iPhone 14
+ *   vmax = long  axis (visual width  in landscape) ≈ 844px on iPhone 14
  *
- * Layout:
- *   40px  top bar
- *   flex  oval
- *   80px  bottom bar: 80px cards column | 1fr action buttons
- * Seats: 80px circular avatar + name label, no box background
+ * These units are orientation-independent: vmin/vmax stay the same whether
+ * the phone is physically landscape or portrait-rotated via CSS transform.
+ *
+ *   TOP BAR:    5vmin  ≈ 20px — Leave | table name | pot
+ *   TABLE AREA: flex:1 ≈ 273px — oval with seats
+ *   BOTTOM BAR: 25vmin ≈ 97px — hole cards | action buttons
  */
 @media (max-width: 768px), (max-height: 500px) and (orientation: landscape) {
 
@@ -1763,16 +1764,16 @@ input, select, textarea { font-family: inherit; }
     overflow: hidden;
   }
 
-  /* 2 ─ Top bar: 40px */
+  /* 2 ─ Top bar: 5vmin */
   body.table-page .table-header {
     flex-shrink: 0;
-    height: 40px;
-    min-height: 40px;
-    max-height: 40px;
-    padding: 0 10px;
-    font-size: 0.68rem;
+    height: 5vmin;
+    min-height: 5vmin;
+    max-height: 5vmin;
+    padding: 0 1vmax;
+    font-size: 1.4vmax;
     flex-wrap: nowrap;
-    gap: 6px;
+    gap: 0.8vmax;
     align-items: center;
     overflow: hidden;
     background: rgba(0,0,0,0.9);
@@ -1780,24 +1781,23 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .table-header .table-info-bar {
     flex: 1 1 0;
-    font-size: 0.62rem;
-    gap: 4px;
+    font-size: 1.3vmax;
+    gap: 0.6vmax;
     flex-wrap: nowrap;
     min-width: 0;
     overflow: hidden;
   }
-  /* Mobile header: show leave btn + pot, hide desktop right section */
   body.table-page .hdr-leave-btn {
     display: flex;
     align-items: center;
     flex-shrink: 0;
     background: rgba(255,255,255,0.06);
     border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 6px;
+    border-radius: 0.5vmin;
     color: var(--gold);
-    font-size: 0.62rem;
+    font-size: 1.3vmax;
     font-weight: 700;
-    padding: 3px 7px;
+    padding: 0.3vmin 0.8vmax;
     cursor: pointer;
     white-space: nowrap;
   }
@@ -1806,18 +1806,18 @@ input, select, textarea { font-family: inherit; }
     display: inline;
     flex-shrink: 0;
     color: var(--chip-green);
-    font-size: 0.62rem;
+    font-size: 1.3vmax;
     font-weight: 700;
     white-space: nowrap;
   }
   body.table-page .hdr-right { display: none; }
   body.table-page #hdr-jackpot-timer { display: none; }
-  body.table-page .jackpot-mini { font-size: 0.62rem; }
+  body.table-page .jackpot-mini { font-size: 1.3vmax; }
   body.table-page #host-hh-btn { display: none !important; }
   body.table-page #chat-toggle { display: none; }
   body.table-page #action-leave-btn { display: none; }
 
-  /* 3 ─ Table-main fills space between top bar and bottom bar */
+  /* 3 ─ Table-main fills remaining space */
   body.table-page .table-main {
     flex: 1 1 0;
     min-height: 0;
@@ -1830,10 +1830,10 @@ input, select, textarea { font-family: inherit; }
   body.table-page .chat-panel {
     display: none;
     position: fixed !important;
-    top: 40px;
-    bottom: 80px;
+    top: 5vmin;
+    bottom: 25vmin;
     right: 0;
-    width: min(260px, 65vw);
+    width: min(30vmax, 260px);
     z-index: 150;
     background: rgba(5,12,8,0.97) !important;
     border-left: 1px solid var(--border) !important;
@@ -1852,18 +1852,17 @@ input, select, textarea { font-family: inherit; }
     justify-content: center;
   }
 
-  /* 5 ─ Oval: height-driven 2:1
-   *   seat overhang = 80px avatar ÷ 2 = 40px each side = 80px total vertical margin
-   *   oval-height = 100dvh − 40(header) − 80(bottom) − 80(seat margin) = 100dvh − 200px
-   *   iPhone 14 (390px): 190px height → 380px width ✓
-   *   Galaxy S21 (412px): 212px height → 424px width ✓
+  /* 5 ─ Oval: 2:1 aspect, scaled by vmin/vmax
+   *   Seat diameter: 8vmax  → overhang: 4vmax per side
+   *   Oval height = table-area(70vmin) − seat-overhang(8vmax)
+   *   iPhone 14 landscape: 70×3.9 − 8×8.44 = 273 − 67.5 = 205.5px height
+   *                        width = 411px  (fits in 844px) ✓
    */
   body.table-page .poker-table-wrap {
     position: relative;
-    /* min() keeps oval within viewport in both landscape and portrait */
-    height: min(calc(100dvh - 200px), calc((100dvw - 56px) / 2));
-    width: min(calc(2 * (100dvh - 200px)), calc(100dvw - 56px));
-    max-width: calc(100dvw - 56px);
+    height: min(calc(70vmin - 8vmax), calc((100vmax - 4vmax) / 2));
+    width:  min(calc(2 * (70vmin - 8vmax)), calc(100vmax - 4vmax));
+    max-width: calc(100vmax - 4vmax);
     flex-shrink: 0;
     margin: 0 auto;
   }
@@ -1875,24 +1874,22 @@ input, select, textarea { font-family: inherit; }
     border-radius: 50%;
   }
 
-  /* 6 ─ Circular seat design — 80px avatars */
-  body.table-page .seats-container { inset: -44px; }
-  /* Strip the rectangle — seat is just a circle + label */
+  /* 6 ─ Seats: 8vmax circles */
+  body.table-page .seats-container { inset: -4vmax; }
   body.table-page .seat-box {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
     padding: 0;
     min-width: 0;
-    gap: 2px;
+    gap: 0.3vmin;
   }
   body.table-page .seat-avatar {
-    width: 80px;
-    height: 80px;
+    width: 8vmax;
+    height: 8vmax;
     border-width: 3px;
     border-color: rgba(255,255,255,0.22);
   }
-  /* Gold glow ring when it's this player's turn */
   body.table-page .seat-box.active-player .seat-avatar {
     border-color: var(--gold) !important;
     box-shadow: 0 0 0 2px rgba(212,175,55,0.45), 0 0 12px rgba(212,175,55,0.75) !important;
@@ -1900,8 +1897,8 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .seat-box.folded { opacity: 0.28; }
   body.table-page .seat-box.empty {
-    width: 80px !important;
-    height: 80px !important;
+    width: 8vmax !important;
+    height: 8vmax !important;
     min-width: 0 !important;
     border-radius: 50% !important;
     border: 2px dashed rgba(255,255,255,0.22) !important;
@@ -1914,40 +1911,40 @@ input, select, textarea { font-family: inherit; }
     border-color: rgba(212,175,55,0.7) !important;
     background: rgba(212,175,55,0.08) !important;
   }
-  body.table-page .seat-initials { font-size: 1.9rem; }
+  body.table-page .seat-initials { font-size: 2.5vmax; }
   body.table-page .seat-name {
-    font-size: 0.54rem;
-    max-width: 82px;
-    margin-top: 3px;
+    font-size: 1.5vmax;
+    max-width: 10vmax;
+    margin-top: 0.3vmin;
     font-weight: 600;
     text-align: center;
     color: rgba(255,255,255,0.92);
     letter-spacing: 0;
   }
-  body.table-page .seat-chips { font-size: 0.48rem; text-align: center; line-height: 1; }
-  body.table-page .seat-bet { font-size: 0.46rem; min-height: 9px; }
-  body.table-page .seat-cards .card { width: 20px; height: 30px; font-size: 0.44rem; border-radius: 3px; }
-  body.table-page .dealer-puck { width: 18px; height: 18px; font-size: 0.52rem; top: -6px; right: -6px; }
-  body.table-page .money-puck { min-width: 28px; height: 16px; font-size: 0.46rem; top: -8px; left: -8px; }
-  body.table-page .chip-dot { width: 9px; height: 9px; border-width: 1px; }
-  body.table-page .chip-total { font-size: 0.56rem; }
+  body.table-page .seat-chips { font-size: 1.3vmax; text-align: center; line-height: 1; }
+  body.table-page .seat-bet { font-size: 1.2vmax; min-height: 1.2vmax; }
+  body.table-page .seat-cards .card { width: 2.5vmax; height: 3.5vmax; font-size: 1.1vmax; border-radius: 0.3vmin; }
+  body.table-page .dealer-puck { width: 2vmax; height: 2vmax; font-size: 1.2vmax; top: -0.7vmax; right: -0.7vmax; }
+  body.table-page .money-puck { min-width: 3.5vmax; height: 2vmax; font-size: 1.1vmax; top: -1vmax; left: -1vmax; }
+  body.table-page .chip-dot { width: 1.1vmax; height: 1.1vmax; border-width: 1px; }
+  body.table-page .chip-total { font-size: 1.4vmax; }
   body.table-page .chip-breakdown { display: none !important; }
 
-  /* 7 ─ Community cards */
-  body.table-page .community-area { gap: 3px; }
-  body.table-page .community-cards { gap: 3px; }
-  body.table-page .community-cards .card { width: 28px; height: 42px; font-size: 0.62rem; }
-  body.table-page .pot-display .pot-amount { font-size: 0.9rem; }
-  body.table-page .pot-display .pot-label { font-size: 0.58rem; }
+  /* 7 ─ Community cards: 5vmax × 8vmin */
+  body.table-page .community-area { gap: 0.4vmax; }
+  body.table-page .community-cards { gap: 0.4vmax; }
+  body.table-page .community-cards .card { width: 5vmax; height: 8vmin; font-size: 1.8vmax; }
+  body.table-page .pot-display .pot-amount { font-size: 2vmin; }
+  body.table-page .pot-display .pot-label { font-size: 1.5vmin; }
 
-  /* 8 ─ Bottom bar: 80px, 2-column grid */
+  /* 8 ─ Bottom bar: 25vmin, 2-column grid (12vmax cards | 1fr buttons) */
   body.table-page .my-cards-area {
     flex-shrink: 0;
-    height: 80px;
-    min-height: 80px;
-    max-height: 80px;
+    height: 25vmin;
+    min-height: 25vmin;
+    max-height: 25vmin;
     display: grid;
-    grid-template-columns: 80px 1fr;
+    grid-template-columns: 12vmax 1fr;
     align-items: stretch;
     padding: 0;
     gap: 0;
@@ -1957,35 +1954,35 @@ input, select, textarea { font-family: inherit; }
     overflow: visible;
   }
 
-  /* Shot clock: floats above the bottom bar at the left edge */
+  /* Shot clock: floats above the bottom bar */
   body.table-page .shot-clock {
     position: absolute;
-    top: -44px;
-    left: 6px;
-    width: 34px;
-    height: 34px;
+    top: -4.5vmin;
+    left: 0.8vmax;
+    width: 4vmin;
+    height: 4vmin;
     z-index: 20;
   }
-  body.table-page .shot-clock-number { font-size: 0.62rem; }
+  body.table-page .shot-clock-number { font-size: 1.6vmin; }
 
-  /* Left column: hole cards */
+  /* Left column: hole cards — 6vmax × 10vmin */
   body.table-page .my-hole-cards {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 5px;
-    padding: 6px 5px;
+    gap: 0.6vmax;
+    padding: 0.5vmin 0.5vmax;
     border-right: 1px solid rgba(255,255,255,0.09);
     background: rgba(0,0,0,0.25);
   }
-  body.table-page .card.large { width: 38px; height: 56px; font-size: 0.78rem; }
+  body.table-page .card.large { width: 6vmax; height: 10vmin; font-size: 2vmax; }
 
-  /* 9 ─ Right column: action buttons */
+  /* 9 ─ Right column: action buttons — flex fill, 8vmin height, 1.8vmax font */
   body.table-page .action-area {
     display: flex;
     align-items: center;
-    gap: 4px;
-    padding: 6px 8px;
+    gap: 0.5vmax;
+    padding: 0.8vmin 0.8vmax;
     overflow: visible;
     height: 100%;
     position: static;
@@ -1993,47 +1990,47 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .action-btn {
     flex: 1 1 0;
-    height: 56px;
-    min-height: 56px;
+    height: 8vmin;
+    min-height: 8vmin;
     min-width: 0;
-    font-size: 0.64rem;
-    padding: 2px 3px;
-    border-radius: 10px;
+    font-size: 1.8vmax;
+    padding: 0;
+    border-radius: 1vmin;
   }
 
   /* 10 ─ Raise slider: absolute overlay above bottom bar */
   body.table-page .raise-controls {
     position: absolute;
-    bottom: 80px;
+    bottom: 25vmin;
     left: 0;
     right: 0;
     background: rgba(4,12,6,0.96);
     border: 1px solid rgba(200,168,75,0.3);
     border-bottom: none;
-    border-radius: 8px 8px 0 0;
-    padding: 6px 10px;
+    border-radius: 1vmin 1vmin 0 0;
+    padding: 0.6vmin 1vmax;
     display: flex;
-    gap: 8px;
+    gap: 1vmax;
     align-items: center;
     z-index: 31;
     flex-wrap: nowrap;
   }
   body.table-page .raise-controls input[type=range] {
     flex: 1;
-    height: 26px;
-    min-width: 60px;
+    height: 3vmin;
+    min-width: 7vmax;
     accent-color: var(--gold);
     touch-action: none;
   }
   body.table-page .raise-controls input[type=number] {
-    width: 56px;
-    padding: 3px 5px;
-    font-size: 0.72rem;
-    height: 28px;
+    width: 7vmax;
+    padding: 0.3vmin 0.5vmax;
+    font-size: 1.8vmax;
+    height: 3vmin;
     flex-shrink: 0;
   }
 
-  /* 11 ─ Hide utility buttons in landscape */
+  /* 11 ─ Hide utility buttons */
   body.table-page .ptt-btn { display: none; }
   body.table-page .break-btn { display: none; }
   body.table-page #mic-test-btn { display: none; }
@@ -2042,11 +2039,17 @@ input, select, textarea { font-family: inherit; }
   body.table-page #voice-toggle-btn { display: none; }
 
   /* 12 ─ Blind timer */
-  body.table-page #blind-timer-panel { padding: 3px 6px !important; font-size: 0.58rem; }
-  body.table-page #blind-timer-panel .btp-level { font-size: 0.56rem; }
+  body.table-page #blind-timer-panel { padding: 0.3vmin 0.6vmax !important; font-size: 1.4vmax; }
+  body.table-page #blind-timer-panel .btp-level { font-size: 1.3vmax; }
 
-  /* 15 ─ Chat bubble visible in landscape */
-  body.table-page .chat-bubble-btn { display: flex; }
+  /* 13 ─ Chat bubble: position relative to bottom bar */
+  body.table-page .chat-bubble-btn {
+    display: flex;
+    bottom: calc(25vmin + 0.5vmin);
+    right: 1vmax;
+    width: 5vmin;
+    height: 5vmin;
+  }
 }
 
 /* ─── Portrait force-landscape: rotate entire table page 90° ─────────────── */
