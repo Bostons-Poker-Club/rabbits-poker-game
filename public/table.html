@@ -166,7 +166,7 @@
     <button class="action-btn btn-call" id="btn-call"
       ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>CALL<span class="sub" id="call-amount"></span></button>
     <button class="action-btn btn-raise" id="btn-raise"
-      ontouchstart="actTouch('raise',event)" onclick="act('raise')" disabled>RAISE<span class="sub" id="raise-display">–</span></button>
+      ontouchstart="tapRaise(event)" onclick="tapRaise(event)" disabled>RAISE<span class="sub" id="raise-display">–</span></button>
     <button class="action-btn btn-allin" id="btn-allin"
       ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled>ALL IN<span class="sub" id="allin-amount"></span></button>
     <!-- Raise slider panel — in landscape this becomes a floating overlay above the bar -->

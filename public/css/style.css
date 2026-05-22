@@ -1790,6 +1790,35 @@ input, select, textarea { font-family: inherit; }
   }
   .chat-bubble-badge.visible { display: flex; }
 
+  /* Raise slider: hidden by default, shown via .visible class when RAISE is tapped */
+  body.table-page .raise-controls { display: none; }
+  body.table-page .raise-controls.visible { display: flex; }
+
+  /* Force action buttons into a horizontal row regardless of global overrides */
+  body.table-page .action-area {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    width: 100% !important;
+  }
+  body.table-page .action-btn {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  /* Hide seat camera feeds on mobile — too small to be useful */
+  .seat-cam-video,
+  #admin-cam-overlay { display: none !important; }
+
+  /* Center the poker table oval */
+  body.table-page .poker-area {
+    justify-content: center !important;
+    align-items: center !important;
+  }
+  body.table-page .poker-table-wrap {
+    margin: 0 auto !important;
+  }
+
   /* Hide utility buttons not needed in mobile action bar */
   body.table-page .ptt-btn,
   body.table-page .break-btn,

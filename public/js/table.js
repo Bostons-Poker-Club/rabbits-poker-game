@@ -26,6 +26,7 @@ let _reconnectTapTimer = null;
 let shotClockEnd = 0;
 let chatOpen = false;
 let chatUnread = 0;
+let _raiseSliderVisible = false;
 let prevBets = {};       // seatNumber -> last known currentBet
 let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
@@ -134,13 +135,24 @@ const SEAT_POSITIONS = {
 };
 
 // ─── Orientation Lock ─────────────────────────────────────────────────────
-// Locks to landscape on Android Chrome and installed PWAs.
-// iOS Safari does not support orientation lock via JS (handled by apple-mobile-web-app-capable).
-(function initOrientation() {
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock('landscape').catch(() => {});
+// Tries the Screen Orientation API (Android Chrome / PWA).
+// Falls back to an inline body transform when in portrait (e.g. iOS Safari).
+(async function initOrientation() {
+  try {
+    if (screen.orientation && screen.orientation.lock) {
+      await screen.orientation.lock('landscape');
+    }
+  } catch (e) {
+    if (window.innerHeight > window.innerWidth) {
+      document.body.style.transform      = 'rotate(90deg)';
+      document.body.style.transformOrigin = 'left top';
+      document.body.style.width          = window.innerHeight + 'px';
+      document.body.style.height         = window.innerWidth  + 'px';
+      document.body.style.position       = 'absolute';
+      document.body.style.top            = '100%';
+      document.body.style.left           = '0';
+    }
   }
-  // Unlock when leaving so other pages (lobby, etc.) rotate freely
   window.addEventListener('pagehide', () => {
     try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
   });
@@ -1274,6 +1286,9 @@ function updateActionButtons(state) {
     currentMaxRaise = 0;
     if (allinAmountEl) allinAmountEl.textContent = '';
     callAmountEl.textContent = '';
+    // Reset raise slider visibility when it's no longer our turn
+    _raiseSliderVisible = false;
+    document.getElementById('raise-controls')?.classList.remove('visible');
   }
 }
 
@@ -1302,6 +1317,31 @@ function actTouch(action, event) {
   });
   if (action === 'allin') { setAllIn(); act('raise'); }
   else act(action);
+}
+
+// On mobile, first RAISE tap reveals the slider; second tap submits.
+function tapRaise(event) {
+  if (event) event.preventDefault();
+  const rc = document.getElementById('raise-controls');
+  if (!rc) { act('raise'); return; }
+
+  if (!_raiseSliderVisible) {
+    _raiseSliderVisible = true;
+    rc.classList.add('visible');
+    return;
+  }
+
+  // Second tap: submit raise
+  if (_actTouchLock) return;
+  _actTouchLock = true;
+  setTimeout(() => { _actTouchLock = false; }, 800);
+  ['btn-fold','btn-check','btn-call','btn-raise','btn-allin'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = true;
+  });
+  _raiseSliderVisible = false;
+  rc.classList.remove('visible');
+  act('raise');
 }
 
 function act(action) {
