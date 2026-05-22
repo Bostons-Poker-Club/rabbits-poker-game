@@ -1,5 +1,11 @@
 'use strict';
 
+// Force landscape on mobile via CSS rotation — class drives the @media portrait rule
+document.documentElement.classList.add('table-page-html');
+window.addEventListener('pagehide', () => {
+  document.documentElement.classList.remove('table-page-html');
+});
+
 requireAuth();
 
 const user = getUser();

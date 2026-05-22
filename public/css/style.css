@@ -1573,6 +1573,21 @@ input, select, textarea { font-family: inherit; }
  *   BOTTOM BAR: 48px  — hole cards left | action buttons right
  */
 
+/* ─── Portrait → Landscape rotation (table page only) ───────────────────── */
+/* Class added/removed by table.js so this never affects any other page.      */
+@media screen and (max-width: 768px) and (orientation: portrait) {
+  html.table-page-html {
+    transform: rotate(90deg) translateY(-100%);
+    transform-origin: top left;
+    width: 100vh;
+    height: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+  }
+}
+
 /* ─── Mobile Table Layout ────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   body.table-page {
