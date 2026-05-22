@@ -2074,41 +2074,33 @@ input, select, textarea { font-family: inherit; }
   }
 }
 
-/* ─── Portrait-mode blocker overlay ─────────────────────────────────────── */
-#portrait-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: rgba(4, 12, 6, 0.97);
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  text-align: center;
-  padding: 32px;
-}
-#portrait-overlay .po-icon {
-  font-size: 3.5rem;
-  animation: poRotate 2.2s ease-in-out infinite;
-}
-@keyframes poRotate {
-  0%, 30%, 100% { transform: rotate(0deg); }
-  55%, 80%      { transform: rotate(90deg); }
-}
-#portrait-overlay .po-title {
-  color: var(--gold);
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-}
-#portrait-overlay .po-sub {
-  color: rgba(255,255,255,0.5);
-  font-size: 0.9rem;
-}
-
+/* ─── Portrait → landscape rotation (table page only) ───────────────────── */
+/*
+ * Rotates the entire table page 90° CW so it always appears in landscape on
+ * portrait-held phones. html.table-mode is set only in table.html.
+ *
+ * Math for portrait viewport W×H (e.g. 390×844):
+ *   1. Set html to width=100dvh(844) × height=100dvw(390), anchored at (0,0)
+ *   2. transform-origin: 0 0  →  pivot at top-left corner
+ *   3. rotate(90deg) maps the 844×390 box to x∈[-390,0], y∈[0,844]
+ *   4. translateX(100dvw=390) shifts it back into view: x∈[0,390], y∈[0,844] ✓
+ * Body height is forced to 100dvw so the flex column fits the short axis.
+ */
 @media (max-width: 768px) and (orientation: portrait) {
-  #portrait-overlay { display: flex; }
+  html.table-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100dvh;
+    height: 100dvw;
+    overflow: hidden;
+    transform-origin: 0 0;
+    transform: translateX(100dvw) rotate(90deg);
+  }
+  html.table-mode body.table-page {
+    height: 100dvw;
+    max-height: 100dvw;
+  }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
