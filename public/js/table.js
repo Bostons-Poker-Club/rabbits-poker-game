@@ -1,11 +1,5 @@
 'use strict';
 
-// Force landscape on mobile via CSS rotation — class drives the @media portrait rule
-document.documentElement.classList.add('table-page-html');
-window.addEventListener('pagehide', () => {
-  document.documentElement.classList.remove('table-page-html');
-});
-
 requireAuth();
 
 const user = getUser();
@@ -135,23 +129,11 @@ const SEAT_POSITIONS = {
 };
 
 // ─── Orientation Lock ─────────────────────────────────────────────────────
-// Tries the Screen Orientation API (Android Chrome / PWA).
-// Falls back to an inline body transform when in portrait (e.g. iOS Safari).
-(async function initOrientation() {
-  try {
-    if (screen.orientation && screen.orientation.lock) {
-      await screen.orientation.lock('landscape');
-    }
-  } catch (e) {
-    if (window.innerHeight > window.innerWidth) {
-      document.body.style.transform      = 'rotate(90deg)';
-      document.body.style.transformOrigin = 'left top';
-      document.body.style.width          = window.innerHeight + 'px';
-      document.body.style.height         = window.innerWidth  + 'px';
-      document.body.style.position       = 'absolute';
-      document.body.style.top            = '100%';
-      document.body.style.left           = '0';
-    }
+// Attempts to lock to landscape on Android Chrome / installed PWAs.
+// Silently ignored on iOS Safari — no fallback rotation applied.
+(function initOrientation() {
+  if (screen.orientation && screen.orientation.lock) {
+    screen.orientation.lock('landscape').catch(() => {});
   }
   window.addEventListener('pagehide', () => {
     try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
