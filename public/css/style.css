@@ -1561,6 +1561,8 @@ input, select, textarea { font-family: inherit; }
   transition: background 0.15s, transform 0.1s;
 }
 .chat-bubble-btn:active { transform: scale(0.92); background: rgba(200,168,75,0.3); }
+.chat-bubble-btn { position: relative; }  /* anchor for badge */
+.chat-close-btn { display: none; }  /* hidden on desktop, shown on mobile */
 
 /* ─── Mobile Table Layout ────────────────────────────────────────────────── */
 /*
@@ -1603,6 +1605,7 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Mobile Table Layout ────────────────────────────────────────────────── */
 @media (max-width: 768px) {
+  /* Full-screen flex column */
   body.table-page {
     display: flex;
     flex-direction: column;
@@ -1612,6 +1615,7 @@ input, select, textarea { font-family: inherit; }
     background: #040e07;
   }
 
+  /* 36px top header */
   body.table-page .table-header {
     height: 36px;
     min-height: 36px;
@@ -1624,6 +1628,7 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.7rem;
   }
 
+  /* Table area fills everything between header and bottom bar */
   body.table-page .poker-area {
     flex: 1;
     min-height: 0;
@@ -1631,6 +1636,7 @@ input, select, textarea { font-family: inherit; }
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    padding-bottom: 56px;   /* clear the fixed bottom bar */
   }
 
   body.table-page .poker-table-wrap {
@@ -1639,29 +1645,36 @@ input, select, textarea { font-family: inherit; }
     max-height: 100%;
   }
 
+  /* Bottom bar: fixed at absolute bottom, always visible */
   body.table-page .my-cards-area {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
     height: 56px;
     min-height: 56px;
-    flex-shrink: 0;
     display: flex;
     align-items: center;
     padding: 4px 6px;
     gap: 4px;
     background: rgba(0,0,0,0.92);
     border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 30;
   }
 
+  /* Action buttons: horizontal row filling right side of bottom bar */
   body.table-page .action-area {
     display: flex;
     flex-direction: row;
     flex: 1;
     gap: 3px;
-    align-items: center;
+    align-items: stretch;
+    height: 100%;
   }
 
   body.table-page .action-btn {
     flex: 1;
-    height: 44px;
+    height: 100%;
     font-size: 0.6rem;
     font-weight: bold;
     padding: 2px 3px;
@@ -1680,6 +1693,33 @@ input, select, textarea { font-family: inherit; }
     height: 52px;
   }
 
+  /* Raise slider: floats just above the fixed bottom bar */
+  body.table-page .raise-controls {
+    position: fixed;
+    bottom: 56px;
+    left: 0;
+    right: 0;
+    z-index: 50;
+    padding: 6px 10px;
+    background: rgba(4,12,6,0.96);
+    border-top: 1px solid rgba(200,168,75,0.3);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  body.table-page .raise-controls input[type=range] {
+    flex: 1;
+    height: 24px;
+    accent-color: var(--gold);
+    touch-action: none;
+  }
+  body.table-page .raise-controls input[type=number] {
+    width: 60px;
+    font-size: 0.75rem;
+    padding: 3px 5px;
+  }
+
+  /* Host/mic panels: right-side drawers, below header */
   body.table-page #mic-controls-panel,
   body.table-page #host-controls {
     position: fixed;
@@ -1692,16 +1732,63 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.7rem;
   }
 
-  body.table-page .raise-controls {
+  /* Chat panel: slide-up from bottom, takes 40% height, above bottom bar */
+  body.table-page .chat-panel {
     position: fixed;
     bottom: 56px;
     left: 0;
     right: 0;
-    z-index: 50;
-    padding: 6px 10px;
-    background: rgba(4,12,6,0.96);
-    border-top: 1px solid rgba(200,168,75,0.3);
+    height: 40vh;
+    background: rgba(5,12,8,0.98);
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    transform: translateY(110%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
+    pointer-events: none;
   }
+  body.table-page .chat-panel.open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* Chat bubble: floating above bottom bar */
+  body.table-page .chat-bubble-btn {
+    display: flex;
+    position: fixed;
+    bottom: 66px;
+    right: 12px;
+    z-index: 140;
+  }
+
+  /* Chat close button inside header */
+  body.table-page .chat-close-btn {
+    display: flex;
+  }
+
+  /* Unread badge on chat bubble */
+  .chat-bubble-badge {
+    display: none;
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: var(--red, #e53935);
+    color: #fff;
+    font-size: 0.55rem;
+    font-weight: 700;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    line-height: 1;
+    pointer-events: none;
+  }
+  .chat-bubble-badge.visible { display: flex; }
 
   /* Hide utility buttons not needed in mobile action bar */
   body.table-page .ptt-btn,

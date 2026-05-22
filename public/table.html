@@ -123,7 +123,7 @@
 
   <!-- Chat Panel -->
   <div class="chat-panel" id="chat-panel">
-    <div class="chat-header">Table Chat</div>
+    <div class="chat-header">Table Chat <button class="chat-close-btn" onclick="toggleChat()" title="Close chat">✕</button></div>
     <div class="chat-messages" id="chat-messages"></div>
     <!-- Emoji reactions -->
     <div class="chat-reactions-bar">
@@ -187,7 +187,7 @@
 </div>
 
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
-<button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬</button>
+<button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬<span id="chat-bubble-badge" class="chat-bubble-badge"></span></button>
 
 <!-- Blind Schedule Modal -->
 <div class="modal-overlay hidden" id="blind-schedule-modal">

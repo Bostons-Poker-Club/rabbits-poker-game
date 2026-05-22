@@ -25,6 +25,7 @@ let _reconnectTimer = null;
 let _reconnectTapTimer = null;
 let shotClockEnd = 0;
 let chatOpen = false;
+let chatUnread = 0;
 let prevBets = {};       // seatNumber -> last known currentBet
 let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
@@ -144,6 +145,16 @@ const SEAT_POSITIONS = {
     try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
   });
 })();
+
+// Tap outside chat panel to close it on mobile
+document.addEventListener('click', (e) => {
+  if (!chatOpen) return;
+  const panel = document.getElementById('chat-panel');
+  const bubble = document.getElementById('chat-bubble-btn');
+  if (panel && !panel.contains(e.target) && bubble && !bubble.contains(e.target)) {
+    toggleChat();
+  }
+});
 
 // Initialise sound engine (reads mute preference from localStorage)
 if (window.Sound) Sound.init();
@@ -1603,6 +1614,12 @@ function chatMsg(name, text, type) {
   el.appendChild(div);
   el.scrollTop = el.scrollHeight;
 
+  // Unread badge: count non-system messages that arrive while chat is closed
+  if (!isSystem && !chatOpen) {
+    chatUnread++;
+    _updateChatBadge();
+  }
+
   // Persist to session storage (skip system messages to reduce noise)
   if (!isSystem) {
     _chatHistory.push({ name, text, type, ts: Date.now() });
@@ -1632,6 +1649,21 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 function toggleChat() {
   chatOpen = !chatOpen;
   document.getElementById('chat-panel').classList.toggle('open', chatOpen);
+  if (chatOpen) {
+    chatUnread = 0;
+    _updateChatBadge();
+  }
+}
+
+function _updateChatBadge() {
+  const badge = document.getElementById('chat-bubble-badge');
+  if (!badge) return;
+  if (chatUnread > 0) {
+    badge.textContent = chatUnread > 9 ? '9+' : String(chatUnread);
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
