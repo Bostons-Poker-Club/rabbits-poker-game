@@ -1,8 +1,5 @@
 'use strict';
 
-// Ensure portrait-rotation CSS selector always matches, even if HTML attr is lost
-document.documentElement.classList.add('table-mode');
-
 requireAuth();
 
 const user = getUser();
@@ -130,8 +127,8 @@ const SEAT_POSITIONS = {
 };
 
 // ─── Orientation Lock ─────────────────────────────────────────────────────
-// CSS rotation (style.css) handles portrait→landscape on iOS Safari.
-// screen.orientation.lock is attempted for Android/PWA installs.
+// Locks to landscape on Android Chrome and installed PWAs.
+// iOS Safari does not support orientation lock via JS (handled by apple-mobile-web-app-capable).
 (function initOrientation() {
   if (screen.orientation && screen.orientation.lock) {
     screen.orientation.lock('landscape').catch(() => {});
