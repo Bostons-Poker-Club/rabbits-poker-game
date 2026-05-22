@@ -1673,41 +1673,6 @@ input, select, textarea { font-family: inherit; }
   border-bottom: none;
 }
 
-/* ─── Portrait Rotate Overlay (table page only) ─────────────────────────── */
-.rotate-overlay {
-  display: none;
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: #040e07;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--text);
-}
-.rotate-icon {
-  font-size: 4rem;
-  color: var(--gold);
-  margin-bottom: 16px;
-  display: inline-block;
-  animation: rotate-hint 1.8s ease-in-out infinite;
-}
-@keyframes rotate-hint {
-  0%, 100% { transform: rotate(0deg); }
-  40%, 60% { transform: rotate(85deg); }
-}
-.rotate-title {
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--gold);
-  margin-bottom: 8px;
-}
-.rotate-subtitle {
-  font-size: .9rem;
-  color: var(--text-dim);
-  max-width: 280px;
-  text-align: center;
-}
 
 
 /* ─── Seat glow animation (active player's turn) ────────────────────────── */
@@ -2074,40 +2039,6 @@ input, select, textarea { font-family: inherit; }
   }
 }
 
-/* ─── Portrait → landscape rotation (table page only) ───────────────────── */
-/*
- * Rotates body.table-page 90° CW so the table always appears in landscape on
- * portrait-held phones. Transforming body (not html) is more reliable across
- * browsers; position:fixed children are contained inside the transformed body.
- *
- * Math for portrait viewport W×H (e.g. 390×844):
- *   body: width=100vh(844) × height=100vw(390), anchored at (0,0)
- *   transform-origin: 0 0  →  pivot at top-left
- *   rotate(90deg): maps corners to x∈[-390,0], y∈[0,844]
- *   translateX(100vw=390): shifts back → x∈[0,390], y∈[0,844]  ✓
- *
- * vh/vw listed before dvh/dvw as fallbacks for older Android browsers.
- * DEBUG: body turns red in portrait if this block is firing — remove !important
- * line once confirmed.
- */
-@media (max-width: 768px) and (orientation: portrait) {
-  html.table-mode {
-    overflow: hidden;
-  }
-  html.table-mode body.table-page {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vh;
-    width: 100dvh;
-    height: 100vw;
-    height: 100dvw;
-    overflow: hidden;
-    transform-origin: 0 0;
-    transform: translateX(100vw) rotate(90deg);
-    transform: translateX(100dvw) rotate(90deg);
-  }
-}
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
 .seat-avatar {
