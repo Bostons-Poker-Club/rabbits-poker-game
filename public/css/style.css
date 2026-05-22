@@ -1577,7 +1577,7 @@ input, select, textarea { font-family: inherit; }
 /* Class added/removed by table.js so this never affects any other page.      */
 @media screen and (max-width: 768px) and (orientation: portrait) {
   html.table-page-html {
-    transform: rotate(90deg) translateY(-100%);
+    transform: rotate(90deg) translateX(0) translateY(-100%);
     transform-origin: top left;
     width: 100vh;
     height: 100vw;
@@ -1585,6 +1585,19 @@ input, select, textarea { font-family: inherit; }
     top: 0;
     left: 0;
     overflow: hidden;
+  }
+
+  html.table-page-html body {
+    width: 100vmax;
+    height: 100vmin;
+    overflow: hidden;
+  }
+
+  html.table-page-html body.table-page {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 }
 
