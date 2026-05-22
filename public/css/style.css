@@ -2076,30 +2076,37 @@ input, select, textarea { font-family: inherit; }
 
 /* ─── Portrait → landscape rotation (table page only) ───────────────────── */
 /*
- * Rotates the entire table page 90° CW so it always appears in landscape on
- * portrait-held phones. html.table-mode is set only in table.html.
+ * Rotates body.table-page 90° CW so the table always appears in landscape on
+ * portrait-held phones. Transforming body (not html) is more reliable across
+ * browsers; position:fixed children are contained inside the transformed body.
  *
  * Math for portrait viewport W×H (e.g. 390×844):
- *   1. Set html to width=100dvh(844) × height=100dvw(390), anchored at (0,0)
- *   2. transform-origin: 0 0  →  pivot at top-left corner
- *   3. rotate(90deg) maps the 844×390 box to x∈[-390,0], y∈[0,844]
- *   4. translateX(100dvw=390) shifts it back into view: x∈[0,390], y∈[0,844] ✓
- * Body height is forced to 100dvw so the flex column fits the short axis.
+ *   body: width=100vh(844) × height=100vw(390), anchored at (0,0)
+ *   transform-origin: 0 0  →  pivot at top-left
+ *   rotate(90deg): maps corners to x∈[-390,0], y∈[0,844]
+ *   translateX(100vw=390): shifts back → x∈[0,390], y∈[0,844]  ✓
+ *
+ * vh/vw listed before dvh/dvw as fallbacks for older Android browsers.
+ * DEBUG: body turns red in portrait if this block is firing — remove !important
+ * line once confirmed.
  */
 @media (max-width: 768px) and (orientation: portrait) {
   html.table-mode {
+    overflow: hidden;
+  }
+  html.table-mode body.table-page {
+    background: red !important; /* DEBUG — remove after confirming rotation fires */
     position: fixed;
     top: 0;
     left: 0;
+    width: 100vh;
     width: 100dvh;
+    height: 100vw;
     height: 100dvw;
     overflow: hidden;
     transform-origin: 0 0;
+    transform: translateX(100vw) rotate(90deg);
     transform: translateX(100dvw) rotate(90deg);
-  }
-  html.table-mode body.table-page {
-    height: 100dvw;
-    max-height: 100dvw;
   }
 }
 

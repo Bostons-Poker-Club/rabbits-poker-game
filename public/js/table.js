@@ -1,5 +1,8 @@
 'use strict';
 
+// Ensure portrait-rotation CSS selector always matches, even if HTML attr is lost
+document.documentElement.classList.add('table-mode');
+
 requireAuth();
 
 const user = getUser();
