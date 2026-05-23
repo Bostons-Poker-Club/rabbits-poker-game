@@ -1718,17 +1718,26 @@ input, select, textarea { font-family: inherit; }
     padding: 3px 5px;
   }
 
-  /* Host/mic panels: right-side drawers, below header */
-  body.table-page #mic-controls-panel,
-  body.table-page #host-controls {
-    position: fixed;
+  /* Slide panels on mobile: narrow, high z-index, inherit slide-in behavior from .slide-panel */
+  body.table-page .slide-panel {
+    width: 200px;
+    max-width: min(88vw, 88dvw);
+    z-index: 500;
+  }
+
+  /* FAB buttons: 36px circles in top-right corner */
+  body.table-page #panel-fabs {
     top: 40px;
     right: 0;
-    width: 180px;
-    max-height: 60vh;
-    overflow-y: auto;
-    z-index: 100;
-    font-size: 0.7rem;
+    gap: 4px;
+    padding: 4px 0;
+    z-index: 510;
+  }
+  body.table-page .panel-fab {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px 0 0 8px;
+    font-size: 1.1rem;
   }
 
   /* Chat panel: slide-up from bottom, takes 40% height, above bottom bar */

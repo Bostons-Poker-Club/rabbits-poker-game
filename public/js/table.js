@@ -2412,14 +2412,7 @@ function toggleMicPanel() {
   const panel = document.getElementById('mic-controls-panel');
   if (!panel) return;
   const opening = panel.classList.toggle('open');
-  if (opening) {
-    document.getElementById('host-controls')?.classList.remove('open');
-    const rc = document.getElementById('raise-controls');
-    if (rc) rc.style.display = 'none';
-  } else {
-    const rc = document.getElementById('raise-controls');
-    if (rc) rc.style.display = '';
-  }
+  if (opening) document.getElementById('host-controls')?.classList.remove('open');
 }
 
 function adminMuteAll()   { socket?.emit('ptt:admin_mute_all'); }
