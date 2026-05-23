@@ -1600,21 +1600,47 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.7rem;
   }
 
-  /* Table area fills everything between header and bottom bar */
+  /* table-main is a direct flex child — must have flex:1 to fill screen */
+  body.table-page .table-main {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  /* poker-area fills table-main */
   body.table-page .poker-area {
     flex: 1;
     min-height: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
-    padding-bottom: 56px;   /* clear the fixed bottom bar */
+    overflow: visible;
+    padding: 0;
   }
 
+  /* wrap: remove desktop max-width cap, size driven by oval below */
   body.table-page .poker-table-wrap {
-    width: 90vw;
-    height: 90%;
-    max-height: 100%;
+    width: auto;
+    height: auto;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+  }
+
+  /*
+   * Oval: fill as much screen as possible.
+   * Seats extend 60px beyond each oval edge (seats-container inset:-60px).
+   * Width limit:  100vw minus 120px (60px each side for seats)
+   * Height limit: viewport minus header(36) minus bottom-bar(56) minus seat-top(60) minus seat-bottom(60) = dvh-212px
+   *               oval width = height * 2, so max-width-from-height = (dvh-212px)*2
+   * min() picks whichever constraint is tighter.
+   */
+  body.table-page .poker-table-oval {
+    width: min(calc(100vw - 120px), calc((100dvh - 212px) * 2));
+    height: auto;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
@@ -1665,7 +1691,7 @@ input, select, textarea { font-family: inherit; }
     height: 52px;
   }
 
-  /* Raise slider: floats just above the fixed bottom bar */
+  /* Raise slider: hidden by default, floats above bottom bar when .visible */
   body.table-page .raise-controls {
     position: fixed;
     bottom: 56px;
@@ -1675,10 +1701,11 @@ input, select, textarea { font-family: inherit; }
     padding: 6px 10px;
     background: rgba(4,12,6,0.96);
     border-top: 1px solid rgba(200,168,75,0.3);
-    display: flex;
+    display: none;
     gap: 8px;
     align-items: center;
   }
+  body.table-page .raise-controls.visible { display: flex; }
   body.table-page .raise-controls input[type=range] {
     flex: 1;
     height: 24px;
@@ -1762,10 +1789,6 @@ input, select, textarea { font-family: inherit; }
   }
   .chat-bubble-badge.visible { display: flex; }
 
-  /* Raise slider: hidden by default, shown via .visible class when RAISE is tapped */
-  body.table-page .raise-controls { display: none; }
-  body.table-page .raise-controls.visible { display: flex; }
-
   /* Force action buttons into a horizontal row regardless of global overrides */
   body.table-page .action-area {
     display: flex !important;
@@ -1781,15 +1804,6 @@ input, select, textarea { font-family: inherit; }
   /* Hide seat camera feeds on mobile — too small to be useful */
   .seat-cam-video,
   #admin-cam-overlay { display: none !important; }
-
-  /* Center the poker table oval */
-  body.table-page .poker-area {
-    justify-content: center !important;
-    align-items: center !important;
-  }
-  body.table-page .poker-table-wrap {
-    margin: 0 auto !important;
-  }
 
   /* Hide utility buttons not needed in mobile action bar */
   body.table-page .ptt-btn,
