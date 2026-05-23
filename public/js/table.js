@@ -128,17 +128,7 @@ const SEAT_POSITIONS = {
   9:  [{ x:50, y:92 }, { x:15, y:75 }, { x:3,  y:50 }, { x:10, y:20 }, { x:35, y:5 }, { x:65, y:5 }, { x:90, y:20 }, { x:97, y:50 }, { x:85, y:75 }]
 };
 
-// ─── Orientation Lock ─────────────────────────────────────────────────────
-// Attempts to lock to landscape on Android Chrome / installed PWAs.
-// Silently ignored on iOS Safari — no fallback rotation applied.
-(function initOrientation() {
-  if (screen.orientation && screen.orientation.lock) {
-    screen.orientation.lock('landscape').catch(() => {});
-  }
-  window.addEventListener('pagehide', () => {
-    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
-  });
-})();
+screen.orientation.lock('landscape-primary').catch(() => {});
 
 // Tap outside chat panel to close it on mobile
 document.addEventListener('click', (e) => {
