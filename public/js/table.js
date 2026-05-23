@@ -131,13 +131,16 @@ const SEAT_POSITIONS = {
 screen.orientation.lock('landscape-primary').catch(() => {});
 
 function enterTable() {
-  document.documentElement.requestFullscreen().then(() => {
+  function _afterEnter() {
     screen.orientation.lock('landscape-primary').catch(() => {});
     document.getElementById('enter-fullscreen').style.display = 'none';
-  }).catch(() => {
-    screen.orientation.lock('landscape-primary').catch(() => {});
-    document.getElementById('enter-fullscreen').style.display = 'none';
-  });
+    setTimeout(() => {
+      window.dispatchEvent(new Event('resize'));
+      if (gameState) renderTable(gameState);
+      if (socket?.connected) socket.emit('table:get_stats', { tableId });
+    }, 500);
+  }
+  document.documentElement.requestFullscreen().then(_afterEnter).catch(_afterEnter);
 }
 
 if (window.innerWidth < 900 || window.innerHeight < 900) {
