@@ -130,6 +130,21 @@ const SEAT_POSITIONS = {
 
 screen.orientation.lock('landscape-primary').catch(() => {});
 
+function enterTable() {
+  document.documentElement.requestFullscreen().then(() => {
+    screen.orientation.lock('landscape-primary').catch(() => {});
+    document.getElementById('enter-fullscreen').style.display = 'none';
+  }).catch(() => {
+    screen.orientation.lock('landscape-primary').catch(() => {});
+    document.getElementById('enter-fullscreen').style.display = 'none';
+  });
+}
+
+if (window.innerWidth < 900 || window.innerHeight < 900) {
+  const overlay = document.getElementById('enter-fullscreen');
+  if (overlay) overlay.style.display = 'flex';
+}
+
 // Tap outside chat panel to close it on mobile
 document.addEventListener('click', (e) => {
   if (!chatOpen) return;
