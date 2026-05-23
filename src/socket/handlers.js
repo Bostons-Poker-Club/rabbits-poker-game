@@ -754,6 +754,7 @@ function setupSocketHandlers(io) {
     });
 
     socket.on('chat_message', ({ tableId, message }) => {
+      if (socket.spectatingTableId) return; // spectators are invisible — never broadcast their chat
       const tId = tableId || socket.currentTableId;
       if (!message || message.length > 200) return;
       io.to(tId).emit('chat', {
@@ -943,8 +944,9 @@ function setupSocketHandlers(io) {
       const tId = socket.spectatingTableId;
       if (tId) {
         tableSpectators.get(tId)?.delete(socket.id);
+        socket.leave(tId);
         socket.spectatingTableId = null;
-        socket.to(tId).emit('admin:cam_presence', { userId, username, enabled: false });
+        // No broadcast to players — admin exit is silent
       }
     });
 
