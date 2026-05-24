@@ -1828,6 +1828,46 @@ input, select, textarea { font-family: inherit; }
   body.table-page #chat-toggle { display: none; }
 }
 
+/* ─── 769–900px: phones in landscape that miss the 768px block ──────────── */
+@media (max-width: 900px) and (min-width: 769px) {
+  /* Collapse the desktop 2-column grid — chat takes 260px and clips the table */
+  body.table-page .table-main {
+    grid-template-columns: 1fr;
+  }
+
+  /* Chat panel: same slide-up behaviour as the 768px mobile block */
+  body.table-page .chat-panel {
+    position: fixed;
+    bottom: 56px;
+    left: 0;
+    right: 0;
+    height: 40vh;
+    background: rgba(5,12,8,0.98);
+    border-top: 1px solid var(--border);
+    border-radius: 12px 12px 0 0;
+    border-left: none;
+    display: flex;
+    flex-direction: column;
+    z-index: 200;
+    transform: translateY(110%);
+    transition: transform 0.25s ease;
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
+    pointer-events: none;
+  }
+  body.table-page .chat-panel.open {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  /* Allow seats (which extend 60px past the oval edge) to show without clipping */
+  body.table-page .poker-area { overflow: visible; }
+
+  /* Keep oval within viewport so seats don't bleed off-screen */
+  body.table-page .poker-table-oval {
+    width: min(calc(95vw - 120px), calc((100dvh - 212px) * 2));
+  }
+}
+
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
 .seat-avatar {
   width: 120px;
