@@ -25,6 +25,7 @@ let prevBets = {};       // seatNumber -> last known currentBet
 let seatTimerInterval = null;
 let moneyPuck = null;    // current puck state for this table
 let straddleCountdown = null;
+let _myDealtCards = null; // cards from cards_dealt — survives hand_started reorder
 
 // Hand history
 let lastHandHistory = [];
@@ -484,10 +485,15 @@ function connect() {
     hideHandResult();
     const myCards = document.getElementById('my-hole-cards');
     if (myCards) myCards.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;align-self:center">Dealing…</div>';
+    // Server sends cards_dealt before hand_started — re-render immediately so
+    // hand_started's "Dealing…" placeholder doesn't wipe already-rendered cards.
+    if (_myDealtCards?.length) renderMyHoleCards(_myDealtCards);
+    _myDealtCards = null;
   });
 
   socket.on('cards_dealt', ({ holeCards }) => {
     console.log('[cards_dealt]', holeCards?.map(c => c.rank + c.suit).join(' ') || 'none');
+    _myDealtCards = holeCards;
     if (window.Sound) Sound.cardDeal();
     renderMyHoleCards(holeCards);
   });
@@ -1417,6 +1423,7 @@ function stayAtTable() {
 }
 
 function takeSeat(seatNumber) {
+  if (!confirm(`Sit in Seat ${seatNumber}?`)) return;
   socket.emit('join_table', { tableId, seatNumber, buyInChips: buyIn });
 }
 
