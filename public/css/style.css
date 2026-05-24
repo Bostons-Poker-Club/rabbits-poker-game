@@ -1837,6 +1837,34 @@ input, select, textarea { font-family: inherit; }
   body.table-page #chat-toggle { display: none; }
 }
 
+/* ─── Mobile Landscape Fixes (phones in landscape orientation) ───────────── */
+/*
+ * Targets landscape phones (max-height: 500px covers typical landscape phones
+ * like iPhone SE/14/15 in landscape where height ≈ 375–430px).
+ * Combined with max-width: 900px to avoid affecting desktop.
+ *
+ * Fixes:
+ *   1. Shift table up 20px so bottom seat (seat 1) clears the action bar
+ *   2. Constrain oval to 92vw so right-edge seats (7 & 8) stay on screen
+ *   3. Expand seats-container top inset so seats 5 & 6 labels are not clipped
+ */
+@media (max-width: 900px) and (orientation: landscape) {
+  /* 1. Shift the entire table up so the bottom seat clears the action bar */
+  body.table-page .poker-table-wrap {
+    transform: translateY(-20px);
+  }
+
+  /* 2. Cap oval width at 92vw so right-edge seats (7 & 8) stay on screen */
+  body.table-page .poker-table-oval {
+    max-width: 92vw;
+  }
+
+  /* 3. Increase top inset so seats 5 & 6 (y≈5%) labels are not clipped */
+  body.table-page #seats-container {
+    inset: -56px -40px -40px -40px;
+  }
+}
+
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
 .seat-avatar {
   width: 120px;
