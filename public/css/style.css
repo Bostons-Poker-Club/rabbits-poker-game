@@ -1612,53 +1612,41 @@ input, select, textarea { font-family: inherit; }
     overflow: visible;
   }
 
-  /* poker-area fills table-main */
+  /* poker-area: fixed slab between header and action bar */
   body.table-page .poker-area {
-    flex: 1;
-    min-height: 0;
-    height: calc(100dvh - 100px);
+    position: fixed;
+    top: 56px;
+    bottom: 64px;
+    left: 0;
+    right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     padding: 0;
-    /* Push the oval up so it centers between header+action-bar, not full height.
-       Without this, the fixed action bar (56px) isn't in the flex flow so the
-       oval centers too low and the bottom seat clips behind the action bar. */
-    padding-bottom: 56px;
   }
 
-  /* wrap: remove desktop max-width cap, size driven by oval below */
+  /* wrap: fills poker-area so oval % sizing resolves correctly */
   body.table-page .poker-table-wrap {
-    width: auto;
-    height: auto;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     max-width: none;
     max-height: none;
     margin: 0;
   }
 
-  /*
-   * Oval: conservative size so ALL 9 seats stay on screen.
-   * seats-container is inset:-40px (overridden below), so seats extend 40px
-   * beyond each oval edge.
-   * Width:  100vw − 160px (80px each side for left/right extreme seats at x≈3%)
-   * Height: viewport − 36 header − 56 action-bar − 72 top-seat − 76 bottom-seat = dvh−240px
-   *         Combined with padding-bottom:56 on poker-area the oval is visually
-   *         centred between the header and action bar so extreme seats clear both.
-   */
+  /* Oval: 90% of the fixed container */
   body.table-page .poker-table-oval {
-    width: min(calc(100vw - 160px), calc((100dvh - 240px) * 2));
-    height: auto;
-    transform: scale(0.75);
-    transform-origin: center center;
+    width: 90%;
+    height: 90%;
   }
 
-  /* Bring seats inward — seats-container inset:-40px instead of -60px so seats
-     at y:5% and y:92% don't disappear behind the header / action bar.        */
+  /* Seats scale with the oval; inset keeps extreme seats from clipping */
   body.table-page #seats-container {
     inset: -40px;
-    transform: scale(0.75);
-    transform-origin: center center;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
@@ -1666,9 +1654,9 @@ input, select, textarea { font-family: inherit; }
     position: fixed;
     bottom: 0;
     left: 0;
-    right: 0;
-    height: 56px;
-    min-height: 56px;
+    width: 100%;
+    height: 64px;
+    min-height: 64px;
     display: flex;
     align-items: center;
     padding: 4px 6px;
@@ -1712,7 +1700,7 @@ input, select, textarea { font-family: inherit; }
   /* Raise slider: hidden by default, floats above bottom bar when .visible */
   body.table-page .raise-controls {
     position: fixed;
-    bottom: 56px;
+    bottom: 64px;
     left: 0;
     right: 0;
     z-index: 50;
@@ -1761,7 +1749,7 @@ input, select, textarea { font-family: inherit; }
   /* Chat panel: slide-up from bottom, takes 40% height, above bottom bar */
   body.table-page .chat-panel {
     position: fixed;
-    bottom: 56px;
+    bottom: 64px;
     left: 0;
     right: 0;
     height: 40vh;
