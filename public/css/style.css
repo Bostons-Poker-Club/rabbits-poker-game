@@ -1845,8 +1845,8 @@ input, select, textarea { font-family: inherit; }
  *
  * Fixes:
  *   1. Shift table up 20px so bottom seat (seat 1) clears the action bar
- *   2. Constrain oval to 92vw so right-edge seats (7 & 8) stay on screen
- *   3. Expand seats-container top inset so seats 5 & 6 labels are not clipped
+ *   2. Constrain oval to 80vw so all seats stay on screen without clipping
+ *   3. Tighten seats-container inset to keep seats close to the smaller oval
  */
 @media (max-width: 900px) and (orientation: landscape) {
   /* 1. Shift the entire table up so the bottom seat clears the action bar */
@@ -1854,14 +1854,14 @@ input, select, textarea { font-family: inherit; }
     transform: translateY(-20px);
   }
 
-  /* 2. Cap oval width at 92vw so right-edge seats (7 & 8) stay on screen */
+  /* 2. Cap oval width at 80vw so all seats (incl. 7 & 8) stay on screen */
   body.table-page .poker-table-oval {
-    max-width: 92vw;
+    max-width: 80vw;
   }
 
-  /* 3. Increase top inset so seats 5 & 6 (y≈5%) labels are not clipped */
+  /* 3. Tighten inset so seats track the smaller oval without being clipped */
   body.table-page #seats-container {
-    inset: -56px -40px -40px -40px;
+    inset: -40px -30px -40px -30px;
   }
 }
 
