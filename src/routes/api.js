@@ -608,10 +608,10 @@ router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) =
 
     if (hostId && !hostUsername) {
       try {
-        const { data: hostUser } = await supabaseAdmin.from('users').select('username, email, is_admin, host_type').eq('id', hostId).single();
+        const { data: hostUser } = await supabaseAdmin.from('users').select('username, email, is_admin, is_host').eq('id', hostId).single();
         if (hostUser) {
           hostUsername = hostUser.username;
-          hostType     = hostUser.is_admin ? 'admin' : (hostUser.host_type || 'host');
+          hostType     = hostUser.is_admin ? 'admin' : (hostUser.is_host ? 'host' : 'host');
           hostPercent  = hostType === 'admin' ? 20 : 40;
           hostEmail    = hostUser.email;
         }
@@ -987,21 +987,18 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
     if (role === 'admin') {
       updates.is_admin = true;
       updates.is_host  = false;
-      updates.host_type = 'admin';
       newIsAdmin = true;
       roleChanged = true;
       hostSet.delete(targetId);
     } else if (role === 'host') {
       updates.is_admin = false;
       updates.is_host  = true;
-      updates.host_type = 'host';
       newIsAdmin = false;
       hostSet.add(targetId);
       roleChanged = true;
     } else {
       updates.is_admin = false;
       updates.is_host  = false;
-      updates.host_type = null;
       newIsAdmin = false;
       hostSet.delete(targetId);
       roleChanged = true;
@@ -1036,7 +1033,8 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
     const { error } = await supabaseAdmin.from('users').update(remaining).eq('id', targetId);
     if (!error) { updateError = null; break; }
     updateError = error;
-    const missing = error.message.match(/column (?:[\w.]*\.)?["']?(\w+)["']? does not exist/);
+    const missing = error.message.match(/column (?:[\w.]*\.)?["']?(\w+)["']? does not exist/) ||
+                    error.message.match(/Could not find the '(\w+)' column of '\w+' in the schema cache/);
     if (missing) {
       const col = missing[1];
       console.warn(`[editPlayer] column "${col}" missing in users table — skipping`);
@@ -1119,10 +1117,10 @@ router.post('/admin/players/:id/host', authMiddleware, adminMiddleware, async (r
   const { isHost } = req.body;
   if (isHost) {
     hostSet.add(req.params.id);
-    try { await supabaseAdmin.from('users').update({ is_host: true, host_type: 'host' }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
+    try { await supabaseAdmin.from('users').update({ is_host: true }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
   } else {
     hostSet.delete(req.params.id);
-    try { await supabaseAdmin.from('users').update({ is_host: false, host_type: null }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
+    try { await supabaseAdmin.from('users').update({ is_host: false }).eq('id', req.params.id); } catch (e) { console.warn('[host] update error:', e.message); }
   }
   appEvents.emit('host:change', { userId: req.params.id, isHost: !!isHost });
   res.json({ success: true, is_host: !!isHost });
@@ -1258,7 +1256,6 @@ router.post('/admin/players/:id/admin', authMiddleware, adminMiddleware, async (
   const { isAdmin: makeAdmin } = req.body;
   const updates = { is_admin: !!makeAdmin };
   if (makeAdmin) {
-    updates.host_type = 'admin';
     updates.is_host   = false;
     hostSet.delete(req.params.id);
   }
@@ -1948,8 +1945,7 @@ router.post('/admin/host-applications/:id/approve', authMiddleware, adminMiddlew
     full_name: app.full_name,
     phone: app.phone,
     address: app.address,
-    is_host: true,
-    host_type: 'host'
+    is_host: true
   }).select('id, username, email').single();
 
   if (createErr) {
@@ -2026,10 +2022,8 @@ router.post('/admin/create-admin', authMiddleware, adminMiddleware, async (req, 
     full_name: String(full_name).slice(0, 120),
     phone: String(phone).slice(0, 20),
     address: String(address).slice(0, 500),
-    is_admin: true,
-    host_type: 'admin'
+    is_admin: true
   }).select('id, username, email').single();
-
   if (error) {
     if (error.code === '23505') return res.status(400).json({ error: 'Username or email already taken' });
     return res.status(500).json({ error: error.message });
@@ -2515,7 +2509,7 @@ function _sendCsv(res, filename, rows) {
 router.get('/admin/export/players.csv', authMiddleware, adminMiddleware, async (req, res) => {
   const { from, to } = _csvRange(req);
   const { data, error } = await supabaseAdmin.from('users')
-    .select('id, username, full_name, nickname, phone, email, address, city, state, zip, is_admin, is_host, host_type, created_at')
+    .select('id, username, full_name, nickname, phone, email, address, city, state, zip, is_admin, is_host, created_at')
     .gte('created_at', from + 'T00:00:00Z')
     .lte('created_at', to   + 'T23:59:59Z')
     .order('created_at', { ascending: false });
