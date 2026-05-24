@@ -1638,11 +1638,12 @@ input, select, textarea { font-family: inherit; }
     margin: 0;
   }
 
-  /* Oval: 90% of the fixed container, capped so side seats stay on screen */
+  /* Oval: 90% of the fixed container, capped so all seats stay on screen */
   body.table-page .poker-table-oval {
     width: 90%;
     height: 90%;
-    max-width: 92vw;
+    max-width: 85vw;
+    max-height: 75dvh;
   }
 
   /* Seats scale with the oval; inset keeps extreme seats from clipping */

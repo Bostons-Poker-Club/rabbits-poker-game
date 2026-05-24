@@ -1875,8 +1875,13 @@ function _camDisable() {
 }
 
 function toggleCamera() {
-  if (camEnabled) _camDisable();
-  else _camEnable();
+  if (camEnabled) {
+    localStorage.removeItem('rp_cam_opt_in'); // respect explicit disable
+    _camDisable();
+  } else {
+    localStorage.setItem('rp_cam_opt_in', '1');
+    _camEnable();
+  }
 }
 
 function _updateCamBtn() {
@@ -1913,9 +1918,11 @@ function _setAvatarVideo(avatarEl, stream, muted) {
   if (!vid) {
     vid = document.createElement('video');
     vid.className = 'seat-cam-video';
-    vid.autoplay = true;
-    vid.playsInline = true;
-    vid.muted = muted;
+    // Set both IDL properties and HTML attributes — iOS Safari requires the
+    // attribute form for autoplay/playsinline/muted to take effect.
+    vid.autoplay = true;   vid.setAttribute('autoplay', '');
+    vid.playsInline = true; vid.setAttribute('playsinline', '');
+    if (muted) { vid.muted = true; vid.setAttribute('muted', ''); }
     vid.onplaying = () => console.log(`[CAM] video playing for uid=${uid}`);
     vid.onclick = () => _expandCamVideo(vid, avatarEl.dataset.camUid);
     avatarEl.appendChild(vid);
@@ -1988,6 +1995,7 @@ function _camPromptSkip() {
 
 function _camPromptEnable() {
   document.getElementById('cam-prompt-modal')?.remove();
+  localStorage.setItem('rp_cam_opt_in', '1'); // auto-enable on future joins
   _camEnable();
 }
 
