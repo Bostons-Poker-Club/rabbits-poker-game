@@ -1615,14 +1615,14 @@ input, select, textarea { font-family: inherit; }
   /* poker-area: fixed slab between header and action bar */
   body.table-page .poker-area {
     position: fixed;
-    top: 56px;
+    top: 36px;
     bottom: 64px;
     left: 0;
     right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: hidden;
+    overflow: visible;
     padding: 0;
   }
 
@@ -1638,10 +1638,11 @@ input, select, textarea { font-family: inherit; }
     margin: 0;
   }
 
-  /* Oval: 90% of the fixed container */
+  /* Oval: 90% of the fixed container, capped so side seats stay on screen */
   body.table-page .poker-table-oval {
     width: 90%;
     height: 90%;
+    max-width: 92vw;
   }
 
   /* Seats scale with the oval; inset keeps extreme seats from clipping */
