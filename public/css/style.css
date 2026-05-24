@@ -1616,10 +1616,11 @@ input, select, textarea { font-family: inherit; }
   body.table-page .poker-area {
     flex: 1;
     min-height: 0;
+    height: calc(100dvh - 100px);
     display: flex;
     align-items: center;
     justify-content: center;
-    overflow: visible;
+    overflow: hidden;
     padding: 0;
     /* Push the oval up so it centers between header+action-bar, not full height.
        Without this, the fixed action bar (56px) isn't in the flex flow so the
@@ -1648,12 +1649,16 @@ input, select, textarea { font-family: inherit; }
   body.table-page .poker-table-oval {
     width: min(calc(100vw - 160px), calc((100dvh - 240px) * 2));
     height: auto;
+    transform: scale(0.75);
+    transform-origin: center center;
   }
 
   /* Bring seats inward — seats-container inset:-40px instead of -60px so seats
      at y:5% and y:92% don't disappear behind the header / action bar.        */
   body.table-page #seats-container {
     inset: -40px;
+    transform: scale(0.75);
+    transform-origin: center center;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
