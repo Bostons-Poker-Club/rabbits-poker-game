@@ -1575,14 +1575,15 @@ input, select, textarea { font-family: inherit; }
  *   BOTTOM BAR: 48px  — hole cards left | action buttons right
  */
 
-/* ─── Mobile Table Layout ────────────────────────────────────────────────── */
-@media (max-width: 768px) {
+/* ─── Mobile Table Layout (≤900px — phones in portrait AND landscape) ─────── */
+@media (max-width: 900px) {
   /* Full-screen flex column */
   body.table-page {
     display: flex;
     flex-direction: column;
     height: 100dvh;
     width: 100dvw;
+    margin: 0;          /* remove default body margin (fixes left black strip) */
     overflow: hidden;
     background: #040e07;
   }
@@ -1619,6 +1620,10 @@ input, select, textarea { font-family: inherit; }
     justify-content: center;
     overflow: visible;
     padding: 0;
+    /* Push the oval up so it centers between header+action-bar, not full height.
+       Without this, the fixed action bar (56px) isn't in the flex flow so the
+       oval centers too low and the bottom seat clips behind the action bar. */
+    padding-bottom: 56px;
   }
 
   /* wrap: remove desktop max-width cap, size driven by oval below */
@@ -1631,16 +1636,23 @@ input, select, textarea { font-family: inherit; }
   }
 
   /*
-   * Oval: fill as much screen as possible.
-   * Seats extend 60px beyond each oval edge (seats-container inset:-60px).
-   * Width limit:  100vw minus 120px (60px each side for seats)
-   * Height limit: viewport minus header(36) minus bottom-bar(56) minus seat-top(60) minus seat-bottom(60) = dvh-212px
-   *               oval width = height * 2, so max-width-from-height = (dvh-212px)*2
-   * min() picks whichever constraint is tighter.
+   * Oval: conservative size so ALL 9 seats stay on screen.
+   * seats-container is inset:-40px (overridden below), so seats extend 40px
+   * beyond each oval edge.
+   * Width:  100vw − 160px (80px each side for left/right extreme seats at x≈3%)
+   * Height: viewport − 36 header − 56 action-bar − 72 top-seat − 76 bottom-seat = dvh−240px
+   *         Combined with padding-bottom:56 on poker-area the oval is visually
+   *         centred between the header and action bar so extreme seats clear both.
    */
   body.table-page .poker-table-oval {
-    width: min(calc(100vw - 120px), calc((100dvh - 212px) * 2));
+    width: min(calc(100vw - 160px), calc((100dvh - 240px) * 2));
     height: auto;
+  }
+
+  /* Bring seats inward — seats-container inset:-40px instead of -60px so seats
+     at y:5% and y:92% don't disappear behind the header / action bar.        */
+  body.table-page #seats-container {
+    inset: -40px;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
@@ -1754,12 +1766,14 @@ input, select, textarea { font-family: inherit; }
     flex-direction: column;
     z-index: 200;
     transform: translateY(110%);
+    visibility: hidden;   /* belt-and-suspenders: stops chat-header text bleeding through */
     transition: transform 0.25s ease;
     box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
     pointer-events: none;
   }
   body.table-page .chat-panel.open {
     transform: translateY(0);
+    visibility: visible;
     pointer-events: auto;
   }
 
@@ -1826,46 +1840,6 @@ input, select, textarea { font-family: inherit; }
   body.table-page #btn-hand-history,
   body.table-page .hdr-right,
   body.table-page #chat-toggle { display: none; }
-}
-
-/* ─── 769–900px: phones in landscape that miss the 768px block ──────────── */
-@media (max-width: 900px) and (min-width: 769px) {
-  /* Collapse the desktop 2-column grid — chat takes 260px and clips the table */
-  body.table-page .table-main {
-    grid-template-columns: 1fr;
-  }
-
-  /* Chat panel: same slide-up behaviour as the 768px mobile block */
-  body.table-page .chat-panel {
-    position: fixed;
-    bottom: 56px;
-    left: 0;
-    right: 0;
-    height: 40vh;
-    background: rgba(5,12,8,0.98);
-    border-top: 1px solid var(--border);
-    border-radius: 12px 12px 0 0;
-    border-left: none;
-    display: flex;
-    flex-direction: column;
-    z-index: 200;
-    transform: translateY(110%);
-    transition: transform 0.25s ease;
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.7);
-    pointer-events: none;
-  }
-  body.table-page .chat-panel.open {
-    transform: translateY(0);
-    pointer-events: auto;
-  }
-
-  /* Allow seats (which extend 60px past the oval edge) to show without clipping */
-  body.table-page .poker-area { overflow: visible; }
-
-  /* Keep oval within viewport so seats don't bleed off-screen */
-  body.table-page .poker-table-oval {
-    width: min(calc(95vw - 120px), calc((100dvh - 212px) * 2));
-  }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
