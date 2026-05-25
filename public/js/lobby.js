@@ -213,7 +213,7 @@ function renderTables(tables) {
         <span class="game-badge">${t.game_type === 'plo' ? 'PLO' : "Hold'em"}</span>
       </div>
       <div class="table-stakes">$${t.stakes_small_blind}/$${t.stakes_big_blind}</div>
-      <div class="table-info">Max Players: ${t.max_players} | Rake: ${t.rake_percent}% | Min: $${fmtChips(minBuyIn)}</div>
+      <div class="table-info">Max Players: ${t.max_players}${(user?.isAdmin || user?.isHost) ? ` | Rake: ${t.rake_percent}%` : ''} | Min: $${fmtChips(minBuyIn)}</div>
       ${jpLine}
       <div id="lobby-stats-${t.id}" class="lobby-table-stats" style="display:none"></div>
       <div class="player-count">${dots} <span style="margin-left:4px">${seated}/${t.max_players} seated</span></div>

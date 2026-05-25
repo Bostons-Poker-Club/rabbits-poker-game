@@ -590,8 +590,10 @@ function connect() {
       if (iWon) setTimeout(() => Sound.win(), 450);
     }
 
-    // Flash rake deduction in pot display before showing winner overlay
-    if (result.rakeCollected > 0) {
+    const _canSeeRake = user?.isAdmin || user?.isHost;
+
+    // Flash rake deduction in pot display — admin/host only
+    if (result.rakeCollected > 0 && _canSeeRake) {
       const potEl = document.getElementById('pot-amount');
       const potLabel = potEl?.nextElementSibling; // .pot-label
       if (potEl) {
@@ -613,11 +615,12 @@ function connect() {
     }
 
     if (result.winners?.length) {
+      const rakeTag = _canSeeRake && result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : '';
       if (result.isSplitPot) {
         const names = result.winners.map(w => `${w.username} +$${fmt(w.amount)}`).join(', ');
-        chatMsg('system', `🤝 Split Pot: ${names}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
+        chatMsg('system', `🤝 Split Pot: ${names}${rakeTag}`);
       } else {
-        chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : ''}`);
+        chatMsg('system', `Winner: ${result.winners[0].username} (${result.winners[0].handName || 'folded out'}) +${fmt(result.winners[0].amount)}${rakeTag}`);
       }
     }
   });
@@ -1487,14 +1490,14 @@ function showHandResult(result) {
     document.getElementById('hr-cards').innerHTML = (w.holeCards || []).map(c => cardHtml(c, true)).join('');
   }
 
-  // Side pot breakdown + rake line
+  // Side pot breakdown (always visible) + rake line (admin/host only)
   const rakeEl = document.getElementById('hr-rake');
   if (rakeEl) {
     let footerText = '';
     if (result.potBreakdown?.length > 1) {
       footerText = result.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ');
     }
-    if (result.rakeCollected) {
+    if (result.rakeCollected && (user?.isAdmin || user?.isHost)) {
       footerText += (footerText ? '  •  ' : '') + `Rake: $${fmt(result.rakeCollected)}`;
     }
     rakeEl.textContent = footerText;
@@ -2709,7 +2712,7 @@ function openHandHistory() {
     if (lastHandResult.potBreakdown?.length > 1) {
       histHtml += `<div class="hh-pots">${lastHandResult.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ')}</div>`;
     }
-    if (lastHandResult.rakeCollected) {
+    if (lastHandResult.rakeCollected && (user?.isAdmin || user?.isHost)) {
       histHtml += `<div style="color:rgba(255,255,255,.4);font-size:.75rem;margin-top:4px">Rake: $${fmt(lastHandResult.rakeCollected)}</div>`;
     }
   }
