@@ -13,8 +13,8 @@ class PokerGame {
     this.smallBlind = tableConfig.smallBlind || 5;
     this.bigBlind = tableConfig.bigBlind || 10;
     this.maxPlayers = tableConfig.maxPlayers || 9;
-    this.rakePercent = tableConfig.rakePercent || 5;
-    this.rakeCap = tableConfig.rakeCap || 500; // in cents equivalent
+    this.rakePercent = tableConfig.rakePercent || 10;
+    this.rakeCap = tableConfig.rakeCap || 15;
 
     // Player map: seatNumber -> player object
     this.players = new Map(); // userId -> player

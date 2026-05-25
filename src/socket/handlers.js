@@ -14,12 +14,17 @@ const JACKPOT_INTERVAL_MS = (parseInt(process.env.JACKPOT_INTERVAL_MINUTES) || 3
 const JACKPOT_CONTRIB = parseFloat(process.env.JACKPOT_CONTRIBUTION_PERCENT) || 1;
 const SHOT_CLOCK = parseInt(process.env.SHOT_CLOCK_SECONDS) || 40;
 
-// Tiered rake: keyed by big blind thresholds
-function getRakeConfig(bigBlind) {
-  if (bigBlind <= 3)  return { rakePercent: 5, rakeCap: 8 };
-  if (bigBlind <= 5)  return { rakePercent: 5, rakeCap: 12 };
-  if (bigBlind <= 10) return { rakePercent: 5, rakeCap: 15 };
-  return { rakePercent: 4, rakeCap: 20 };  // $10/$20+
+// Tiered rake by stakes — all 10%, caps vary by game size
+// $1/$3          sb≤1, bb≤3  → 10% capped at $7
+// $2/$2 PLO      sb=2, bb=2  → 10% capped at $12
+// $2/$5          sb=2, bb=5  → 10% capped at $12
+// $5/$5 / $5/$10 sb=5        → 10% capped at $15
+// $10/$20+                   → 10% capped at $20
+function getRakeConfig(smallBlind, bigBlind) {
+  if (bigBlind <= 3 && smallBlind <= 1) return { rakePercent: 10, rakeCap: 7 };
+  if (bigBlind <= 5 && smallBlind <= 2) return { rakePercent: 10, rakeCap: 12 };
+  if (bigBlind <= 10)                   return { rakePercent: 10, rakeCap: 15 };
+  return                                       { rakePercent: 10, rakeCap: 20 };
 }
 
 // Minimum buy-in per table stakes — must mirror the client-side version in lobby.js
@@ -503,7 +508,7 @@ function setupSocketHandlers(io) {
         // Get or create game
         let game = activeGames.get(tableId);
         if (!game) {
-          const { rakePercent, rakeCap } = getRakeConfig(table.stakes_big_blind);
+          const { rakePercent, rakeCap } = getRakeConfig(table.stakes_small_blind, table.stakes_big_blind);
           game = new PokerGame({
             tableId,
             gameType: table.game_type,
