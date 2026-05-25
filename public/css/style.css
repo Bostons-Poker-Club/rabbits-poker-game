@@ -1615,7 +1615,7 @@ input, select, textarea { font-family: inherit; }
   /* poker-area: fixed slab between header and action bar */
   body.table-page .poker-area {
     position: fixed;
-    top: 36px;
+    top: 66px;
     bottom: 64px;
     left: 0;
     right: 0;
@@ -1646,9 +1646,9 @@ input, select, textarea { font-family: inherit; }
     max-height: 75dvh;
   }
 
-  /* Seats scale with the oval; inset keeps extreme seats from clipping */
+  /* Seats: tighter inset so top seats don't extend into the header */
   body.table-page #seats-container {
-    inset: -40px;
+    inset: -20px;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
@@ -1850,19 +1850,14 @@ input, select, textarea { font-family: inherit; }
  *   3. Tighten seats-container inset to keep seats close to the smaller oval
  */
 @media (max-width: 900px) and (orientation: landscape) {
-  /* 1. Shift the entire table up so the bottom seat clears the action bar */
-  body.table-page .poker-table-wrap {
-    transform: translateY(-20px);
-  }
-
-  /* 2. Cap oval width at 80vw so all seats (incl. 7 & 8) stay on screen */
+  /* Cap oval width at 75vw so seat 8 (x:97%) stays within screen edges */
   body.table-page .poker-table-oval {
-    max-width: 80vw;
+    max-width: 75vw;
   }
 
-  /* 3. Tighten inset so seats track the smaller oval without being clipped */
+  /* Match inset to main block so seats don't overshoot the smaller oval */
   body.table-page #seats-container {
-    inset: -40px -30px -40px -30px;
+    inset: -20px;
   }
 }
 

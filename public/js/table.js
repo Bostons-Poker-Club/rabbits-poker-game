@@ -436,7 +436,7 @@ function connect() {
       if (hhBtn) hhBtn.style.display = '';
     }
     _pttInit();
-    _showCamPrompt();
+    _camEnable();
     // Request current table stats
     socket.emit('table:get_stats', { tableId });
     // Restore chat history
