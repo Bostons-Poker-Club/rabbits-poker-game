@@ -34,6 +34,12 @@ class Tournament {
     this.isPaused = false;
     this.pausedRemainingMs = null; // ms remaining when paused
 
+    // Break state
+    this.isOnBreak = false;
+    this.breakEndsAt = null;
+    this.breakTimer = null;
+    this.breakWarnTimer = null;
+
     // Callbacks
     this.onBroadcast = null;
     this.onPlayerEliminated = null;
@@ -135,6 +141,7 @@ class Tournament {
         if (this.onBroadcast) {
           const next = this._nextLevelConfig();
           this.onBroadcast('blind_warning', {
+            tournamentId: this.id,
             nextLevel: this.currentBlindLevel + 2,
             nextSmallBlind: next.small_blind,
             nextBigBlind:   next.big_blind,
@@ -150,7 +157,7 @@ class Tournament {
   }
 
   pause() {
-    if (!this.status === 'active' || this.isPaused) return;
+    if (this.status !== 'active' || this.isPaused) return;
     if (this.blindTimer) clearTimeout(this.blindTimer);
     if (this.warnTimer)  clearTimeout(this.warnTimer);
     this.isPaused = true;
@@ -168,6 +175,114 @@ class Tournament {
       this.onBroadcast('tournament_timer_resumed', { timerState: this.getTimerState() });
     }
   }
+
+  // ─── Break System ─────────────────────────────────────────────────────────
+
+  callBreak(durationMinutes = 15) {
+    if (this.status !== 'active') return;
+
+    // Pause blind timer and record remaining ms
+    if (!this.isPaused) {
+      if (this.blindTimer) clearTimeout(this.blindTimer);
+      if (this.warnTimer)  clearTimeout(this.warnTimer);
+      this.isPaused = true;
+      this.pausedRemainingMs = this._getRemainingMs();
+    }
+
+    // Clear any existing break timers
+    if (this.breakTimer)     clearTimeout(this.breakTimer);
+    if (this.breakWarnTimer) clearTimeout(this.breakWarnTimer);
+
+    const breakMs = durationMinutes * 60 * 1000;
+    this.isOnBreak  = true;
+    this.breakEndsAt = new Date(Date.now() + breakMs);
+
+    // 2-minute warning before break ends
+    const warnMs = breakMs - 2 * 60 * 1000;
+    if (warnMs > 0) {
+      this.breakWarnTimer = setTimeout(() => {
+        if (this.onBroadcast) {
+          this.onBroadcast('tournament_break_warning', {
+            tournamentId: this.id,
+            secondsRemaining: 120
+          });
+        }
+      }, warnMs);
+    }
+
+    // Auto-end break
+    this.breakTimer = setTimeout(() => this.endBreak(), breakMs);
+
+    if (this.onBroadcast) {
+      this.onBroadcast('tournament_break_start', {
+        tournamentId: this.id,
+        durationMinutes,
+        breakRemainingMs: breakMs,
+        endsAt: this.breakEndsAt.toISOString()
+      });
+    }
+  }
+
+  extendBreak(extraMinutes = 5) {
+    if (!this.isOnBreak || !this.breakEndsAt) return;
+
+    if (this.breakTimer)     clearTimeout(this.breakTimer);
+    if (this.breakWarnTimer) clearTimeout(this.breakWarnTimer);
+
+    const extraMs = extraMinutes * 60 * 1000;
+    this.breakEndsAt = new Date(this.breakEndsAt.getTime() + extraMs);
+    const remainingMs = Math.max(0, this.breakEndsAt.getTime() - Date.now());
+
+    const warnMs = remainingMs - 2 * 60 * 1000;
+    if (warnMs > 0) {
+      this.breakWarnTimer = setTimeout(() => {
+        if (this.onBroadcast) {
+          this.onBroadcast('tournament_break_warning', {
+            tournamentId: this.id,
+            secondsRemaining: 120
+          });
+        }
+      }, warnMs);
+    }
+
+    this.breakTimer = setTimeout(() => this.endBreak(), remainingMs);
+
+    if (this.onBroadcast) {
+      this.onBroadcast('tournament_break_extended', {
+        tournamentId: this.id,
+        extraMinutes,
+        breakRemainingMs: remainingMs,
+        endsAt: this.breakEndsAt.toISOString()
+      });
+    }
+  }
+
+  endBreak() {
+    if (!this.isOnBreak) return;
+
+    if (this.breakTimer)     { clearTimeout(this.breakTimer);     this.breakTimer = null; }
+    if (this.breakWarnTimer) { clearTimeout(this.breakWarnTimer); this.breakWarnTimer = null; }
+
+    this.isOnBreak  = false;
+    this.breakEndsAt = null;
+
+    // Resume the blind timer
+    this.resume();
+
+    if (this.onBroadcast) {
+      this.onBroadcast('tournament_break_end', {
+        tournamentId: this.id,
+        timerState: this.getTimerState()
+      });
+    }
+  }
+
+  getBreakRemainingMs() {
+    if (!this.isOnBreak || !this.breakEndsAt) return 0;
+    return Math.max(0, this.breakEndsAt.getTime() - Date.now());
+  }
+
+  // ─── Blind Level Advancement ───────────────────────────────────────────────
 
   advanceBlindLevel() {
     const nextLevel = this.currentBlindLevel + 1;
@@ -192,6 +307,7 @@ class Tournament {
       this._startBlindTimer();
       if (this.onBroadcast) {
         this.onBroadcast('blind_increase', {
+          tournamentId: this.id,
           blindLevel: nextLevel + 1,
           ...newBlinds,
           timerState: this.getTimerState()
@@ -212,6 +328,7 @@ class Tournament {
 
     if (this.onBroadcast) {
       this.onBroadcast('blind_increase', {
+        tournamentId: this.id,
         blindLevel: nextLevel + 1,
         small_blind: newLevel.small_blind,
         big_blind:   newLevel.big_blind,
@@ -227,7 +344,6 @@ class Tournament {
     const idx = Math.min(this.currentBlindLevel, this.blindSchedule.length - 1);
     const base = this.blindSchedule[idx] || this.blindSchedule[this.blindSchedule.length - 1];
     if (this.currentBlindLevel < this.blindSchedule.length) return base;
-    // Beyond schedule — double last level
     const mult = 2 ** (this.currentBlindLevel - this.blindSchedule.length + 1);
     return {
       ...base,
@@ -257,19 +373,25 @@ class Tournament {
     const next     = this._nextLevelConfig();
     const remaining = this._getRemainingMs();
     return {
-      tournamentId:  this.id,
-      isPaused:      this.isPaused,
-      currentLevel:  this.currentBlindLevel + 1,
-      smallBlind:    level.small_blind,
-      bigBlind:      level.big_blind,
-      remainingMs:   remaining,
+      tournamentId:    this.id,
+      tournamentName:  this.name,
+      isPaused:        this.isPaused,
+      isOnBreak:       this.isOnBreak,
+      breakRemainingMs: this.getBreakRemainingMs(),
+      breakEndsAt:     this.breakEndsAt ? this.breakEndsAt.toISOString() : null,
+      currentLevel:    this.currentBlindLevel + 1,
+      smallBlind:      level.small_blind,
+      bigBlind:        level.big_blind,
+      remainingMs:     remaining,
       levelDurationMs: this.levelDurationMs,
-      nextLevel:     this.currentBlindLevel + 2,
-      nextSmallBlind: next.small_blind,
-      nextBigBlind:  next.big_blind,
-      schedule:      this.blindSchedule
+      nextLevel:       this.currentBlindLevel + 2,
+      nextSmallBlind:  next.small_blind,
+      nextBigBlind:    next.big_blind,
+      schedule:        this.blindSchedule
     };
   }
+
+  // ─── Player Elimination & Standings ───────────────────────────────────────
 
   eliminatePlayer(userId) {
     const player = this.players.get(userId);
@@ -287,9 +409,17 @@ class Tournament {
 
     if (this.onBroadcast) {
       this.onBroadcast('player_eliminated', {
+        tournamentId: this.id,
         userId,
         username: player.username,
         placement: player.placement
+      });
+      // Broadcast updated standings
+      this.onBroadcast('tournament_standings', {
+        tournamentId: this.id,
+        standings: this.getStandings(),
+        prize: this.getTotalPrize(),
+        activePlayers: Array.from(this.players.values()).filter(p => !p.isEliminated).length
       });
     }
 
@@ -308,6 +438,8 @@ class Tournament {
 
       if (this.blindTimer) { clearTimeout(this.blindTimer); this.blindTimer = null; }
       if (this.warnTimer)  { clearTimeout(this.warnTimer);  this.warnTimer  = null; }
+      if (this.breakTimer) { clearTimeout(this.breakTimer); this.breakTimer = null; }
+      if (this.breakWarnTimer) { clearTimeout(this.breakWarnTimer); this.breakWarnTimer = null; }
 
       if (this.onTournamentEnd) {
         this.onTournamentEnd({ winner, standings: this.getStandings(), prize: this.getTotalPrize() });
@@ -315,6 +447,7 @@ class Tournament {
 
       if (this.onBroadcast) {
         this.onBroadcast('tournament_ended', {
+          tournamentId: this.id,
           winner,
           standings: this.getStandings(),
           prize: this.getTotalPrize()
@@ -363,8 +496,10 @@ class Tournament {
   }
 
   destroy() {
-    if (this.blindTimer) { clearTimeout(this.blindTimer); this.blindTimer = null; }
-    if (this.warnTimer)  { clearTimeout(this.warnTimer);  this.warnTimer  = null; }
+    if (this.blindTimer)     { clearTimeout(this.blindTimer);     this.blindTimer = null; }
+    if (this.warnTimer)      { clearTimeout(this.warnTimer);      this.warnTimer  = null; }
+    if (this.breakTimer)     { clearTimeout(this.breakTimer);     this.breakTimer = null; }
+    if (this.breakWarnTimer) { clearTimeout(this.breakWarnTimer); this.breakWarnTimer = null; }
     if (this.game) this.game.destroy();
   }
 }

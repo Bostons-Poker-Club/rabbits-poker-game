@@ -116,6 +116,37 @@ if (typeof io !== 'undefined') {
     renderLiveTableOverview(tables);
   });
 
+  // Tournament real-time events
+  adminSocket.on('tournament_standings', ({ tournamentId, standings, prize, activePlayers }) => {
+    _renderAdminStandings(standings, prize, activePlayers);
+  });
+
+  adminSocket.on('tournament_break_start', ({ tournamentId, breakRemainingMs }) => {
+    toast(`☕ Tournament break started`, 'warn');
+    document.getElementById('adm-break-extend-btn')?.style && (document.getElementById('adm-break-extend-btn').style.display = '');
+    document.getElementById('adm-break-end-btn')?.style && (document.getElementById('adm-break-end-btn').style.display = '');
+  });
+
+  adminSocket.on('tournament_break_end', () => {
+    document.getElementById('adm-break-extend-btn')?.style && (document.getElementById('adm-break-extend-btn').style.display = 'none');
+    document.getElementById('adm-break-end-btn')?.style && (document.getElementById('adm-break-end-btn').style.display = 'none');
+    toast('▶ Tournament break ended');
+  });
+
+  adminSocket.on('blind_increase', ({ tournamentId, blindLevel, small_blind, big_blind }) => {
+    toast(`📈 Level ${blindLevel}: $${small_blind}/$${big_blind}`);
+  });
+
+  adminSocket.on('player_eliminated', ({ username, placement }) => {
+    toast(`❌ ${username} eliminated — ${placement}${_admOrdinal(placement)} place`);
+  });
+
+  adminSocket.on('tournament_ended', ({ winner, standings, prize }) => {
+    toast(`🏆 Tournament ended! ${winner?.username || 'Winner'} wins $${prize?.toLocaleString() || '?'}!`);
+    _renderAdminStandings(standings, prize, 0);
+    loadTournaments();
+  });
+
 }
 
 async function loadAll() {
@@ -1560,6 +1591,9 @@ async function loadTournaments() {
   } catch {}
 }
 
+let _activeTournamentId = null;
+let _activeTournamentName = '';
+
 function renderTournamentsAdmin(list) {
   const tbody = document.getElementById('tournaments-body');
   if (!list.length) {
@@ -1569,6 +1603,8 @@ function renderTournamentsAdmin(list) {
   tbody.innerHTML = list.map(t => {
     const players = t.tournament_players?.[0]?.count || 0;
     const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
+    const isActive = t.status === 'active';
+    const isRegistering = t.status === 'registering';
     return `
     <tr>
       <td>${esc(t.name)}</td>
@@ -1577,10 +1613,87 @@ function renderTournamentsAdmin(list) {
       <td><span style="color:${statusColor}">${t.status}</span></td>
       <td>${players}</td>
       <td><div class="actions">
+        ${isRegistering ? `<button class="btn btn-sm btn-gold" onclick="startTournamentAdmin('${t.id}','${esc(t.name)}')">▶ Start</button>` : ''}
+        ${isActive ? `<button class="btn btn-sm btn-outline" onclick="setActiveTournament('${t.id}','${esc(t.name)}')">Controls</button>` : ''}
         <button class="btn btn-sm btn-red" onclick="deleteTournament('${t.id}','${esc(t.name)}')">Delete</button>
       </div></td>
     </tr>`;
   }).join('');
+
+  // Auto-select active tournament
+  const active = list.find(t => t.status === 'active');
+  if (active) setActiveTournament(active.id, active.name, false);
+  else {
+    const ctrl = document.getElementById('active-tournament-controls');
+    if (ctrl) ctrl.style.display = 'none';
+  }
+}
+
+function setActiveTournament(id, name, doJoin = true) {
+  _activeTournamentId = id;
+  _activeTournamentName = name;
+  const ctrl = document.getElementById('active-tournament-controls');
+  const nameEl = document.getElementById('active-tourn-name');
+  if (ctrl) ctrl.style.display = '';
+  if (nameEl) nameEl.textContent = name;
+  if (doJoin && adminSocket) {
+    adminSocket.emit('join_tournament_room', { tournamentId: id });
+    adminSocket.emit('tournament_get_standings', { tournamentId: id });
+  }
+}
+
+async function startTournamentAdmin(id, name) {
+  if (!confirm(`Start tournament "${name}"? This cannot be undone.`)) return;
+  try {
+    adminSocket?.emit('start_tournament', { tournamentId: id });
+    adminSocket?.emit('join_tournament_room', { tournamentId: id });
+    toast(`Starting tournament ${name}…`);
+    setTimeout(loadTournaments, 1500);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function adminCallBreak(minutes) {
+  if (!_activeTournamentId) return toast('No active tournament selected', 'error');
+  if (!confirm(`Call a ${minutes}-minute break for all players?`)) return;
+  adminSocket?.emit('tournament_call_break', { tournamentId: _activeTournamentId, durationMinutes: minutes });
+  // Show extend/end buttons
+  document.getElementById('adm-break-extend-btn')?.style && (document.getElementById('adm-break-extend-btn').style.display = '');
+  document.getElementById('adm-break-end-btn')?.style && (document.getElementById('adm-break-end-btn').style.display = '');
+  toast(`☕ ${minutes}-min break called`);
+}
+
+function adminExtendBreak() {
+  if (!_activeTournamentId) return;
+  adminSocket?.emit('tournament_extend_break', { tournamentId: _activeTournamentId, extraMinutes: 5 });
+  toast('+5 minutes added to break');
+}
+
+function adminEndBreak() {
+  if (!_activeTournamentId) return;
+  adminSocket?.emit('tournament_end_break', { tournamentId: _activeTournamentId });
+  document.getElementById('adm-break-extend-btn')?.style && (document.getElementById('adm-break-extend-btn').style.display = 'none');
+  document.getElementById('adm-break-end-btn')?.style && (document.getElementById('adm-break-end-btn').style.display = 'none');
+  toast('Break ended');
+}
+
+function adminAdvanceTournamentLevel() {
+  if (!_activeTournamentId) return toast('No active tournament selected', 'error');
+  if (!confirm('Advance to next blind level now?')) return;
+  adminSocket?.emit('tournament_advance_level', { tournamentId: _activeTournamentId });
+  toast('Blind level advanced');
+}
+
+function adminViewStandings() {
+  if (!_activeTournamentId) return;
+  adminSocket?.emit('tournament_get_standings', { tournamentId: _activeTournamentId });
+  document.getElementById('admin-standings-panel').style.display = '';
+  document.getElementById('admin-standings-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function adminSpectateTournament() {
+  if (!_activeTournamentId) return;
+  const tableId = `tournament_${_activeTournamentId}`;
+  window.open(`/table.html?tableId=${tableId}&spectate=1`, '_blank');
 }
 
 // ─── Blind Schedule Editor ────────────────────────────────────────────────────
@@ -1700,6 +1813,33 @@ async function deleteTournament(id, name) {
     toast('Tournament deleted');
     loadTournaments();
   } catch (e) { toast(e.message, 'error'); }
+}
+
+function _admOrdinal(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+function _renderAdminStandings(standings, prize, activePlayers) {
+  const prizeEl = document.getElementById('admin-standings-prize');
+  const rowsEl  = document.getElementById('admin-standings-rows');
+  if (!rowsEl) return;
+
+  const active = activePlayers ?? (standings || []).filter(s => !s.isEliminated).length;
+  if (prizeEl) {
+    prizeEl.textContent = prize
+      ? `Prize pool: $${prize.toLocaleString()} | ${active} remaining`
+      : `${active} player${active !== 1 ? 's' : ''} remaining`;
+  }
+
+  rowsEl.innerHTML = (standings || []).map((p, i) => {
+    const medal = i === 0 && !p.isEliminated ? '🥇' : i === 1 && !p.isEliminated ? '🥈' : i === 2 && !p.isEliminated ? '🥉' : `${p.rank}`;
+    return `<div style="display:grid;grid-template-columns:32px 1fr auto;gap:6px;padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.05);${p.isEliminated?'opacity:.4':''}">
+      <span style="text-align:center">${medal}</span>
+      <span style="color:${p.isEliminated?'#888':'var(--text)'}${p.isEliminated?';text-decoration:line-through':''}">${esc(p.username)}${p.isEliminated?` <span style="color:var(--red);font-size:.7rem">✗ ${_admOrdinal(p.placement)}</span>`:''}</span>
+      <span style="color:${p.isEliminated?'#555':'var(--chip-green)'}">$${p.isEliminated?'—':(p.chips||0).toLocaleString()}</span>
+    </div>`;
+  }).join('');
 }
 
 // ─── Per-Table Jackpot ────────────────────────────────────────────────────

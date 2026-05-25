@@ -2160,6 +2160,21 @@ input, select, textarea { font-family: inherit; }
 
 @keyframes btp-pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 
+/* Break button variant */
+.btp-btn-break { color: #e8a838; border-color: rgba(232,168,56,.4); }
+.btp-btn-break:hover { background: rgba(232,168,56,.12); }
+
+/* ─── Tournament Break Banner ─────────────────────────────────────────────────── */
+#tournament-break-banner {
+  animation: break-fade-in .35s ease;
+}
+@keyframes break-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ─── Tournament Standings Modal ─────────────────────────────────────────────── */
+#standings-rows::-webkit-scrollbar { width: 4px; }
+#standings-rows::-webkit-scrollbar-track { background: transparent; }
+#standings-rows::-webkit-scrollbar-thumb { background: rgba(212,175,55,.35); border-radius: 2px; }
+
 /* ─── Blind Schedule Modal ───────────────────────────────────────────────────── */
 #blind-schedule-modal .sched-row {
   display: grid; grid-template-columns: 30px 1fr 1fr 1fr; gap: 8px;

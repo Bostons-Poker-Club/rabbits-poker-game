@@ -1662,18 +1662,92 @@ function setupSocketHandlers(io) {
 
     socket.on('join_tournament_room', ({ tournamentId }) => {
       socket.join(`tournament_${tournamentId}`);
+      // Send current state if tournament is active
+      const t = activeTournaments.get(tournamentId);
+      if (t && t.status === 'active') {
+        socket.emit('tournament_timer', t.getTimerState());
+        socket.emit('tournament_standings', {
+          tournamentId,
+          standings: t.getStandings(),
+          prize: t.getTotalPrize(),
+          activePlayers: Array.from(t.players.values()).filter(p => !p.isEliminated).length
+        });
+        if (t.isOnBreak) {
+          socket.emit('tournament_break_start', {
+            tournamentId,
+            breakRemainingMs: t.getBreakRemainingMs(),
+            endsAt: t.breakEndsAt ? t.breakEndsAt.toISOString() : null
+          });
+        }
+      }
     });
+
+    function _wireTournamentBroadcast(tournament) {
+      tournament.onBroadcast = (event, data) => {
+        // Broadcast to tournament room (lobby observers + table players)
+        io.to(`tournament_${tournament.id}`).emit(event, data);
+        // Also broadcast to the game table room if different
+        const tableId = tournament.game ? tournament.game.tableId : null;
+        if (tableId && tableId !== `tournament_${tournament.id}`) {
+          io.to(tableId).emit(event, data);
+        }
+      };
+    }
 
     socket.on('start_tournament', async ({ tournamentId }) => {
       if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
-      const tournament = activeTournaments.get(tournamentId);
-      if (!tournament) return socket.emit('error', { message: 'Tournament not found' });
+
+      // Load or create tournament in memory
+      let tournament = activeTournaments.get(tournamentId);
+      if (!tournament) {
+        try {
+          const { data: tData } = await supabaseAdmin
+            .from('tournaments')
+            .select('*, tournament_players(user_id, users(username))')
+            .eq('id', tournamentId)
+            .single();
+
+          if (!tData) return socket.emit('error', { message: 'Tournament not found' });
+          if (tData.status === 'completed') return socket.emit('error', { message: 'Tournament already completed' });
+
+          tournament = new Tournament({
+            id: tournamentId,
+            name: tData.name,
+            buyIn: tData.buy_in,
+            startingChips: tData.starting_chips,
+            blindSchedule: tData.blind_schedule || undefined
+          });
+
+          for (const tp of (tData.tournament_players || [])) {
+            try {
+              tournament.registerPlayer(tp.user_id, tp.users?.username || `Player_${tp.user_id.slice(0, 4)}`);
+            } catch {}
+          }
+
+          _wireTournamentBroadcast(tournament);
+          activeTournaments.set(tournamentId, tournament);
+        } catch (err) {
+          return socket.emit('error', { message: `Failed to load tournament: ${err.message}` });
+        }
+      } else {
+        // Ensure broadcast is wired even if tournament was already in map
+        _wireTournamentBroadcast(tournament);
+      }
+
       try {
         tournament.start();
         await supabaseAdmin
           .from('tournaments')
           .update({ status: 'active', started_at: new Date().toISOString() })
           .eq('id', tournamentId);
+
+        // Push initial standings
+        io.to(`tournament_${tournamentId}`).emit('tournament_standings', {
+          tournamentId,
+          standings: tournament.getStandings(),
+          prize: tournament.getTotalPrize(),
+          activePlayers: tournament.players.size
+        });
       } catch (err) {
         socket.emit('error', { message: err.message });
       }
@@ -1691,6 +1765,48 @@ function setupSocketHandlers(io) {
       const tournament = activeTournaments.get(tournamentId);
       if (!tournament) return;
       tournament.resume();
+    });
+
+    socket.on('tournament_advance_level', ({ tournamentId }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament || tournament.status !== 'active') return;
+      // Clear current timer before manually advancing
+      if (tournament.blindTimer) { clearTimeout(tournament.blindTimer); tournament.blindTimer = null; }
+      if (tournament.warnTimer)  { clearTimeout(tournament.warnTimer);  tournament.warnTimer  = null; }
+      tournament.advanceBlindLevel();
+    });
+
+    socket.on('tournament_call_break', ({ tournamentId, durationMinutes }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament || tournament.status !== 'active') return socket.emit('error', { message: 'Tournament not active' });
+      tournament.callBreak(durationMinutes || 15);
+    });
+
+    socket.on('tournament_extend_break', ({ tournamentId, extraMinutes }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament || !tournament.isOnBreak) return socket.emit('error', { message: 'Not on break' });
+      tournament.extendBreak(extraMinutes || 5);
+    });
+
+    socket.on('tournament_end_break', ({ tournamentId }) => {
+      if (!isAdmin && !hostSet.has(userId)) return socket.emit('error', { message: 'Host/Admin only' });
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament || !tournament.isOnBreak) return;
+      tournament.endBreak();
+    });
+
+    socket.on('tournament_get_standings', ({ tournamentId }) => {
+      const tournament = activeTournaments.get(tournamentId);
+      if (!tournament) return;
+      socket.emit('tournament_standings', {
+        tournamentId,
+        standings: tournament.getStandings(),
+        prize: tournament.getTotalPrize(),
+        activePlayers: Array.from(tournament.players.values()).filter(p => !p.isEliminated).length
+      });
     });
 
     socket.on('get_tournament_timer', ({ tournamentId }) => {

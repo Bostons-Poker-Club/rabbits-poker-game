@@ -357,11 +357,34 @@
       <h2 style="color:var(--gold)">Tournaments</h2>
       <button class="btn btn-gold btn-sm" onclick="openModal('create-tournament-modal-admin');initBlindScheduleEditor()">+ Create Tournament</button>
     </div>
+    <!-- Active tournament controls -->
+    <div id="active-tournament-controls" style="display:none;background:rgba(212,175,55,.07);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Active Tournament Controls</div>
+      <div id="active-tourn-name" style="color:var(--gold);font-weight:700;font-size:.95rem;margin-bottom:10px"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="adminCallBreak(15)">☕ 15-min Break</button>
+        <button class="btn btn-sm btn-outline" onclick="adminCallBreak(20)">☕ 20-min Break</button>
+        <button class="btn btn-sm btn-outline" id="adm-break-extend-btn" style="display:none" onclick="adminExtendBreak()">+5 min</button>
+        <button class="btn btn-sm btn-outline" id="adm-break-end-btn" style="display:none" onclick="adminEndBreak()">End Break</button>
+        <button class="btn btn-sm btn-outline" onclick="adminAdvanceTournamentLevel()">⏭ Next Level</button>
+        <button class="btn btn-sm btn-outline" onclick="adminViewStandings()">🏆 Standings</button>
+        <button class="btn btn-sm btn-outline" onclick="adminSpectateTournament()">👁 Spectate</button>
+      </div>
+    </div>
     <div class="table-wrap">
       <table class="data-table">
         <thead><tr><th>Name</th><th>Buy-In</th><th>Starting Chips</th><th>Status</th><th>Players</th><th>Actions</th></tr></thead>
         <tbody id="tournaments-body"></tbody>
       </table>
+    </div>
+    <!-- Tournament Standings Panel -->
+    <div id="admin-standings-panel" style="display:none;margin-top:20px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h3 style="color:var(--gold);margin:0;font-size:.9rem">🏆 Live Standings</h3>
+        <button class="btn btn-sm btn-outline" onclick="document.getElementById('admin-standings-panel').style.display='none'">✕</button>
+      </div>
+      <div id="admin-standings-prize" style="font-size:.78rem;color:var(--text-dim);margin-bottom:8px"></div>
+      <div id="admin-standings-rows" style="max-height:300px;overflow-y:auto;font-size:.82rem"></div>
     </div>
   </div>
 

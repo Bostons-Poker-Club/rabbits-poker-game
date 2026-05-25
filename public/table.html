@@ -107,12 +107,22 @@
       <div class="btp-blinds" id="btp-blinds">25/50</div>
       <div class="btp-countdown" id="btp-countdown">15:00</div>
       <div class="btp-next" id="btp-next"></div>
+      <!-- Admin/host controls -->
       <div class="btp-controls" id="btp-controls" style="display:none">
         <button class="btp-btn" id="btp-pause-btn" onclick="toggleBlindTimer()">⏸ Pause</button>
+        <button class="btp-btn" onclick="adminAdvanceBlindLevel()">⏭ Next Level</button>
         <button class="btp-btn" onclick="openBlindSchedule()">📋 Schedule</button>
       </div>
+      <div class="btp-controls" id="btp-break-controls" style="display:none">
+        <button class="btp-btn btp-btn-break" onclick="openBreakDialog()">☕ Break</button>
+        <button class="btp-btn" onclick="openTournamentStandings()">🏆 Standings</button>
+      </div>
+      <!-- Player-only controls -->
       <div style="display:none" id="btp-schedule-btn-wrap">
-        <button class="btp-btn" style="margin-top:4px" onclick="openBlindSchedule()">📋 Schedule</button>
+        <div style="display:flex;gap:5px;justify-content:center;margin-top:4px">
+          <button class="btp-btn" onclick="openBlindSchedule()">📋 Schedule</button>
+          <button class="btp-btn" onclick="openTournamentStandings()">🏆 Standings</button>
+        </div>
       </div>
     </div>
 
@@ -197,12 +207,55 @@
 <!-- Chat bubble: landscape mobile only, fixed bottom-right -->
 <button id="chat-bubble-btn" class="chat-bubble-btn" onclick="toggleChat()" title="Chat">💬<span id="chat-bubble-badge" class="chat-bubble-badge"></span></button>
 
+<!-- Tournament Break Banner (fixed overlay) -->
+<div id="tournament-break-banner" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:600;background:rgba(0,0,0,.82);display:none;flex-direction:column;align-items:center;justify-content:center;text-align:center">
+  <div style="background:rgba(8,20,12,.97);border:2px solid var(--gold);border-radius:16px;padding:32px 40px;max-width:380px;width:92%">
+    <div style="font-size:2.5rem;margin-bottom:8px">☕</div>
+    <div style="font-size:1.4rem;font-weight:900;color:var(--gold);letter-spacing:.05em;margin-bottom:6px">TOURNAMENT BREAK</div>
+    <div id="break-countdown" style="font-size:3rem;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;margin:12px 0">15:00</div>
+    <div id="break-resume-msg" style="font-size:.85rem;color:rgba(255,255,255,.6);margin-bottom:20px">Game resumes automatically when timer ends</div>
+    <!-- Admin extend button (shown only to admin/host) -->
+    <div id="break-admin-controls" style="display:none;gap:8px;justify-content:center;flex-wrap:wrap">
+      <button class="btn btn-outline" style="font-size:.8rem;padding:6px 14px" onclick="extendTournamentBreak()">+5 min</button>
+      <button class="btn btn-gold" style="font-size:.8rem;padding:6px 14px" onclick="endTournamentBreakNow()">End Break</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tournament Standings Modal -->
+<div class="modal-overlay hidden" id="tournament-standings-modal">
+  <div class="modal" style="max-width:460px">
+    <h2 style="color:var(--gold)">🏆 Tournament Standings</h2>
+    <div id="standings-prize" style="font-size:.82rem;color:var(--text-dim);margin-bottom:12px"></div>
+    <div id="standings-rows" style="max-height:50vh;overflow-y:auto"></div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-outline" onclick="closeModal('tournament-standings-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tournament Break Dialog (admin only) -->
+<div class="modal-overlay hidden" id="break-dialog-modal">
+  <div class="modal" style="max-width:340px;text-align:center">
+    <h2 style="color:var(--gold)">☕ Call a Break</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:20px">All tournament tables will pause. Players see a countdown.</p>
+    <div style="display:flex;gap:10px;justify-content:center;margin-bottom:20px">
+      <button class="btn btn-outline" style="flex:1;padding:12px" onclick="callTournamentBreak(15)">15 min</button>
+      <button class="btn btn-outline" style="flex:1;padding:12px" onclick="callTournamentBreak(20)">20 min</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('break-dialog-modal')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Blind Schedule Modal -->
 <div class="modal-overlay hidden" id="blind-schedule-modal">
   <div class="modal" style="max-width:420px">
     <h2 style="color:var(--gold)">📋 Blind Schedule</h2>
     <div id="blind-sched-rows"></div>
-    <div class="modal-footer" style="margin-top:16px">
+    <div class="modal-footer" style="margin-top:16px;gap:10px">
+      <button id="bsm-advance-btn" class="btn btn-outline" style="display:none;font-size:.82rem" onclick="adminAdvanceBlindLevel();closeModal('blind-schedule-modal')">⏭ Advance Level</button>
       <button class="btn btn-outline" onclick="closeModal('blind-schedule-modal')">Close</button>
     </div>
   </div>

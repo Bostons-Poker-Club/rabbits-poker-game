@@ -675,8 +675,9 @@ function connect() {
     if (window.Sound) Sound.notification();
   });
 
-  socket.on('tournament_started', ({ timerState }) => {
+  socket.on('tournament_started', ({ timerState, standings, prize }) => {
     if (timerState) updateBlindTimer(timerState);
+    if (standings) _updateStandingsData(standings, prize);
   });
 
   socket.on('tournament_timer', (timerState) => {
@@ -689,6 +690,48 @@ function connect() {
 
   socket.on('tournament_timer_resumed', ({ timerState }) => {
     updateBlindTimer(timerState);
+  });
+
+  socket.on('blind_increase', ({ timerState }) => {
+    if (timerState) updateBlindTimer(timerState);
+  });
+
+  socket.on('tournament_standings', ({ standings, prize, activePlayers }) => {
+    _updateStandingsData(standings, prize, activePlayers);
+  });
+
+  socket.on('player_eliminated', ({ userId, username, placement }) => {
+    toast(`❌ ${username} eliminated — finished ${placement}${_ordinal(placement)}`, 'warn');
+    socket.emit('tournament_get_standings', { tournamentId: _tournamentId });
+  });
+
+  socket.on('tournament_ended', ({ winner, standings, prize }) => {
+    if (standings) _updateStandingsData(standings, prize);
+    toast(`🏆 Tournament over! ${winner?.username || 'Winner'} wins!`);
+  });
+
+  // ─── Tournament Break Events ─────────────────────────────────────────────
+
+  socket.on('tournament_break_start', ({ breakRemainingMs, endsAt, durationMinutes }) => {
+    _startBreakCountdown(breakRemainingMs || 0);
+    toast(`☕ Tournament break — ${durationMinutes || Math.round((breakRemainingMs||0)/60000)} minutes`, 'warn');
+    if (window.Sound) Sound.notification();
+  });
+
+  socket.on('tournament_break_extended', ({ breakRemainingMs, extraMinutes }) => {
+    _startBreakCountdown(breakRemainingMs || 0);
+    toast(`⏱ Break extended by ${extraMinutes} minutes`);
+  });
+
+  socket.on('tournament_break_end', ({ timerState }) => {
+    _stopBreakCountdown();
+    if (timerState) updateBlindTimer(timerState);
+    toast('▶ Break over — game resuming!');
+  });
+
+  socket.on('tournament_break_warning', ({ secondsRemaining }) => {
+    toast(`⚠️ Break ends in ${secondsRemaining} seconds — take your seats!`, 'warn');
+    if (window.Sound) Sound.notification();
   });
 
   socket.on('chat', ({ username: chatUser, message }) => {
@@ -2746,6 +2789,9 @@ function applyFeltColor(color) {
 let _blindTimerInterval = null;
 let _timerState = null;
 let _tournamentId = null;
+let _standingsData = null;
+let _breakCountdownInterval = null;
+let _breakRemainingMs = 0;
 
 function updateBlindTimer(state) {
   _timerState = state;
@@ -2756,18 +2802,27 @@ function updateBlindTimer(state) {
   panel.style.display = '';
   panel.classList.toggle('paused', !!state.isPaused);
 
-  // Show admin/host controls
   const isHostAdmin = user?.isAdmin || user?.isHost;
-  const ctrlEl = document.getElementById('btp-controls');
-  const schedWrap = document.getElementById('btp-schedule-btn-wrap');
-  if (ctrlEl)   ctrlEl.style.display   = isHostAdmin ? '' : 'none';
-  if (schedWrap) schedWrap.style.display = isHostAdmin ? 'none' : '';
+  const ctrlEl       = document.getElementById('btp-controls');
+  const breakCtrlEl  = document.getElementById('btp-break-controls');
+  const schedWrap    = document.getElementById('btp-schedule-btn-wrap');
+
+  if (ctrlEl)      ctrlEl.style.display      = isHostAdmin ? '' : 'none';
+  if (breakCtrlEl) breakCtrlEl.style.display  = isHostAdmin ? '' : 'none';
+  if (schedWrap)   schedWrap.style.display    = isHostAdmin ? 'none' : '';
+
+  // Show admin controls inside the blind schedule modal footer
+  const bsmAdvBtn = document.getElementById('bsm-advance-btn');
+  if (bsmAdvBtn) bsmAdvBtn.style.display = isHostAdmin ? '' : 'none';
+
+  // Show admin extend/end controls in break banner
+  const breakAdminCtrl = document.getElementById('break-admin-controls');
+  if (breakAdminCtrl) breakAdminCtrl.style.display = isHostAdmin ? 'flex' : 'none';
 
   _renderTimerDisplay(state);
 
-  // Start/restart the countdown interval
   if (_blindTimerInterval) clearInterval(_blindTimerInterval);
-  if (!state.isPaused) {
+  if (!state.isPaused && !state.isOnBreak) {
     _blindTimerInterval = setInterval(_tickTimer, 500);
   }
 }
@@ -2787,18 +2842,24 @@ function _renderTimerDisplay(state) {
 
   if (!levelEl) return;
 
-  const rem = Math.max(0, state.remainingMs);
+  const rem  = Math.max(0, state.remainingMs);
   const mins = Math.floor(rem / 60000);
   const secs = Math.floor((rem % 60000) / 1000).toString().padStart(2, '0');
 
   levelEl.textContent  = `Level ${state.currentLevel}`;
   blindsEl.textContent = `$${state.smallBlind} / $${state.bigBlind}`;
-  countEl.textContent  = state.isPaused ? `${mins}:${secs} ⏸` : `${mins}:${secs}`;
-  countEl.classList.toggle('warn', !state.isPaused && rem <= 30_000);
+
+  if (state.isOnBreak) {
+    countEl.textContent = '☕ BREAK';
+    countEl.classList.remove('warn');
+  } else {
+    countEl.textContent = state.isPaused ? `${mins}:${secs} ⏸` : `${mins}:${secs}`;
+    countEl.classList.toggle('warn', !state.isPaused && rem <= 30_000);
+  }
 
   if (nextEl) {
-    nextEl.textContent = state.nextSmallBlind !== undefined
-      ? `Next: Level ${state.nextLevel} — $${state.nextSmallBlind}/$${state.nextBigBlind} in ${mins}:${secs}`
+    nextEl.textContent = (!state.isOnBreak && state.nextSmallBlind !== undefined)
+      ? `Next: Lvl ${state.nextLevel} — $${state.nextSmallBlind}/$${state.nextBigBlind}`
       : '';
   }
 
@@ -2816,28 +2877,160 @@ function toggleBlindTimer() {
   }
 }
 
+function adminAdvanceBlindLevel() {
+  if (!_tournamentId) return;
+  if (!confirm('Advance to next blind level now?')) return;
+  socket.emit('tournament_advance_level', { tournamentId: _tournamentId });
+}
+
+// ─── Tournament Break ─────────────────────────────────────────────────────────
+
+function openBreakDialog() {
+  if (!_tournamentId) return;
+  openModal('break-dialog-modal');
+}
+
+function callTournamentBreak(minutes) {
+  if (!_tournamentId) return;
+  closeModal('break-dialog-modal');
+  socket.emit('tournament_call_break', { tournamentId: _tournamentId, durationMinutes: minutes });
+}
+
+function extendTournamentBreak() {
+  if (!_tournamentId) return;
+  socket.emit('tournament_extend_break', { tournamentId: _tournamentId, extraMinutes: 5 });
+}
+
+function endTournamentBreakNow() {
+  if (!_tournamentId) return;
+  socket.emit('tournament_end_break', { tournamentId: _tournamentId });
+}
+
+function _startBreakCountdown(remainingMs) {
+  _breakRemainingMs = remainingMs;
+  _stopBreakCountdown();
+
+  const banner = document.getElementById('tournament-break-banner');
+  if (banner) banner.style.display = 'flex';
+
+  // Stop blind timer tick during break
+  if (_blindTimerInterval) { clearInterval(_blindTimerInterval); _blindTimerInterval = null; }
+
+  _renderBreakCountdown();
+  _breakCountdownInterval = setInterval(() => {
+    _breakRemainingMs = Math.max(0, _breakRemainingMs - 500);
+    _renderBreakCountdown();
+  }, 500);
+}
+
+function _stopBreakCountdown() {
+  if (_breakCountdownInterval) { clearInterval(_breakCountdownInterval); _breakCountdownInterval = null; }
+  const banner = document.getElementById('tournament-break-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+function _renderBreakCountdown() {
+  const el = document.getElementById('break-countdown');
+  if (!el) return;
+  const rem  = Math.max(0, _breakRemainingMs);
+  const mins = Math.floor(rem / 60000);
+  const secs = Math.floor((rem % 60000) / 1000).toString().padStart(2, '0');
+  el.textContent = `${mins}:${secs}`;
+  el.style.color = rem <= 120_000 ? '#e74c3c' : 'var(--text)';
+}
+
+// ─── Tournament Standings ─────────────────────────────────────────────────────
+
+function _updateStandingsData(standings, prize, activePlayers) {
+  _standingsData = { standings, prize, activePlayers };
+}
+
+function openTournamentStandings() {
+  if (!_standingsData?.standings) {
+    // Request fresh standings
+    if (_tournamentId) socket.emit('tournament_get_standings', { tournamentId: _tournamentId });
+    toast('Fetching standings…');
+    return;
+  }
+  _renderStandingsModal(_standingsData.standings, _standingsData.prize, _standingsData.activePlayers);
+  openModal('tournament-standings-modal');
+}
+
+function _renderStandingsModal(standings, prize, activePlayers) {
+  const prizeEl = document.getElementById('standings-prize');
+  const rowsEl  = document.getElementById('standings-rows');
+  if (!rowsEl) return;
+
+  if (prizeEl) {
+    const active = activePlayers || standings.filter(s => !s.isEliminated).length;
+    prizeEl.textContent = prize
+      ? `Prize pool: $${prize.toLocaleString()} | ${active} player${active !== 1 ? 's' : ''} remaining`
+      : `${active} player${active !== 1 ? 's' : ''} remaining`;
+  }
+
+  rowsEl.innerHTML = standings.map((p, i) => {
+    const isMe = p.userId === (user?.id || user?.userId);
+    const eliminated = p.isEliminated;
+    const rankBadge = i === 0 && !eliminated ? '🥇' :
+                      i === 1 && !eliminated ? '🥈' :
+                      i === 2 && !eliminated ? '🥉' : `${p.rank}`;
+    return `<div style="display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.06);font-size:.85rem${eliminated?';opacity:.45':''}${isMe?';background:rgba(212,175,55,.07);border-radius:6px':''}">
+      <div style="text-align:center;font-size:.95rem">${rankBadge}</div>
+      <div>
+        <span style="color:${isMe ? 'var(--gold)' : 'var(--text)'}${eliminated?';text-decoration:line-through':''}">${_esc(p.username)}</span>
+        ${eliminated ? `<span style="font-size:.72rem;color:var(--red);margin-left:6px">✗ ${_ordinal(p.placement)}</span>` : ''}
+        ${isMe ? '<span style="font-size:.65rem;color:var(--gold);margin-left:4px">▸ you</span>' : ''}
+      </div>
+      <div style="font-weight:700;color:${eliminated?'#666':'var(--chip-green)'}">${eliminated ? '—' : '$' + (p.chips || 0).toLocaleString()}</div>
+    </div>`;
+  }).join('');
+}
+
+function _esc(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function _ordinal(n) {
+  const s = ['th','st','nd','rd'];
+  const v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+// ─── Blind Schedule Modal ─────────────────────────────────────────────────────
+
 function openBlindSchedule() {
   if (!_timerState?.schedule) return;
   const rows = document.getElementById('blind-sched-rows');
   if (!rows) return;
 
-  rows.innerHTML = `
-    <div style="display:grid;grid-template-columns:30px 1fr 1fr 1fr;gap:8px;padding:4px 0;margin-bottom:6px;font-size:.7rem;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">
-      <div>#</div><div>Small / Big</div><div>Duration</div><div></div>
-    </div>
-    ${_timerState.schedule.map((lvl, i) => {
+  rows.innerHTML = [
+    `<div style="display:grid;grid-template-columns:32px 1fr 60px 80px;gap:8px;padding:4px 0 8px;font-size:.7rem;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--border)">
+      <div>#</div><div>Blinds</div><div>Duration</div><div>Time Left</div>
+    </div>`,
+    ..._timerState.schedule.map((lvl, i) => {
       const isCurrent = (i + 1) === _timerState.currentLevel;
+      const isPast    = (i + 1) < _timerState.currentLevel;
       const rem = isCurrent ? Math.max(0, _timerState.remainingMs) : null;
       const remStr = rem !== null
         ? `${Math.floor(rem/60000)}:${Math.floor((rem%60000)/1000).toString().padStart(2,'0')}`
         : '';
-      return `<div style="display:grid;grid-template-columns:30px 1fr 1fr 1fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.82rem${isCurrent?';color:var(--gold);font-weight:700':''}">
-        <div>${lvl.level}</div>
+      const style = isCurrent
+        ? 'color:var(--gold);font-weight:700;background:rgba(212,175,55,.08);border-radius:4px;padding:7px 4px'
+        : isPast
+        ? 'opacity:.4;padding:7px 0'
+        : 'padding:7px 0';
+      return `<div style="display:grid;grid-template-columns:32px 1fr 60px 80px;gap:8px;align-items:center;border-bottom:1px solid rgba(255,255,255,.04);font-size:.82rem;${style}">
+        <div>${isCurrent ? '▶' : lvl.level}</div>
         <div>$${lvl.small_blind}/$${lvl.big_blind}</div>
         <div>${lvl.duration_minutes}m</div>
         <div style="font-size:.75rem;color:var(--chip-green)">${remStr ? `⏱ ${remStr}` : ''}</div>
       </div>`;
-    }).join('')}`;
+    })
+  ].join('');
+
+  // Show advance button for admin/host
+  const advBtn = document.getElementById('bsm-advance-btn');
+  if (advBtn) advBtn.style.display = (user?.isAdmin || user?.isHost) ? '' : 'none';
 
   openModal('blind-schedule-modal');
 }
