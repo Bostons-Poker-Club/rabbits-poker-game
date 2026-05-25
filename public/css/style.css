@@ -270,6 +270,7 @@ input, select, textarea { font-family: inherit; }
 .table-header .jackpot-mini { color: var(--gold); font-weight: bold; font-size: 0.95rem; }
 /* Desktop: hide mobile-only header elements */
 .hdr-leave-btn { display: none; }
+.hdr-mob-lobby { display: none; }
 .hdr-pot { display: none; }
 .hdr-right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .hdr-icon-btn {
@@ -1836,6 +1837,46 @@ input, select, textarea { font-family: inherit; }
   body.table-page #btn-hand-history,
   body.table-page .hdr-right,
   body.table-page #chat-toggle { display: none; }
+
+  /* Mobile header: show leave + lobby buttons, shrink center info */
+  body.table-page .hdr-leave-btn {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    padding: 3px 7px;
+    height: 26px;
+    white-space: nowrap;
+    border-radius: 5px;
+  }
+  body.table-page .hdr-mob-lobby {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    font-size: 0.6rem;
+    padding: 3px 7px;
+    height: 26px;
+    white-space: nowrap;
+    color: var(--gold);
+    text-decoration: none;
+    border: 1px solid rgba(200,168,75,0.4);
+    border-radius: 5px;
+    background: transparent;
+  }
+  body.table-page .table-info-bar {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    gap: 5px;
+  }
+  body.table-page .table-info-bar .hdr-lobby-link { display: none; }
+  body.table-page #hdr-table-name,
+  body.table-page #hdr-blinds,
+  body.table-page #hdr-street {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 /* ─── Mobile Landscape Fixes (phones in landscape orientation) ───────────── */
