@@ -52,7 +52,7 @@ const loginLimiter = rateLimit({
     const ms = req.rateLimit?.resetTime ? req.rateLimit.resetTime - Date.now() : 30 * 60 * 1000;
     const mins = Math.max(1, Math.ceil(ms / 60000));
     res.status(429).json({
-      error: `Too many attempts. Please wait ${mins} minute${mins !== 1 ? 's' : ''} or contact admin at bostonspokerclub.amitureflops@gmail.com or text (508) 521-9176`
+      error: `Too many attempts. Please wait ${mins} minute${mins !== 1 ? 's' : ''} or contact admin at bostonspokerclub.amitureflops@gmail.com or text ${process.env.ADMIN_PHONE || '(857) 230-8682'}`
     });
   },
 });
