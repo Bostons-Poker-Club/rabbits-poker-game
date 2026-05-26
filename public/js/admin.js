@@ -1842,18 +1842,19 @@ function renderTournamentsAdmin(list) {
     const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
     const isActive = t.status === 'active';
     const isRegistering = t.status === 'registering';
+    const meta = JSON.stringify({id:t.id,name:t.name,buy_in:t.buy_in,starting_chips:t.starting_chips,status:t.status});
     return `
     <tr>
-      <td>${esc(t.name)}</td>
-      <td style="color:var(--gold)">${fmt(t.buy_in)}</td>
-      <td>${fmt(t.starting_chips)}</td>
-      <td><span style="color:${statusColor}">${t.status}</span></td>
-      <td>${players}</td>
-      <td id="paid-count-${t.id}" style="color:var(--chip-green)">—</td>
-      <td><div class="actions">
+      <td data-label="Name">${esc(t.name)}</td>
+      <td data-label="Buy-In" style="color:var(--gold)">${fmt(t.buy_in)}</td>
+      <td data-label="Starting">${fmt(t.starting_chips)}</td>
+      <td data-label="Status"><span style="color:${statusColor}">${t.status}</span></td>
+      <td data-label="Players">${players}</td>
+      <td data-label="Paid" id="paid-count-${t.id}" style="color:var(--chip-green)">—</td>
+      <td data-label=""><div class="actions">
         ${isRegistering ? `<button class="btn btn-sm btn-gold" onclick="startTournamentAdmin('${t.id}','${esc(t.name)}')">▶ Start</button>` : ''}
         ${isActive ? `<button class="btn btn-sm btn-outline" onclick="setActiveTournament('${t.id}','${esc(t.name)}')">Controls</button>` : ''}
-        <button class="btn btn-sm btn-outline" onclick="loadTournamentRoster('${t.id}',${JSON.stringify({id:t.id,name:t.name,buy_in:t.buy_in,starting_chips:t.starting_chips,status:t.status})})">👥 Players</button>
+        <button class="btn btn-sm btn-outline" onclick="openTournamentPlayersModal('${t.id}',${meta})">👥 Players</button>
         <button class="btn btn-sm btn-red" onclick="deleteTournament('${t.id}','${esc(t.name)}')">Delete</button>
       </div></td>
     </tr>`;
@@ -1932,6 +1933,66 @@ async function loadTournamentRoster(tournamentId, tournamentMeta) {
   }
 }
 
+async function openTournamentPlayersModal(tournamentId, tournamentMeta) {
+  _rosterTournamentId = tournamentId;
+  if (tournamentMeta) _rosterTournamentData = tournamentMeta;
+
+  const titleEl = document.getElementById('tp-modal-title');
+  const statsEl = document.getElementById('tp-modal-stats');
+  const listEl  = document.getElementById('tp-modal-list');
+
+  if (titleEl) titleEl.textContent = tournamentMeta?.name || 'Tournament Players';
+  if (statsEl) statsEl.textContent = '';
+  if (listEl)  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">Loading…</div>';
+  openModal('tourn-players-modal');
+
+  try {
+    const players = await apiFetch(`/api/admin/tournaments/${tournamentId}/players`);
+    const paid = players.filter(p => p.buy_in_paid).length;
+    const total = players.length;
+    const buyIn = tournamentMeta?.buy_in || 0;
+
+    if (statsEl) statsEl.textContent = `${total} registered · ${paid} paid · ${total - paid} unpaid · Prize pool: $${(paid * buyIn).toLocaleString()}`;
+
+    // Also update paid-count cell in the tournament table row if visible
+    const paidEl = document.getElementById(`paid-count-${tournamentId}`);
+    if (paidEl) paidEl.textContent = `${paid}/${total}`;
+
+    if (!players.length) {
+      if (listEl) listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-dim)">No players registered yet</div>';
+      return;
+    }
+
+    if (listEl) listEl.innerHTML = players.map(p => {
+      const u = p.users || {};
+      const paidBadge = p.buy_in_paid
+        ? `<span style="color:var(--chip-green);font-size:.78rem;font-weight:700">✓ Paid</span>`
+        : `<span style="color:var(--red);font-size:.78rem">✗ Unpaid</span>`;
+      const elimBadge = p.is_eliminated ? `<span style="color:var(--red);font-size:.72rem;margin-left:4px">✗ out</span>` : '';
+      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+        <div>
+          <strong style="color:var(--gold)">${esc(u.nickname || u.username || '—')}</strong>${elimBadge}
+          ${u.nickname && u.username && u.nickname !== u.username ? `<div style="color:var(--text-dim);font-size:.75rem">@${esc(u.username)}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${paidBadge}
+          ${!p.buy_in_paid
+            ? `<button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px" onclick="markTournamentPlayerPaid('${tournamentId}','${p.user_id}',true)">Pay</button>`
+            : `<button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px;opacity:.5" onclick="markTournamentPlayerPaid('${tournamentId}','${p.user_id}',false)">Undo</button>`}
+          <button class="btn btn-sm btn-red" style="font-size:.7rem;padding:2px 8px" onclick="removeTournamentPlayer('${tournamentId}','${p.user_id}','${esc(u.username || u.nickname || 'player')}')">✕</button>
+        </div>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    if (listEl) listEl.innerHTML = `<div style="color:var(--red);padding:12px">${esc(e.message)}</div>`;
+  }
+}
+
+function _isModalOpen(id) {
+  const el = document.getElementById(id);
+  return el && !el.classList.contains('hidden');
+}
+
 async function markTournamentPlayerPaid(tournamentId, userId, paid) {
   try {
     await apiFetch(`/api/admin/tournaments/${tournamentId}/players/${userId}`, {
@@ -1939,7 +2000,11 @@ async function markTournamentPlayerPaid(tournamentId, userId, paid) {
       body: { buy_in_paid: paid }
     });
     toast(paid ? '✓ Buy-in marked as paid' : 'Buy-in marked unpaid');
-    loadTournamentRoster(tournamentId);
+    if (_isModalOpen('tourn-players-modal')) {
+      openTournamentPlayersModal(tournamentId, _rosterTournamentData);
+    } else {
+      loadTournamentRoster(tournamentId);
+    }
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -1948,7 +2013,11 @@ async function removeTournamentPlayer(tournamentId, userId, username) {
   try {
     await apiFetch(`/api/admin/tournaments/${tournamentId}/players/${userId}`, { method: 'DELETE' });
     toast(`${username} removed`);
-    loadTournamentRoster(tournamentId);
+    if (_isModalOpen('tourn-players-modal')) {
+      openTournamentPlayersModal(tournamentId, _rosterTournamentData);
+    } else {
+      loadTournamentRoster(tournamentId);
+    }
     loadTournaments();
   } catch (e) { toast(e.message, 'error'); }
 }

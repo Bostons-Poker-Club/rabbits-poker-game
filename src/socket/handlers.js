@@ -1807,6 +1807,13 @@ function setupSocketHandlers(io) {
       }
 
       try {
+        // Update DB before start() fires the tournament_started broadcast so
+        // lobby clients see status:'active' when they call loadTournaments()
+        await supabaseAdmin
+          .from('tournaments')
+          .update({ status: 'active', started_at: new Date().toISOString() })
+          .eq('id', tournamentId);
+
         tournament.start();
 
         // Wire tournament game into activeGames so join_table reconnect and spectate work
@@ -1852,11 +1859,6 @@ function setupSocketHandlers(io) {
           };
         }
 
-        await supabaseAdmin
-          .from('tournaments')
-          .update({ status: 'active', started_at: new Date().toISOString() })
-          .eq('id', tournamentId);
-
         // Push initial standings
         io.to(`tournament_${tournamentId}`).emit('tournament_standings', {
           tournamentId,
@@ -1869,6 +1871,10 @@ function setupSocketHandlers(io) {
         if (tGame) broadcastGameState(io, tGame.tableId, tGame);
 
       } catch (err) {
+        // Revert DB if start() failed (e.g. not enough players)
+        if (tournament.status !== 'active') {
+          supabaseAdmin.from('tournaments').update({ status: 'registering', started_at: null }).eq('id', tournamentId).catch(() => {});
+        }
         socket.emit('error', { message: err.message });
       }
     });

@@ -58,6 +58,8 @@ loadInbox();
 // ─── Socket (notifications for all logged-in users) ───────────────────────
 
 let lobbySocket = null;
+let _joinedTournamentIds = []; // track rooms to re-join on reconnect
+
 if (typeof io !== 'undefined') {
   lobbySocket = io({
     transports: ['websocket'],
@@ -73,6 +75,8 @@ if (typeof io !== 'undefined') {
   lobbySocket.on('connect', () => {
     document.getElementById('reconnecting-banner').style.display = 'none';
     lobbySocket.emit('lobby:join');
+    // Re-join tournament rooms after reconnect (server drops room membership on disconnect)
+    _joinedTournamentIds.forEach(id => lobbySocket.emit('join_tournament_room', { tournamentId: id }));
   });
   lobbySocket.on('disconnect', () => {
     document.getElementById('reconnecting-banner').style.display = 'block';
@@ -257,12 +261,12 @@ function renderTournaments(list) {
 
   // Join tournament room for every non-completed tournament so we receive
   // tournament_started even for ones still in registering state
-  list.forEach(t => {
-    if (t.status !== 'completed' && lobbySocket) {
-      lobbySocket.emit('join_tournament_room', { tournamentId: t.id });
-      if (t.status === 'active') {
-        lobbySocket.emit('get_tournament_timer', { tournamentId: t.id });
-      }
+  _joinedTournamentIds = list.filter(t => t.status !== 'completed').map(t => t.id);
+  _joinedTournamentIds.forEach(id => {
+    if (lobbySocket) {
+      lobbySocket.emit('join_tournament_room', { tournamentId: id });
+      const t = list.find(x => x.id === id);
+      if (t?.status === 'active') lobbySocket.emit('get_tournament_timer', { tournamentId: id });
     }
   });
 

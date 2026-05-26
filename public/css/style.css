@@ -1063,6 +1063,53 @@ input, select, textarea { font-family: inherit; }
   .data-table { min-width: 520px; }
 }
 
+/* ─── Admin: Tournament table → card layout on mobile ───────────────────── */
+@media (max-width: 640px) {
+  #panel-tournaments .table-wrap { border: none; background: none; }
+  #panel-tournaments .data-table { min-width: unset; }
+  #panel-tournaments .data-table thead { display: none; }
+  #panel-tournaments .data-table tbody tr {
+    display: block;
+    background: rgba(255,255,255,.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    padding: 10px 14px;
+  }
+  #panel-tournaments .data-table tbody td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: none;
+    font-size: .85rem;
+    gap: 8px;
+  }
+  #panel-tournaments .data-table tbody td::before {
+    content: attr(data-label);
+    color: var(--text-dim);
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    flex-shrink: 0;
+  }
+  #panel-tournaments .data-table tbody td[data-label=""] {
+    margin-top: 8px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #panel-tournaments .data-table tbody td[data-label=""] .actions {
+    flex-direction: column;
+    gap: 6px;
+  }
+  #panel-tournaments .data-table tbody td[data-label=""] .btn {
+    width: 100%;
+    justify-content: center;
+    text-align: center;
+  }
+}
+
 /* ─── Responsive: Phone ≤480px ───────────────────────────────────────────── */
 @media (max-width: 480px) {
   /* ── Auth page ── */

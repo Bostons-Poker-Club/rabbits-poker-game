@@ -1074,6 +1074,22 @@
 
 <script src="/socket.io/socket.io.js"></script>
 <script src="/js/auth.js"></script>
+<!-- Tournament Players Quick-View Modal -->
+<div class="modal-overlay hidden" id="tourn-players-modal">
+  <div class="modal" style="max-width:480px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h2 id="tp-modal-title" style="color:var(--gold);margin:0;font-size:1rem">Tournament Players</h2>
+      <button class="btn btn-sm btn-outline" onclick="closeModal('tourn-players-modal')">✕</button>
+    </div>
+    <div id="tp-modal-stats" style="font-size:.78rem;color:var(--text-dim);margin-bottom:12px"></div>
+    <div id="tp-modal-list" style="max-height:50vh;overflow-y:auto;font-size:.85rem"></div>
+    <div class="modal-footer" style="margin-top:14px">
+      <button class="btn btn-gold btn-sm" onclick="openAdminRegisterModal()">+ Add Player</button>
+      <button class="btn btn-outline btn-sm" onclick="closeModal('tourn-players-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <script src="/js/admin.js"></script>
 <script src="/js/pwa.js"></script>
 <script src="/js/maintenance-banner.js"></script>
