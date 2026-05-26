@@ -415,6 +415,20 @@ function setupSocketHandlers(io) {
                 pot: existingGame.pot
               });
             }
+            // If this is a tournament table, send current tournament state
+            if (tableId.startsWith('tournament_')) {
+              const tournId = tableId.slice('tournament_'.length);
+              const tourney = activeTournaments.get(tournId);
+              if (tourney) {
+                socket.emit('tournament_timer', tourney.getTimerState());
+                socket.emit('tournament_standings', {
+                  tournamentId: tournId,
+                  standings: tourney.getStandings(),
+                  prize: tourney.getTotalPrize(),
+                  activePlayers: Array.from(tourney.players.values()).filter(p => !p.isEliminated).length
+                });
+              }
+            }
             return;
           }
         }
@@ -472,38 +486,58 @@ function setupSocketHandlers(io) {
         const user = dbUser || { chips: 999999, is_banned: false };
 
         if (user.is_banned) return socket.emit('error', { message: 'Account is banned' });
-        if (!isLocalAdmin && user.chips <= 0) {
-          return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
-        }
 
-        const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
-        const chips = Math.max(buyInChips || minBuyIn, minBuyIn);
+        // ── Tournament table: chips are internal, no bank deduction ──────────
+        const isTournamentTable = tableId.startsWith('tournament_');
+        let chips;
+        if (isTournamentTable) {
+          const tournId = tableId.slice('tournament_'.length);
+          const activeTourney = activeTournaments.get(tournId);
+          const tp = activeTourney?.players.get(userId);
 
-        if (!isLocalAdmin && user.chips < minBuyIn) {
-          return socket.emit('error', { message: `Insufficient chips. Minimum buy-in for this table is $${minBuyIn}. Contact admin to add chips.` });
-        }
-        if (!isLocalAdmin && user.chips < chips) {
-          return socket.emit('error', { message: `Insufficient chips. You need $${chips} to join with that buy-in.` });
-        }
-        if (!isLocalAdmin && chips < minBuyIn) {
-          return socket.emit('error', { message: `Minimum buy-in for this table is $${minBuyIn}.` });
-        }
+          if (!tp && !isAdmin && !isLocalAdmin) {
+            return socket.emit('error', { message: 'You are not registered in this tournament' });
+          }
+          if (tp?.isEliminated) {
+            return socket.emit('error', { message: 'You have been eliminated from this tournament' });
+          }
+          // Use player's current tournament chip stack; admin gets starting chips if unregistered
+          chips = tp ? tp.chips : (activeTourney?.startingChips || 10000);
+          // No bank deduction and no seat record for tournament tables
+        } else {
+          if (!isLocalAdmin && user.chips <= 0) {
+            return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
+          }
 
-        // Deduct chips from bank (only if user exists in DB)
-        if (dbUser) {
-          await supabaseAdmin.from('users').update({ chips: user.chips - chips }).eq('id', userId);
-          logTransaction({ userId, username, type: 'table_buyin', amount: chips, tableName: table.name || tableId });
-        }
+          const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
+          chips = Math.max(buyInChips || minBuyIn, minBuyIn);
 
-        // Create or update seat record (best-effort — silently skip if DB unavailable)
-        try {
-          await supabaseAdmin.from('table_seats').upsert({
-            table_id: tableId,
-            user_id: userId,
-            seat_number: seatNumber,
-            chips_on_table: chips
-          }, { onConflict: 'table_id,user_id' });
-        } catch (_) {}
+          if (!isLocalAdmin && user.chips < minBuyIn) {
+            return socket.emit('error', { message: `Insufficient chips. Minimum buy-in for this table is $${minBuyIn}. Contact admin to add chips.` });
+          }
+          if (!isLocalAdmin && user.chips < chips) {
+            return socket.emit('error', { message: `Insufficient chips. You need $${chips} to join with that buy-in.` });
+          }
+          if (!isLocalAdmin && chips < minBuyIn) {
+            return socket.emit('error', { message: `Minimum buy-in for this table is $${minBuyIn}.` });
+          }
+
+          // Deduct chips from bank (only if user exists in DB)
+          if (dbUser) {
+            await supabaseAdmin.from('users').update({ chips: user.chips - chips }).eq('id', userId);
+            logTransaction({ userId, username, type: 'table_buyin', amount: chips, tableName: table.name || tableId });
+          }
+
+          // Create or update seat record (best-effort — silently skip if DB unavailable)
+          try {
+            await supabaseAdmin.from('table_seats').upsert({
+              table_id: tableId,
+              user_id: userId,
+              seat_number: seatNumber,
+              chips_on_table: chips
+            }, { onConflict: 'table_id,user_id' });
+          } catch (_) {}
+        }
 
         // Get or create game
         let game = activeGames.get(tableId);
@@ -605,6 +639,21 @@ function setupSocketHandlers(io) {
 
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips, feltColor: game.feltColor || '#1a5c2a' });
         broadcastGameState(io, tableId, game);
+
+        // For tournament tables, send current tournament state to the joining player
+        if (isTournamentTable) {
+          const tournId = tableId.slice('tournament_'.length);
+          const tourney = activeTournaments.get(tournId);
+          if (tourney) {
+            socket.emit('tournament_timer', tourney.getTimerState());
+            socket.emit('tournament_standings', {
+              tournamentId: tournId,
+              standings: tourney.getStandings(),
+              prize: tourney.getTotalPrize(),
+              activePlayers: Array.from(tourney.players.values()).filter(p => !p.isEliminated).length
+            });
+          }
+        }
 
         // SMS + email: notify player they are seated
         if (dbUser?.phone || dbUser?.email) {
@@ -934,13 +983,36 @@ function setupSocketHandlers(io) {
       socket.spectatingTableId = tId;
       if (!tableSpectators.has(tId)) tableSpectators.set(tId, new Set());
       tableSpectators.get(tId).add(socket.id);
-      const game = activeGames.get(tId);
+
+      // For tournament tables, also look up the game from the tournament object if not in activeGames yet
+      let game = activeGames.get(tId);
+      if (!game && tId.startsWith('tournament_')) {
+        const tournId = tId.slice('tournament_'.length);
+        game = activeTournaments.get(tournId)?.game || null;
+      }
+
       if (game) {
         socket.emit('spectator_state', _buildGodState(game));
         socket.emit('spectator_joined', { tableId: tId, tableName: game.tableName || tId, feltColor: game.feltColor || '#1a5c2a' });
       } else {
         socket.emit('spectator_joined', { tableId: tId, tableName: tId, feltColor: '#1a5c2a' });
       }
+
+      // Send tournament state if applicable
+      if (tId.startsWith('tournament_')) {
+        const tournId = tId.slice('tournament_'.length);
+        const tourney = activeTournaments.get(tournId);
+        if (tourney) {
+          socket.emit('tournament_timer', tourney.getTimerState());
+          socket.emit('tournament_standings', {
+            tournamentId: tournId,
+            standings: tourney.getStandings(),
+            prize: tourney.getTotalPrize(),
+            activePlayers: Array.from(tourney.players.values()).filter(p => !p.isEliminated).length
+          });
+        }
+      }
+
       console.log(`[spectate] admin ${username} spectating ${tId}`);
     });
 
@@ -1736,6 +1808,50 @@ function setupSocketHandlers(io) {
 
       try {
         tournament.start();
+
+        // Wire tournament game into activeGames so join_table reconnect and spectate work
+        const tGame = tournament.game;
+        if (tGame && !activeGames.has(tGame.tableId)) {
+          tGame.tableName = tournament.name;
+          tGame.feltColor = '#1a5c2a';
+          tGame.onBroadcast = (event, data) => io.to(tGame.tableId).emit(event, data);
+          tGame.onPrivate = (uid, event, data) => {
+            const sid = userSockets.get(uid);
+            if (sid) io.to(sid).emit(event, data);
+          };
+          tGame.onHandEnd = (result) => persistHandResult(tGame.tableId, result);
+          tGame.onShotClockExpired = (uid) => {
+            try {
+              const cp = tGame.getPlayerBySeat(tGame.currentPlayerSeat);
+              if (!cp || cp.userId !== uid || !tGame.handActive) return;
+              const res = tGame.processAction(uid, 'fold');
+              broadcastGameState(io, tGame.tableId, tGame);
+              handleActionResult(io, tGame.tableId, tGame, res);
+            } catch {}
+          };
+          activeGames.set(tGame.tableId, tGame);
+          setupGameWatchdog(io, tGame.tableId, tGame);
+
+          // Persist result and clean up when tournament finishes
+          tournament.onTournamentEnd = async ({ winner, standings }) => {
+            try {
+              await supabaseAdmin
+                .from('tournaments')
+                .update({ status: 'completed', ended_at: new Date().toISOString() })
+                .eq('id', tournamentId);
+              if (winner) {
+                await supabaseAdmin
+                  .from('tournament_players')
+                  .update({ status: 'winner', placement: 1 })
+                  .eq('tournament_id', tournamentId)
+                  .eq('user_id', winner.userId);
+              }
+            } catch {}
+            activeGames.delete(tGame.tableId);
+            activeTournaments.delete(tournamentId);
+          };
+        }
+
         await supabaseAdmin
           .from('tournaments')
           .update({ status: 'active', started_at: new Date().toISOString() })
@@ -1748,6 +1864,10 @@ function setupSocketHandlers(io) {
           prize: tournament.getTotalPrize(),
           activePlayers: tournament.players.size
         });
+
+        // Broadcast initial game state to anyone already in the room
+        if (tGame) broadcastGameState(io, tGame.tableId, tGame);
+
       } catch (err) {
         socket.emit('error', { message: err.message });
       }
