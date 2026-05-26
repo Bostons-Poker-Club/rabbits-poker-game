@@ -255,10 +255,14 @@ function renderTournaments(list) {
     return;
   }
 
+  // Join tournament room for every non-completed tournament so we receive
+  // tournament_started even for ones still in registering state
   list.forEach(t => {
-    if (t.status === 'active' && lobbySocket) {
+    if (t.status !== 'completed' && lobbySocket) {
       lobbySocket.emit('join_tournament_room', { tournamentId: t.id });
-      lobbySocket.emit('get_tournament_timer', { tournamentId: t.id });
+      if (t.status === 'active') {
+        lobbySocket.emit('get_tournament_timer', { tournamentId: t.id });
+      }
     }
   });
 
@@ -268,6 +272,28 @@ function renderTournaments(list) {
     const blindsSnippet = t.blind_schedule?.[0]
       ? `Blinds: $${t.blind_schedule[0].small_blind}/$${t.blind_schedule[0].big_blind}+`
       : '';
+    const tableUrl = `/table.html?tableId=tournament_${t.id}`;
+
+    let actionHtml = '';
+    if (t.status === 'registering') {
+      if (!t.is_registered) {
+        actionHtml = `<button class="btn btn-gold btn-sm btn-full" onclick="registerTournament('${t.id}')">Register →</button>`;
+      } else {
+        actionHtml = `<div style="display:flex;gap:8px;margin-top:4px">
+          <div style="flex:1;text-align:center;padding:8px;border:1px solid var(--chip-green);border-radius:var(--radius);color:var(--chip-green);font-size:.85rem;font-weight:700">✓ Registered</div>
+          <button class="btn btn-sm btn-outline" style="color:var(--red);border-color:var(--red)" onclick="unregisterTournament('${t.id}')">Unregister</button>
+        </div>`;
+      }
+    } else if (t.status === 'active') {
+      if (t.is_registered || user?.isAdmin) {
+        actionHtml = `<a href="${tableUrl}" class="btn btn-gold btn-sm btn-full" style="display:block;text-align:center;margin-top:8px;font-size:1rem;font-weight:800;letter-spacing:.02em">▶ Enter Tournament</a>`;
+      } else {
+        actionHtml = `<div style="text-align:center;padding:8px 0;color:var(--text-dim);font-size:.85rem;margin-top:4px">Tournament in progress</div>`;
+      }
+    } else if (t.status === 'completed') {
+      actionHtml = `<div style="text-align:center;padding:8px 0;color:var(--text-dim);font-size:.82rem;margin-top:4px">Tournament ended</div>`;
+    }
+
     return `
     <div class="table-card">
       <div class="table-card-header">
@@ -278,8 +304,7 @@ function renderTournaments(list) {
       <div class="table-info">Starting: ${fmtChips(t.starting_chips)} chips${blindsSnippet ? ' · ' + blindsSnippet : ''}</div>
       ${t.status === 'active' ? `<div id="tn-timer-${t.id}" style="font-size:.82rem;color:var(--text-dim);margin:4px 0">Loading timer…</div>` : ''}
       <div class="player-count"><span class="player-dot"></span> ${players} registered</div>
-      ${t.status === 'registering' && !t.is_registered ? `<button class="btn btn-gold btn-sm btn-full" onclick="registerTournament('${t.id}')">Register →</button>` : ''}
-      ${t.status === 'registering' && t.is_registered ? `<div style="display:flex;gap:8px;margin-top:4px"><div style="flex:1;text-align:center;padding:8px;border:1px solid var(--chip-green);border-radius:var(--radius);color:var(--chip-green);font-size:.85rem;font-weight:700">✓ Registered</div><button class="btn btn-sm btn-outline" style="color:var(--red);border-color:var(--red)" onclick="unregisterTournament('${t.id}')">Unregister</button></div>` : ''}
+      ${actionHtml}
     </div>`;
   }).join('');
 }
