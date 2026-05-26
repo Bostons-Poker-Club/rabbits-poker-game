@@ -764,6 +764,130 @@ router.post('/tournaments/:id/register', authMiddleware, async (req, res) => {
   res.json(data);
 });
 
+// ─── Admin Tournament Player Management ──────────────────────────────────────
+
+// Full player roster for a tournament (admin only)
+router.get('/admin/tournaments/:id/players', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from('tournament_players')
+    .select('id, user_id, chips, placement, is_eliminated, registered_at, buy_in_paid, prize_won, status, users(id, username, full_name, nickname, phone, email, chips)')
+    .eq('tournament_id', req.params.id)
+    .order('registered_at', { ascending: true });
+
+  if (error) {
+    // Graceful fallback if new columns not yet migrated
+    const { data: fallback, error: fbErr } = await supabaseAdmin
+      .from('tournament_players')
+      .select('id, user_id, chips, placement, is_eliminated, registered_at, users(id, username, full_name, nickname, phone, email, chips)')
+      .eq('tournament_id', req.params.id)
+      .order('registered_at', { ascending: true });
+    if (fbErr) return res.status(500).json({ error: fbErr.message });
+    return res.json((fallback || []).map(p => ({ ...p, buy_in_paid: false, prize_won: 0, status: 'registered' })));
+  }
+  res.json(data || []);
+});
+
+// Admin manually registers a player to a tournament
+router.post('/admin/tournaments/:id/players', authMiddleware, adminMiddleware, async (req, res) => {
+  const { user_id, mark_paid } = req.body;
+  if (!user_id) return res.status(400).json({ error: 'user_id required' });
+
+  const { data: tournament } = await supabaseAdmin
+    .from('tournaments').select('id, name, buy_in, starting_chips, status').eq('id', req.params.id).single();
+  if (!tournament) return res.status(404).json({ error: 'Tournament not found' });
+
+  const { data: userRow } = await supabaseAdmin
+    .from('users').select('id, username, chips').eq('id', user_id).single();
+  if (!userRow) return res.status(404).json({ error: 'Player not found' });
+
+  // Check if already registered
+  const { data: existing } = await supabaseAdmin
+    .from('tournament_players')
+    .select('id').eq('tournament_id', req.params.id).eq('user_id', user_id).maybeSingle();
+  if (existing) return res.status(400).json({ error: 'Player already registered' });
+
+  const paid = !!mark_paid;
+
+  const { data, error } = await supabaseAdmin
+    .from('tournament_players')
+    .insert({
+      tournament_id: req.params.id,
+      user_id,
+      chips: tournament.starting_chips || 0,
+      buy_in_paid: paid,
+      status: 'registered'
+    })
+    .select()
+    .single();
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Deduct buy-in chips if marking paid
+  if (paid && tournament.buy_in > 0) {
+    await supabaseAdmin
+      .from('users')
+      .update({ chips: Math.max(0, (userRow.chips || 0) - tournament.buy_in) })
+      .eq('id', user_id);
+  }
+
+  res.json(data);
+});
+
+// Admin removes a player from a tournament
+router.delete('/admin/tournaments/:id/players/:userId', authMiddleware, adminMiddleware, async (req, res) => {
+  const { data: tp } = await supabaseAdmin
+    .from('tournament_players')
+    .select('buy_in_paid')
+    .eq('tournament_id', req.params.id)
+    .eq('user_id', req.params.userId)
+    .maybeSingle();
+
+  const { error } = await supabaseAdmin
+    .from('tournament_players')
+    .delete()
+    .eq('tournament_id', req.params.id)
+    .eq('user_id', req.params.userId);
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  // Refund buy-in if they had paid and tournament is still registering
+  if (tp?.buy_in_paid) {
+    const { data: tournament } = await supabaseAdmin
+      .from('tournaments').select('buy_in, status').eq('id', req.params.id).single();
+    if (tournament && tournament.status === 'registering') {
+      const { data: userRow } = await supabaseAdmin.from('users').select('chips').eq('id', req.params.userId).single();
+      if (userRow) {
+        await supabaseAdmin.from('users')
+          .update({ chips: (userRow.chips || 0) + (tournament.buy_in || 0) })
+          .eq('id', req.params.userId);
+      }
+    }
+  }
+
+  res.json({ ok: true });
+});
+
+// Admin updates a tournament player (mark paid, update chips, status)
+router.patch('/admin/tournaments/:id/players/:userId', authMiddleware, adminMiddleware, async (req, res) => {
+  const { buy_in_paid, chips, status, prize_won } = req.body;
+  const updates = {};
+  if (buy_in_paid !== undefined) updates.buy_in_paid = !!buy_in_paid;
+  if (chips       !== undefined) updates.chips       = parseInt(chips) || 0;
+  if (status      !== undefined) updates.status      = status;
+  if (prize_won   !== undefined) updates.prize_won   = parseInt(prize_won) || 0;
+
+  if (!Object.keys(updates).length) return res.status(400).json({ error: 'Nothing to update' });
+
+  const { error } = await supabaseAdmin
+    .from('tournament_players')
+    .update(updates)
+    .eq('tournament_id', req.params.id)
+    .eq('user_id', req.params.userId);
+
+  if (error) return res.status(500).json({ error: error.message });
+  res.json({ ok: true });
+});
+
 // ─── Jackpot ─────────────────────────────────────────────────────────────────
 
 router.get('/jackpot', authMiddleware, (req, res) => {
@@ -939,7 +1063,26 @@ router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) =
   }
 
   if (error) return res.status(500).json({ error: error.message });
-  res.json((data || []).map(p => ({ ...p, is_host: hostSet.has(p.id) })));
+
+  // Compute participation_type: cash | tournament | both | none
+  try {
+    const [{ data: tpRows }, { data: txRows }] = await Promise.all([
+      supabaseAdmin.from('tournament_players').select('user_id'),
+      supabaseAdmin.from('transactions').select('user_id').in('type', ['buy_in', 'cash_out', 'cashout'])
+    ]);
+    const tIds = new Set((tpRows || []).map(r => r.user_id));
+    const cIds = new Set((txRows || []).map(r => r.user_id));
+    res.json((data || []).map(p => ({
+      ...p,
+      is_host: hostSet.has(p.id),
+      participation_type: tIds.has(p.id) && cIds.has(p.id) ? 'both'
+                        : tIds.has(p.id) ? 'tournament'
+                        : cIds.has(p.id) ? 'cash'
+                        : 'none'
+    })));
+  } catch {
+    res.json((data || []).map(p => ({ ...p, is_host: hostSet.has(p.id) })));
+  }
 });
 
 router.get('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {

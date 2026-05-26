@@ -953,6 +953,9 @@ function renderPlayers(list) {
                       p.is_host  ? '<span style="color:var(--chip-green)">Host</span>' :
                                    '<span style="color:var(--text-dim)">Player</span>';
     const selfTag = isSelf ? '<span style="font-size:.65rem;background:rgba(255,200,0,.15);color:var(--gold);padding:1px 5px;border-radius:4px;margin-left:4px">YOU</span>' : '';
+    const actMap = { cash: ['💰','var(--chip-green)','Cash'], tournament: ['🏆','var(--gold)','Tournament'], both: ['♠','#a78bfa','Both'], none: ['—','var(--text-dim)','—'] };
+    const act = actMap[p.participation_type] || actMap.none;
+    const actBadge = `<span style="color:${act[1]};font-size:.78rem">${act[0]} ${act[2]}</span>`;
     return `
     <tr style="cursor:pointer" onclick="viewPlayer('${p.id}')" data-player-id="${p.id}">
       <td><strong>${esc(p.username)}</strong>${selfTag}${p.full_name ? `<div style="font-size:.75rem;color:var(--text-dim)">${esc(p.full_name)}</div>` : ''}</td>
@@ -960,6 +963,7 @@ function renderPlayers(list) {
       <td style="color:var(--text-dim);font-size:.85rem">${esc(p.phone || '–')}</td>
       <td style="color:var(--gold)">${fmt(p.chips)}</td>
       <td>${roleLabel}</td>
+      <td>${actBadge}</td>
       <td><span style="color:${p.is_banned ? 'var(--red)' : 'var(--chip-green)'}">${p.is_banned ? 'Banned' : 'Active'}</span></td>
       <td onclick="event.stopPropagation()" style="white-space:nowrap">
         <div style="display:flex;align-items:center;gap:4px">
@@ -976,14 +980,28 @@ function renderPlayers(list) {
   }).join('');
 }
 
+let _playerTypeFilter = 'all';
+
+function setPlayerTypeFilter(type) {
+  _playerTypeFilter = type;
+  document.querySelectorAll('.ptf-btn').forEach(btn => {
+    btn.classList.toggle('ptf-active', btn.dataset.type === type);
+  });
+  filterPlayers();
+}
+
 function filterPlayers() {
   const q = document.getElementById('player-search').value.toLowerCase();
-  renderPlayers(allPlayers.filter(p =>
+  let filtered = allPlayers.filter(p =>
     p.username.toLowerCase().includes(q) ||
     (p.nickname || '').toLowerCase().includes(q) ||
     (p.email || '').toLowerCase().includes(q) ||
     (p.phone || '').includes(q)
-  ));
+  );
+  if (_playerTypeFilter !== 'all') {
+    filtered = filtered.filter(p => p.participation_type === _playerTypeFilter);
+  }
+  renderPlayers(filtered);
 }
 
 async function setChipsInline(id, username) {
@@ -1594,41 +1612,6 @@ async function loadTournaments() {
 let _activeTournamentId = null;
 let _activeTournamentName = '';
 
-function renderTournamentsAdmin(list) {
-  const tbody = document.getElementById('tournaments-body');
-  if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim)">No tournaments</td></tr>';
-    return;
-  }
-  tbody.innerHTML = list.map(t => {
-    const players = t.tournament_players?.[0]?.count || 0;
-    const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
-    const isActive = t.status === 'active';
-    const isRegistering = t.status === 'registering';
-    return `
-    <tr>
-      <td>${esc(t.name)}</td>
-      <td style="color:var(--gold)">${fmt(t.buy_in)}</td>
-      <td>${fmt(t.starting_chips)}</td>
-      <td><span style="color:${statusColor}">${t.status}</span></td>
-      <td>${players}</td>
-      <td><div class="actions">
-        ${isRegistering ? `<button class="btn btn-sm btn-gold" onclick="startTournamentAdmin('${t.id}','${esc(t.name)}')">▶ Start</button>` : ''}
-        ${isActive ? `<button class="btn btn-sm btn-outline" onclick="setActiveTournament('${t.id}','${esc(t.name)}')">Controls</button>` : ''}
-        <button class="btn btn-sm btn-red" onclick="deleteTournament('${t.id}','${esc(t.name)}')">Delete</button>
-      </div></td>
-    </tr>`;
-  }).join('');
-
-  // Auto-select active tournament
-  const active = list.find(t => t.status === 'active');
-  if (active) setActiveTournament(active.id, active.name, false);
-  else {
-    const ctrl = document.getElementById('active-tournament-controls');
-    if (ctrl) ctrl.style.display = 'none';
-  }
-}
-
 function setActiveTournament(id, name, doJoin = true) {
   _activeTournamentId = id;
   _activeTournamentName = name;
@@ -1840,6 +1823,200 @@ function _renderAdminStandings(standings, prize, activePlayers) {
       <span style="color:${p.isEliminated?'#555':'var(--chip-green)'}">$${p.isEliminated?'—':(p.chips||0).toLocaleString()}</span>
     </div>`;
   }).join('');
+}
+
+// ─── Tournament Player Roster ─────────────────────────────────────────────
+
+let _rosterTournamentId = null;
+let _rosterTournamentData = null; // { id, name, buy_in, starting_chips, status }
+let _regSelectedUserId = null;
+
+function renderTournamentsAdmin(list) {
+  const tbody = document.getElementById('tournaments-body');
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text-dim)">No tournaments</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(t => {
+    const players = t.tournament_players?.[0]?.count || 0;
+    const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
+    const isActive = t.status === 'active';
+    const isRegistering = t.status === 'registering';
+    return `
+    <tr>
+      <td>${esc(t.name)}</td>
+      <td style="color:var(--gold)">${fmt(t.buy_in)}</td>
+      <td>${fmt(t.starting_chips)}</td>
+      <td><span style="color:${statusColor}">${t.status}</span></td>
+      <td>${players}</td>
+      <td id="paid-count-${t.id}" style="color:var(--chip-green)">—</td>
+      <td><div class="actions">
+        ${isRegistering ? `<button class="btn btn-sm btn-gold" onclick="startTournamentAdmin('${t.id}','${esc(t.name)}')">▶ Start</button>` : ''}
+        ${isActive ? `<button class="btn btn-sm btn-outline" onclick="setActiveTournament('${t.id}','${esc(t.name)}')">Controls</button>` : ''}
+        <button class="btn btn-sm btn-outline" onclick="loadTournamentRoster('${t.id}',${JSON.stringify({id:t.id,name:t.name,buy_in:t.buy_in,starting_chips:t.starting_chips,status:t.status})})">👥 Players</button>
+        <button class="btn btn-sm btn-red" onclick="deleteTournament('${t.id}','${esc(t.name)}')">Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+
+  // Auto-select active tournament
+  const active = list.find(t => t.status === 'active');
+  if (active) setActiveTournament(active.id, active.name, false);
+  else {
+    const ctrl = document.getElementById('active-tournament-controls');
+    if (ctrl) ctrl.style.display = 'none';
+  }
+}
+
+async function loadTournamentRoster(tournamentId, tournamentMeta) {
+  _rosterTournamentId = tournamentId;
+  if (tournamentMeta) _rosterTournamentData = tournamentMeta;
+
+  const panel = document.getElementById('tourn-roster-panel');
+  const titleEl = document.getElementById('tourn-roster-title');
+  const statsEl = document.getElementById('tourn-roster-stats');
+  const tbody = document.getElementById('tourn-roster-body');
+
+  panel.style.display = '';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (titleEl) titleEl.textContent = _rosterTournamentData?.name || 'Tournament';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:16px">Loading…</td></tr>';
+
+  try {
+    const players = await apiFetch(`/api/admin/tournaments/${tournamentId}/players`);
+    const paid = players.filter(p => p.buy_in_paid).length;
+    const total = players.length;
+    const buyIn = _rosterTournamentData?.buy_in || 0;
+
+    if (statsEl) statsEl.textContent = `${total} registered · ${paid} paid · ${total - paid} unpaid · Prize pool: $${(paid * buyIn).toLocaleString()}`;
+
+    // Update paid count in table row
+    const paidEl = document.getElementById(`paid-count-${tournamentId}`);
+    if (paidEl) paidEl.textContent = `${paid}/${total}`;
+
+    if (!players.length) {
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:20px">No players registered yet</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = players.map(p => {
+      const u = p.users || {};
+      const isElim = p.is_eliminated;
+      const statusColor = { registered: 'var(--text-dim)', active: 'var(--chip-green)', eliminated: 'var(--red)', winner: 'var(--gold)' }[p.status] || 'var(--text-dim)';
+      const paidBadge = p.buy_in_paid
+        ? `<span style="color:var(--chip-green);font-weight:700">✓ Paid</span>`
+        : `<span style="color:var(--red)">✗ Unpaid</span>`;
+      const chips = p.chips || 0;
+      return `<tr${isElim ? ' style="opacity:.5"' : ''}>
+        <td>
+          <strong style="color:var(--gold)">${esc(u.nickname || u.username || '—')}</strong>
+          ${u.nickname && u.username && u.nickname !== u.username ? `<div style="font-size:.74rem;color:var(--text-dim)">${esc(u.username)}</div>` : ''}
+        </td>
+        <td style="color:var(--text-dim);font-size:.83rem">${esc(u.full_name || '—')}</td>
+        <td style="font-size:.82rem">${esc(u.phone || '—')}</td>
+        <td style="font-size:.78rem;color:var(--text-dim)">${esc(u.email || '—')}</td>
+        <td style="color:var(--gold);font-weight:700">${chips > 0 ? '$' + chips.toLocaleString() : '—'}</td>
+        <td><span style="color:${statusColor};font-size:.8rem">${p.is_eliminated ? `✗ ${_admOrdinal(p.placement)}` : (p.status || 'registered')}</span></td>
+        <td>
+          ${paidBadge}
+          ${!p.buy_in_paid ? `<button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 7px;margin-left:6px" onclick="markTournamentPlayerPaid('${tournamentId}','${p.user_id}',true)">Mark Paid</button>` : `<button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 7px;margin-left:6px;opacity:.5" onclick="markTournamentPlayerPaid('${tournamentId}','${p.user_id}',false)">Undo</button>`}
+        </td>
+        <td style="font-size:.76rem;color:var(--text-dim)">${p.registered_at ? new Date(p.registered_at).toLocaleDateString() : '—'}<br>${p.registered_at ? new Date(p.registered_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : ''}</td>
+        <td onclick="event.stopPropagation()"><div class="actions">
+          <button class="btn btn-sm btn-red" onclick="removeTournamentPlayer('${tournamentId}','${p.user_id}','${esc(u.username || u.nickname || 'player')}')">Remove</button>
+        </div></td>
+      </tr>`;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--red);padding:16px">${esc(e.message)}</td></tr>`;
+  }
+}
+
+async function markTournamentPlayerPaid(tournamentId, userId, paid) {
+  try {
+    await apiFetch(`/api/admin/tournaments/${tournamentId}/players/${userId}`, {
+      method: 'PATCH',
+      body: { buy_in_paid: paid }
+    });
+    toast(paid ? '✓ Buy-in marked as paid' : 'Buy-in marked unpaid');
+    loadTournamentRoster(tournamentId);
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+async function removeTournamentPlayer(tournamentId, userId, username) {
+  if (!confirm(`Remove ${username} from the tournament? Buy-in will be refunded if paid and tournament is still registering.`)) return;
+  try {
+    await apiFetch(`/api/admin/tournaments/${tournamentId}/players/${userId}`, { method: 'DELETE' });
+    toast(`${username} removed`);
+    loadTournamentRoster(tournamentId);
+    loadTournaments();
+  } catch (e) { toast(e.message, 'error'); }
+}
+
+function openAdminRegisterModal() {
+  if (!_rosterTournamentId) return;
+  _regSelectedUserId = null;
+  const nameEl = document.getElementById('reg-modal-tourn-name');
+  if (nameEl) nameEl.textContent = `Tournament: ${_rosterTournamentData?.name || ''}  · Buy-in: $${fmt(_rosterTournamentData?.buy_in || 0)}`;
+  const searchEl = document.getElementById('reg-player-search');
+  if (searchEl) searchEl.value = '';
+  const resultsEl = document.getElementById('reg-search-results');
+  if (resultsEl) resultsEl.style.display = 'none';
+  const selectedEl = document.getElementById('reg-selected-player');
+  if (selectedEl) selectedEl.style.display = 'none';
+  const confirmBtn = document.getElementById('reg-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = true;
+  document.getElementById('reg-mark-paid').checked = false;
+  openModal('admin-register-player-modal');
+}
+
+function filterRegSearch() {
+  const q = document.getElementById('reg-player-search').value.toLowerCase().trim();
+  const resultsEl = document.getElementById('reg-search-results');
+  if (!q || q.length < 2) { resultsEl.style.display = 'none'; return; }
+  const matches = allPlayers.filter(p =>
+    p.username.toLowerCase().includes(q) ||
+    (p.nickname || '').toLowerCase().includes(q) ||
+    (p.phone || '').includes(q)
+  ).slice(0, 8);
+  if (!matches.length) { resultsEl.innerHTML = '<div style="padding:10px 12px;color:var(--text-dim);font-size:.83rem">No players found</div>'; resultsEl.style.display = ''; return; }
+  resultsEl.innerHTML = matches.map(p => `
+    <div onclick="selectRegPlayer('${p.id}','${esc(p.username)}','${esc(p.nickname||'')}','${esc(p.phone||'')}',${p.chips})"
+      style="padding:9px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.06);font-size:.83rem;transition:background .1s"
+      onmouseover="this.style.background='rgba(255,255,255,.07)'" onmouseout="this.style.background=''">
+      <strong style="color:var(--gold)">${esc(p.nickname || p.username)}</strong>
+      ${p.nickname ? `<span style="color:var(--text-dim);margin-left:6px">(${esc(p.username)})</span>` : ''}
+      <span style="float:right;color:var(--chip-green)">${fmt(p.chips)} chips</span>
+      ${p.phone ? `<div style="color:var(--text-dim);font-size:.75rem">${esc(p.phone)}</div>` : ''}
+    </div>`).join('');
+  resultsEl.style.display = '';
+}
+
+function selectRegPlayer(id, username, nickname, phone, chips) {
+  _regSelectedUserId = id;
+  document.getElementById('reg-search-results').style.display = 'none';
+  document.getElementById('reg-player-search').value = nickname || username;
+  const selectedEl = document.getElementById('reg-selected-player');
+  document.getElementById('reg-selected-name').textContent = nickname || username;
+  document.getElementById('reg-selected-info').textContent = `@${username} · ${phone || 'no phone'} · ${fmt(chips)} chips`;
+  selectedEl.style.display = '';
+  const confirmBtn = document.getElementById('reg-confirm-btn');
+  if (confirmBtn) confirmBtn.disabled = false;
+}
+
+async function confirmAdminRegister() {
+  if (!_regSelectedUserId || !_rosterTournamentId) return;
+  const markPaid = document.getElementById('reg-mark-paid')?.checked;
+  try {
+    await apiFetch(`/api/admin/tournaments/${_rosterTournamentId}/players`, {
+      method: 'POST',
+      body: { user_id: _regSelectedUserId, mark_paid: markPaid }
+    });
+    closeModal('admin-register-player-modal');
+    toast('Player added to tournament');
+    loadTournamentRoster(_rosterTournamentId);
+    loadTournaments();
+  } catch (e) { toast(e.message, 'error'); }
 }
 
 // ─── Per-Table Jackpot ────────────────────────────────────────────────────

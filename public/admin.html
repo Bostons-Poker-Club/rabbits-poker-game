@@ -278,7 +278,7 @@
       <div id="rail-body" style="font-size:.85rem;color:var(--text-dim)">Loading…</div>
     </div>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px">
       <h2 style="color:var(--gold)">All Players</h2>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" style="border-color:var(--gold);color:var(--gold)" onclick="openModal('create-admin-modal')">+ Create Admin Account</button>
@@ -286,9 +286,17 @@
         style="padding:8px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);outline:none;width:200px">
       </div>
     </div>
+    <!-- Player type filter -->
+    <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap" id="player-type-filters">
+      <button class="ptf-btn ptf-active" data-type="all"        onclick="setPlayerTypeFilter('all')">All</button>
+      <button class="ptf-btn"            data-type="cash"       onclick="setPlayerTypeFilter('cash')">💰 Cash Game</button>
+      <button class="ptf-btn"            data-type="tournament" onclick="setPlayerTypeFilter('tournament')">🏆 Tournament</button>
+      <button class="ptf-btn"            data-type="both"       onclick="setPlayerTypeFilter('both')">Both</button>
+      <button class="ptf-btn"            data-type="none"       onclick="setPlayerTypeFilter('none')">No Activity</button>
+    </div>
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Status</th><th>Set Chips</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Username</th><th>Nickname</th><th>Phone</th><th>Chips</th><th>Role</th><th>Activity</th><th>Status</th><th>Set Chips</th><th>Actions</th></tr></thead>
         <tbody id="players-body"></tbody>
       </table>
     </div>
@@ -357,9 +365,10 @@
       <h2 style="color:var(--gold)">Tournaments</h2>
       <button class="btn btn-gold btn-sm" onclick="openModal('create-tournament-modal-admin');initBlindScheduleEditor()">+ Create Tournament</button>
     </div>
+
     <!-- Active tournament controls -->
     <div id="active-tournament-controls" style="display:none;background:rgba(212,175,55,.07);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:16px">
-      <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em">Active Tournament Controls</div>
+      <div style="font-size:.8rem;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:.06em">Active Tournament Controls</div>
       <div id="active-tourn-name" style="color:var(--gold);font-weight:700;font-size:.95rem;margin-bottom:10px"></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="adminCallBreak(15)">☕ 15-min Break</button>
@@ -371,12 +380,48 @@
         <button class="btn btn-sm btn-outline" onclick="adminSpectateTournament()">👁 Spectate</button>
       </div>
     </div>
+
+    <!-- Tournament list -->
     <div class="table-wrap">
       <table class="data-table">
-        <thead><tr><th>Name</th><th>Buy-In</th><th>Starting Chips</th><th>Status</th><th>Players</th><th>Actions</th></tr></thead>
+        <thead><tr><th>Name</th><th>Buy-In</th><th>Starting Chips</th><th>Status</th><th>Players</th><th>Paid</th><th>Actions</th></tr></thead>
         <tbody id="tournaments-body"></tbody>
       </table>
     </div>
+
+    <!-- Tournament player roster (revealed when "Players" clicked) -->
+    <div id="tourn-roster-panel" style="display:none;margin-top:20px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="background:rgba(0,0,0,.45);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <span id="tourn-roster-title" style="color:var(--gold);font-weight:700;font-size:.95rem"></span>
+          <span id="tourn-roster-stats" style="font-size:.78rem;color:var(--text-dim);margin-left:10px"></span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-sm btn-gold" onclick="openAdminRegisterModal()">+ Add Player</button>
+          <button class="btn btn-sm btn-outline" onclick="loadTournamentRoster(_rosterTournamentId)">↺ Refresh</button>
+          <button class="btn btn-sm btn-outline" onclick="document.getElementById('tourn-roster-panel').style.display='none'">✕</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="min-width:700px">
+          <thead><tr>
+            <th>Nickname / Username</th>
+            <th>Full Name</th>
+            <th>Phone</th>
+            <th>Email</th>
+            <th>Chips</th>
+            <th>Status</th>
+            <th>Buy-In Paid</th>
+            <th>Registered</th>
+            <th>Actions</th>
+          </tr></thead>
+          <tbody id="tourn-roster-body">
+            <tr><td colspan="9" style="text-align:center;color:var(--text-dim);padding:16px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Tournament Standings Panel -->
     <div id="admin-standings-panel" style="display:none;margin-top:20px;background:rgba(0,0,0,.3);border:1px solid var(--border);border-radius:8px;padding:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -718,6 +763,34 @@
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="closeModal('create-tournament-modal-admin')">Cancel</button>
       <button class="btn btn-gold" onclick="createTournamentAdmin()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Register Player to Tournament Modal -->
+<div class="modal-overlay hidden" id="admin-register-player-modal">
+  <div class="modal" style="max-width:420px">
+    <h2 style="color:var(--gold)">Add Player to Tournament</h2>
+    <p id="reg-modal-tourn-name" style="color:var(--text-dim);font-size:.85rem;margin-bottom:16px"></p>
+    <div class="form-group">
+      <label>Search Player</label>
+      <input type="text" id="reg-player-search" placeholder="Type username or nickname…" oninput="filterRegSearch()"
+        style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);box-sizing:border-box">
+    </div>
+    <div id="reg-search-results" style="max-height:200px;overflow-y:auto;margin:8px 0;border:1px solid var(--border);border-radius:6px;display:none"></div>
+    <div id="reg-selected-player" style="display:none;background:rgba(212,175,55,.08);border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:10px 0;font-size:.85rem">
+      <span id="reg-selected-name" style="color:var(--gold);font-weight:700"></span>
+      <span id="reg-selected-info" style="color:var(--text-dim);margin-left:8px"></span>
+    </div>
+    <div class="form-group" style="margin-top:12px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="reg-mark-paid" style="width:16px;height:16px;accent-color:var(--gold)">
+        Mark buy-in as paid (deducts from player chips)
+      </label>
+    </div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-outline" onclick="closeModal('admin-register-player-modal')">Cancel</button>
+      <button class="btn btn-gold" id="reg-confirm-btn" disabled onclick="confirmAdminRegister()">Add to Tournament</button>
     </div>
   </div>
 </div>
