@@ -861,9 +861,7 @@ function setupSocketHandlers(io) {
           setTimeout(() => startNewHand(io, tableId, game), 2000);
         }
       } catch (err) {
-        if (tableId?.startsWith('tournament_')) {
-          console.error('[tournament] join_table error for', tableId, ':', err.message, err.stack);
-        }
+        console.error('[join_table] UNCAUGHT ERROR — tableId:', tableId, 'userId:', userId, 'message:', err.message, '\n', err.stack);
         socket.emit('error', { message: err.message });
       }
     });
@@ -3152,12 +3150,13 @@ async function preloadActiveGames(io) {
     const { data: tables, error } = await supabaseAdmin
       .from('tables')
       .select('*')
-      .in('status', ['active', 'open']);
+      .not('status', 'eq', 'closed');
 
     if (error) {
-      console.error('[startup] preloadActiveGames — Supabase error:', error.message);
+      console.error('[startup] preloadActiveGames — Supabase error:', error.code, error.message);
       return;
     }
+    console.log('[startup] preloadActiveGames — Supabase returned', tables?.length ?? 0, 'non-closed tables');
 
     let loaded = 0;
     for (const table of (tables || [])) {

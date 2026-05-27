@@ -10,6 +10,9 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || 'placeholder';
 if (!process.env.SUPABASE_URL) {
   console.warn('⚠️  SUPABASE_URL not set — DB features disabled, local admin only');
 }
+console.log('[supabase] URL:', supabaseUrl.slice(0, 40));
+console.log('[supabase] SERVICE_KEY set:', !!process.env.SUPABASE_SERVICE_KEY, '| prefix:', supabaseServiceKey.slice(0, 12));
+console.log('[supabase] ANON_KEY set:', !!process.env.SUPABASE_ANON_KEY, '| prefix:', supabaseAnonKey.slice(0, 12));
 
 // Service client for server-side operations (bypasses RLS)
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || supabaseAnonKey, {
