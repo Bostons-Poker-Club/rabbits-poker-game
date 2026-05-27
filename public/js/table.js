@@ -1019,6 +1019,7 @@ function renderTable(state) {
   if (hdrPot) hdrPot.textContent = potText;
   renderSeats(state);
   renderHostControls(state);
+  _updateSeatVideos(); // re-attach video elements after DOM rebuild
 }
 
 function renderHostControls(state) {
