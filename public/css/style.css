@@ -1696,11 +1696,13 @@ input, select, textarea { font-family: inherit; }
   }
 
   /* Oval: 90% of the fixed container, capped so all seats stay on screen */
+  /* margin-top: -15px shifts the oval up so the bottom seat clears the action bar */
   body.table-page .poker-table-oval {
     width: 90%;
     height: 90%;
     max-width: 85vw;
     max-height: 75dvh;
+    margin-top: -15px;
   }
 
   /* Seats: tighter inset so top seats don't extend into the header */
@@ -1877,9 +1879,37 @@ input, select, textarea { font-family: inherit; }
     min-width: 0 !important;
   }
 
-  /* Hide seat camera feeds on mobile — too small to be useful */
-  .seat-cam-video,
+  /* Hide admin cam overlay and other players' camera feeds on mobile */
   #admin-cam-overlay { display: none !important; }
+  .seat-cam-video { display: none !important; }
+  /* Self-view only: show camera in the local player's own seat */
+  .seat-box.me .seat-cam-video { display: block !important; }
+
+  /* Suppress hover chip-denomination breakdown on touch — tap triggers sticky hover */
+  body.table-page .chip-breakdown { display: none !important; }
+
+  /* Hand result: compact top toast instead of full-screen blocking overlay */
+  body.table-page .hand-result-overlay {
+    inset: auto;
+    top: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: transparent;
+    z-index: 500;
+    pointer-events: none;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  body.table-page .hand-result-overlay.hidden { display: none; }
+  body.table-page .hand-result-box {
+    padding: 10px 18px;
+    max-width: min(92vw, 340px);
+    border-radius: 10px;
+  }
+  body.table-page .hand-result-box .winner-name { font-size: 1.1rem; }
+  body.table-page .hand-result-box .won-amount  { font-size: 1.4rem; margin: 4px 0; }
+  body.table-page .hand-result-box .winner-cards { flex-wrap: wrap; gap: 4px; }
 
   /* Hide utility buttons not needed in mobile action bar */
   body.table-page .ptt-btn,
