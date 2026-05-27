@@ -387,12 +387,16 @@ function setupSocketHandlers(io) {
     // ─── Table Events ──────────────────────────────────────────────────────
 
     socket.on('join_table', async ({ tableId, seatNumber, buyInChips }) => {
+      const isTournJoin = tableId?.startsWith('tournament_');
+      if (isTournJoin) console.log('[tournament] Player joining tournament table:', userId, 'tableId:', tableId);
       try {
         // ── Reconnect shortcut: player already seated in this game ─────────
         // Must happen BEFORE any chip deduction or player removal.
         const existingGame = activeGames.get(tableId);
+        if (isTournJoin) console.log('[tournament] join_table reconnect check — game in activeGames:', !!existingGame);
         if (existingGame) {
           const existingPlayer = existingGame.getPlayer(userId);
+          if (isTournJoin) console.log('[tournament] Player already in game:', !!existingPlayer);
           if (existingPlayer) {
             existingPlayer.isConnected = true;
             socket.join(tableId);
@@ -434,11 +438,13 @@ function setupSocketHandlers(io) {
         }
 
         // ── Fresh join ────────────────────────────────────────────────────
-        const { data: dbTable } = await supabaseAdmin
+        if (isTournJoin) console.log('[tournament] Fresh join path — looking up table in DB:', tableId);
+        const { data: dbTable, error: dbTableErr } = await supabaseAdmin
           .from('tables')
           .select('*')
           .eq('id', tableId)
           .single();
+        if (isTournJoin) console.log('[tournament] DB table lookup — found:', !!dbTable, 'error:', dbTableErr?.message);
 
         // Fall back to config from existing in-memory game if Supabase unavailable
         const table = dbTable || (existingGame ? {
@@ -451,7 +457,10 @@ function setupSocketHandlers(io) {
           status: 'active'
         } : null);
 
-        if (!table) return socket.emit('error', { message: 'Table not found' });
+        if (!table) {
+          if (isTournJoin) console.error('[tournament] Table not found — no DB row and no in-memory game for:', tableId);
+          return socket.emit('error', { message: 'Table not found' });
+        }
 
         // Try with extended columns first; fall back to base columns if any don't exist yet
         let dbUser = null;
@@ -495,14 +504,23 @@ function setupSocketHandlers(io) {
           const activeTourney = activeTournaments.get(tournId);
           const tp = activeTourney?.players.get(userId);
 
+          console.log('[tournament] Chip lookup — tournId:', tournId,
+            'activeTourney found:', !!activeTourney,
+            'activeTournaments size:', activeTournaments.size,
+            'player registered:', !!tp,
+            'isAdmin:', isAdmin);
+
           if (!tp && !isAdmin && !isLocalAdmin) {
+            console.warn('[tournament] Rejecting unregistered player:', userId);
             return socket.emit('error', { message: 'You are not registered in this tournament' });
           }
           if (tp?.isEliminated) {
+            console.warn('[tournament] Rejecting eliminated player:', userId);
             return socket.emit('error', { message: 'You have been eliminated from this tournament' });
           }
           // Use player's current tournament chip stack; admin gets starting chips if unregistered
           chips = tp ? tp.chips : (activeTourney?.startingChips || 10000);
+          console.log('[tournament] Assigned chips:', chips, 'for player:', userId);
           // No bank deduction and no seat record for tournament tables
         } else {
           if (!isLocalAdmin && user.chips <= 0) {
@@ -541,6 +559,7 @@ function setupSocketHandlers(io) {
 
         // Get or create game
         let game = activeGames.get(tableId);
+        if (isTournamentTable) console.log('[tournament] Game lookup at join — found in activeGames:', !!game, 'tableId:', tableId);
         if (!game) {
           const { rakePercent, rakeCap } = getRakeConfig(table.stakes_small_blind, table.stakes_big_blind);
           game = new PokerGame({
@@ -613,9 +632,14 @@ function setupSocketHandlers(io) {
         }
 
         const finalSeat = seatNumber || findOpenSeat(game, table.max_players);
-        if (!finalSeat) return socket.emit('error', { message: 'No open seats' });
+        if (!finalSeat) {
+          if (isTournamentTable) console.error('[tournament] No open seats at:', tableId);
+          return socket.emit('error', { message: 'No open seats' });
+        }
 
+        if (isTournamentTable) console.log('[tournament] Adding player to game — seat:', finalSeat, 'userId:', userId, 'chips:', chips);
         game.addPlayer(userId, username, chips, finalSeat);
+        if (isTournamentTable) console.log('[tournament] Player added successfully — total players in game:', game.players?.size ?? '?');
         playerProfiles.set(userId, { avatarUrl: dbUser?.avatar_url || null, isAdmin, isHost: dbUser?.is_host || false });
 
         // Increment sessions_played on first join to any table this session
@@ -674,6 +698,9 @@ function setupSocketHandlers(io) {
           setTimeout(() => startNewHand(io, tableId, game), 2000);
         }
       } catch (err) {
+        if (tableId?.startsWith('tournament_')) {
+          console.error('[tournament] join_table error for', tableId, ':', err.message, err.stack);
+        }
         socket.emit('error', { message: err.message });
       }
     });
@@ -1768,19 +1795,27 @@ function setupSocketHandlers(io) {
 
     socket.on('start_tournament', async ({ tournamentId }) => {
       if (!isAdmin) return socket.emit('error', { message: 'Admin only' });
+      console.log('[tournament] Starting tournament:', tournamentId);
 
       // Load or create tournament in memory
       let tournament = activeTournaments.get(tournamentId);
+      console.log('[tournament] Already in activeTournaments:', !!tournament);
       if (!tournament) {
         try {
-          const { data: tData } = await supabaseAdmin
+          console.log('[tournament] Fetching tournament from DB:', tournamentId);
+          const { data: tData, error: tErr } = await supabaseAdmin
             .from('tournaments')
             .select('*, tournament_players(user_id, users(username))')
             .eq('id', tournamentId)
             .single();
 
+          console.log('[tournament] DB fetch result — found:', !!tData, 'error:', tErr?.message);
           if (!tData) return socket.emit('error', { message: 'Tournament not found' });
           if (tData.status === 'completed') return socket.emit('error', { message: 'Tournament already completed' });
+
+          console.log('[tournament] DB data — name:', tData.name, 'status:', tData.status,
+            'starting_chips:', tData.starting_chips, 'blind_schedule:', JSON.stringify(tData.blind_schedule),
+            'players:', tData.tournament_players?.length);
 
           tournament = new Tournament({
             id: tournamentId,
@@ -1789,16 +1824,23 @@ function setupSocketHandlers(io) {
             startingChips: tData.starting_chips,
             blindSchedule: tData.blind_schedule || undefined
           });
+          console.log('[tournament] Tournament object created');
 
           for (const tp of (tData.tournament_players || [])) {
             try {
-              tournament.registerPlayer(tp.user_id, tp.users?.username || `Player_${tp.user_id.slice(0, 4)}`);
-            } catch {}
+              const uname = tp.users?.username || `Player_${tp.user_id.slice(0, 4)}`;
+              tournament.registerPlayer(tp.user_id, uname);
+              console.log('[tournament] Registered player:', uname, tp.user_id);
+            } catch (regErr) {
+              console.warn('[tournament] Failed to register player:', tp.user_id, regErr.message);
+            }
           }
 
           _wireTournamentBroadcast(tournament);
           activeTournaments.set(tournamentId, tournament);
+          console.log('[tournament] Tournament stored in activeTournaments, total active:', activeTournaments.size);
         } catch (err) {
+          console.error('[tournament] Failed to load tournament:', err.message, err.stack);
           return socket.emit('error', { message: `Failed to load tournament: ${err.message}` });
         }
       } else {
@@ -1807,17 +1849,21 @@ function setupSocketHandlers(io) {
       }
 
       try {
-        // Update DB before start() fires the tournament_started broadcast so
-        // lobby clients see status:'active' when they call loadTournaments()
-        await supabaseAdmin
+        console.log('[tournament] Updating DB status to active for:', tournamentId);
+        const { error: updateErr } = await supabaseAdmin
           .from('tournaments')
           .update({ status: 'active', started_at: new Date().toISOString() })
           .eq('id', tournamentId);
+        if (updateErr) console.error('[tournament] DB update error:', updateErr.message);
+        else console.log('[tournament] DB status updated to active');
 
+        console.log('[tournament] Calling tournament.start() — player count:', tournament.players.size);
         tournament.start();
+        console.log('[tournament] tournament.start() completed');
 
         // Wire tournament game into activeGames so join_table reconnect and spectate work
         const tGame = tournament.game;
+        console.log('[tournament] tournament.game exists:', !!tGame, 'tableId:', tGame?.tableId);
         if (tGame && !activeGames.has(tGame.tableId)) {
           tGame.tableName = tournament.name;
           tGame.feltColor = '#1a5c2a';
@@ -1837,10 +1883,12 @@ function setupSocketHandlers(io) {
             } catch {}
           };
           activeGames.set(tGame.tableId, tGame);
+          console.log('[tournament] Registered game in activeGames:', tGame.tableId, '| activeGames size:', activeGames.size);
           setupGameWatchdog(io, tGame.tableId, tGame);
 
           // Persist result and clean up when tournament finishes
           tournament.onTournamentEnd = async ({ winner, standings }) => {
+            console.log('[tournament] Tournament ended — winner:', winner?.username);
             try {
               await supabaseAdmin
                 .from('tournaments')
@@ -1857,6 +1905,10 @@ function setupSocketHandlers(io) {
             activeGames.delete(tGame.tableId);
             activeTournaments.delete(tournamentId);
           };
+        } else if (tGame) {
+          console.log('[tournament] Game already in activeGames:', tGame.tableId);
+        } else {
+          console.error('[tournament] tournament.game is null/undefined after start() — cannot register in activeGames');
         }
 
         // Push initial standings
@@ -1866,11 +1918,18 @@ function setupSocketHandlers(io) {
           prize: tournament.getTotalPrize(),
           activePlayers: tournament.players.size
         });
+        console.log('[tournament] Emitted tournament_standings to room tournament_' + tournamentId);
 
         // Broadcast initial game state to anyone already in the room
-        if (tGame) broadcastGameState(io, tGame.tableId, tGame);
+        if (tGame) {
+          broadcastGameState(io, tGame.tableId, tGame);
+          console.log('[tournament] Broadcast initial game state to', tGame.tableId);
+        }
+
+        console.log('[tournament] Start sequence complete for', tournamentId);
 
       } catch (err) {
+        console.error('[tournament] Error during start sequence:', err.message, err.stack);
         // Revert DB if start() failed (e.g. not enough players)
         if (tournament.status !== 'active') {
           supabaseAdmin.from('tournaments').update({ status: 'registering', started_at: null }).eq('id', tournamentId).catch(() => {});

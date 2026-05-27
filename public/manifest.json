@@ -1,32 +1,12 @@
 {
-  "name": "Boston Poker Club",
+  "name": "RabbsRoom",
   "short_name": "RabbsRoom",
-  "description": "Boston's Private Poker Club",
-  "start_url": "/",
+  "start_url": "/lobby.html",
   "display": "standalone",
-  "background_color": "#040e07",
-  "theme_color": "#c8a84b",
-  "orientation": "portrait-primary",
-  "lang": "en-US",
-  "categories": ["games", "entertainment"],
+  "background_color": "#0a1f0a",
+  "theme_color": "#c9a84c",
   "icons": [
-    {
-      "src": "/icons/icon-192.svg",
-      "sizes": "192x192",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "/icons/icon-512.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
-    },
-    {
-      "src": "/images/favicon.svg",
-      "sizes": "48x48 72x72 96x96",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    }
+    { "src": "/images/logo.svg", "sizes": "192x192", "type": "image/svg+xml" },
+    { "src": "/images/logo.svg", "sizes": "512x512", "type": "image/svg+xml" }
   ]
 }
