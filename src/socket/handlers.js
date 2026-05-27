@@ -41,6 +41,18 @@ function getMinBuyIn(sb, bb, gameType) {
   return bb * 20;
 }
 
+// Extract tournament UUID from a tableId that may have a multi-table suffix
+// e.g. "tournament_<uuid>_2" → "<uuid>",  "tournament_<uuid>" → "<uuid>"
+function getTournamentId(tableId) {
+  if (!tableId?.startsWith('tournament_')) return null;
+  const suffix = tableId.slice('tournament_'.length);
+  const lastUnder = suffix.lastIndexOf('_');
+  if (lastUnder > 0 && /^\d+$/.test(suffix.slice(lastUnder + 1))) {
+    return suffix.slice(0, lastUnder);
+  }
+  return suffix;
+}
+
 // In-memory state
 const activeGames = new Map();       // tableId -> PokerGame
 const activeTournaments = new Map(); // tournamentId -> Tournament
@@ -166,6 +178,109 @@ function passMoneyPuck(io, tableId, game) {
   if (puck.autoDropMs > 0) {
     puck.autoDropTimer = setInterval(() => passMoneyPuck(io, tableId, game), puck.autoDropMs);
   }
+}
+
+// ─── Tournament: chip sync + elimination + consolidation after each hand ──────
+// Called from onHandEnd for every tournament table.
+function _syncTournamentTableChips(io, tournament, tableId, game, tournamentId) {
+  // Sync chip counts from game into tournament player tracking
+  for (const [uid, tTid] of tournament.playerTables) {
+    if (tTid !== tableId) continue;
+    const tp = tournament.players.get(uid);
+    const gp = game.getPlayer(uid);
+    if (tp && gp) tp.chips = gp.chips;
+  }
+
+  // Eliminate players who have busted (0 chips, still marked active)
+  const busted = [];
+  for (const [uid, tTid] of tournament.playerTables) {
+    if (tTid !== tableId) continue;
+    const tp = tournament.players.get(uid);
+    const gp = game.getPlayer(uid);
+    if (tp && !tp.isEliminated && gp && gp.chips <= 0) busted.push(uid);
+  }
+
+  for (const uid of busted) {
+    console.log('[tournament] Player busted — eliminating:', uid, 'from table:', tableId);
+    const { moves, closedTables } = tournament.eliminatePlayer(uid);
+
+    // Move affected players to their new tables (update socket rooms)
+    for (const move of moves) {
+      const sid = userSockets.get(move.userId);
+      if (sid) {
+        const sock = io.sockets.sockets.get(sid);
+        if (sock) {
+          sock.leave(move.fromTableId);
+          sock.join(move.toTableId);
+          if (sock.currentTableId === move.fromTableId) sock.currentTableId = move.toTableId;
+        }
+        io.to(sid).emit('player_table_move', {
+          tournamentId,
+          fromTableId: move.fromTableId,
+          toTableId: move.toTableId,
+          username: move.username,
+          message: tournament.tables.size === 1 ? 'You\'ve been moved to the final table!' : 'You\'ve been moved to a new table'
+        });
+      }
+    }
+
+    // Unregister closed tables from activeGames (watchdog self-cleans on next tick)
+    for (const closedId of closedTables) {
+      console.log('[tournament] Closing table, removing from activeGames:', closedId);
+      activeGames.delete(closedId);
+    }
+
+    // Wire newly added tables into activeGames if consolidation added any (shouldn't happen, but safety)
+    for (const [tTid, tGame] of tournament.tables) {
+      if (!activeGames.has(tTid)) {
+        _wireTournamentGameCallbacks(io, tournament, tTid, tGame, tournamentId);
+        activeGames.set(tTid, tGame);
+        setupGameWatchdog(io, tTid, tGame);
+      }
+    }
+  }
+
+  // Broadcast updated standings to everyone in the tournament room
+  if (busted.length > 0) {
+    io.to(`tournament_${tournamentId}`).emit('tournament_standings', {
+      tournamentId,
+      standings: tournament.getStandings(),
+      prize: tournament.getTotalPrize(),
+      activePlayers: Array.from(tournament.players.values()).filter(p => !p.isEliminated).length
+    });
+    // Also broadcast game states for all remaining tables
+    for (const [tTid, tGame] of tournament.tables) {
+      broadcastGameState(io, tTid, tGame);
+    }
+  }
+}
+
+// Wire callbacks onto a tournament PokerGame (used for both initial setup and post-consolidation)
+function _wireTournamentGameCallbacks(io, tournament, tTableId, tGame, tournamentId) {
+  const numTables = tournament.tables.size;
+  tGame.tableName = numTables > 1
+    ? `${tournament.name} – Table ${tTableId.split('_').pop()}`
+    : tournament.name;
+  tGame.feltColor = '#1a5c2a';
+
+  tGame.onBroadcast = (event, data) => io.to(tTableId).emit(event, data);
+  tGame.onPrivate   = (uid, event, data) => {
+    const sid = userSockets.get(uid);
+    if (sid) io.to(sid).emit(event, data);
+  };
+  tGame.onHandEnd = (result) => {
+    persistHandResult(tTableId, result);
+    _syncTournamentTableChips(io, tournament, tTableId, tGame, tournamentId);
+  };
+  tGame.onShotClockExpired = (uid) => {
+    try {
+      const cp = tGame.getPlayerBySeat(tGame.currentPlayerSeat);
+      if (!cp || cp.userId !== uid || !tGame.handActive) return;
+      const res = tGame.processAction(uid, 'fold');
+      broadcastGameState(io, tTableId, tGame);
+      handleActionResult(io, tTableId, tGame, res);
+    } catch {}
+  };
 }
 
 // ─── Game Watchdog ────────────────────────────────────────────────────────────
@@ -386,7 +501,25 @@ function setupSocketHandlers(io) {
 
     // ─── Table Events ──────────────────────────────────────────────────────
 
-    socket.on('join_table', async ({ tableId, seatNumber, buyInChips }) => {
+    socket.on('join_table', async ({ tableId: rawTableId, seatNumber, buyInChips }) => {
+      let tableId = rawTableId;
+
+      // Multi-table redirect: player joins "tournament_<id>" base ID, server routes to their assigned table
+      if (tableId?.startsWith('tournament_')) {
+        const tId = getTournamentId(tableId);
+        const tourney = tId ? activeTournaments.get(tId) : null;
+        if (tourney && tourney.tables.size > 1) {
+          const assigned = tourney.getTableForPlayer(userId);
+          if (assigned) {
+            console.log('[tournament] Redirecting', userId, 'from base ID to assigned table:', assigned);
+            tableId = assigned;
+          } else if (isAdmin) {
+            // Admin spectating gets first available table
+            tableId = tourney.tables.keys().next().value;
+          }
+        }
+      }
+
       const isTournJoin = tableId?.startsWith('tournament_');
       if (isTournJoin) console.log('[tournament] Player joining tournament table:', userId, 'tableId:', tableId);
       try {
@@ -421,7 +554,7 @@ function setupSocketHandlers(io) {
             }
             // If this is a tournament table, send current tournament state
             if (tableId.startsWith('tournament_')) {
-              const tournId = tableId.slice('tournament_'.length);
+              const tournId = getTournamentId(tableId);
               const tourney = activeTournaments.get(tournId);
               if (tourney) {
                 socket.emit('tournament_timer', tourney.getTimerState());
@@ -500,7 +633,7 @@ function setupSocketHandlers(io) {
         const isTournamentTable = tableId.startsWith('tournament_');
         let chips;
         if (isTournamentTable) {
-          const tournId = tableId.slice('tournament_'.length);
+          const tournId = getTournamentId(tableId);
           const activeTourney = activeTournaments.get(tournId);
           const tp = activeTourney?.players.get(userId);
 
@@ -666,7 +799,7 @@ function setupSocketHandlers(io) {
 
         // For tournament tables, send current tournament state to the joining player
         if (isTournamentTable) {
-          const tournId = tableId.slice('tournament_'.length);
+          const tournId = getTournamentId(tableId);
           const tourney = activeTournaments.get(tournId);
           if (tourney) {
             socket.emit('tournament_timer', tourney.getTimerState());
@@ -1014,8 +1147,10 @@ function setupSocketHandlers(io) {
       // For tournament tables, also look up the game from the tournament object if not in activeGames yet
       let game = activeGames.get(tId);
       if (!game && tId.startsWith('tournament_')) {
-        const tournId = tId.slice('tournament_'.length);
-        game = activeTournaments.get(tournId)?.game || null;
+        const tournId = getTournamentId(tId);
+        const tourney = activeTournaments.get(tournId);
+        // For multi-table, use the specific table or fall back to first available
+        game = tourney?.tables.get(tId) || tourney?.game || tourney?.tables.values().next().value || null;
       }
 
       if (game) {
@@ -1027,7 +1162,7 @@ function setupSocketHandlers(io) {
 
       // Send tournament state if applicable
       if (tId.startsWith('tournament_')) {
-        const tournId = tId.slice('tournament_'.length);
+        const tournId = getTournamentId(tId);
         const tourney = activeTournaments.get(tournId);
         if (tourney) {
           socket.emit('tournament_timer', tourney.getTimerState());
@@ -1783,12 +1918,13 @@ function setupSocketHandlers(io) {
 
     function _wireTournamentBroadcast(tournament) {
       tournament.onBroadcast = (event, data) => {
-        // Broadcast to tournament room (lobby observers + table players)
+        // Broadcast to tournament lobby room
         io.to(`tournament_${tournament.id}`).emit(event, data);
-        // Also broadcast to the game table room if different
-        const tableId = tournament.game ? tournament.game.tableId : null;
-        if (tableId && tableId !== `tournament_${tournament.id}`) {
-          io.to(tableId).emit(event, data);
+        // Also broadcast to each active table room
+        for (const tTableId of tournament.tables.keys()) {
+          if (tTableId !== `tournament_${tournament.id}`) {
+            io.to(tTableId).emit(event, data);
+          }
         }
       };
     }
@@ -1859,57 +1995,42 @@ function setupSocketHandlers(io) {
 
         console.log('[tournament] Calling tournament.start() — player count:', tournament.players.size);
         tournament.start();
-        console.log('[tournament] tournament.start() completed');
+        console.log('[tournament] tournament.start() completed — tables created:', tournament.tables.size);
 
-        // Wire tournament game into activeGames so join_table reconnect and spectate work
-        const tGame = tournament.game;
-        console.log('[tournament] tournament.game exists:', !!tGame, 'tableId:', tGame?.tableId);
-        if (tGame && !activeGames.has(tGame.tableId)) {
-          tGame.tableName = tournament.name;
-          tGame.feltColor = '#1a5c2a';
-          tGame.onBroadcast = (event, data) => io.to(tGame.tableId).emit(event, data);
-          tGame.onPrivate = (uid, event, data) => {
-            const sid = userSockets.get(uid);
-            if (sid) io.to(sid).emit(event, data);
-          };
-          tGame.onHandEnd = (result) => persistHandResult(tGame.tableId, result);
-          tGame.onShotClockExpired = (uid) => {
-            try {
-              const cp = tGame.getPlayerBySeat(tGame.currentPlayerSeat);
-              if (!cp || cp.userId !== uid || !tGame.handActive) return;
-              const res = tGame.processAction(uid, 'fold');
-              broadcastGameState(io, tGame.tableId, tGame);
-              handleActionResult(io, tGame.tableId, tGame, res);
-            } catch {}
-          };
-          activeGames.set(tGame.tableId, tGame);
-          console.log('[tournament] Registered game in activeGames:', tGame.tableId, '| activeGames size:', activeGames.size);
-          setupGameWatchdog(io, tGame.tableId, tGame);
-
-          // Persist result and clean up when tournament finishes
-          tournament.onTournamentEnd = async ({ winner, standings }) => {
-            console.log('[tournament] Tournament ended — winner:', winner?.username);
-            try {
-              await supabaseAdmin
-                .from('tournaments')
-                .update({ status: 'completed', ended_at: new Date().toISOString() })
-                .eq('id', tournamentId);
-              if (winner) {
-                await supabaseAdmin
-                  .from('tournament_players')
-                  .update({ status: 'winner', placement: 1 })
-                  .eq('tournament_id', tournamentId)
-                  .eq('user_id', winner.userId);
-              }
-            } catch {}
-            activeGames.delete(tGame.tableId);
-            activeTournaments.delete(tournamentId);
-          };
-        } else if (tGame) {
-          console.log('[tournament] Game already in activeGames:', tGame.tableId);
-        } else {
-          console.error('[tournament] tournament.game is null/undefined after start() — cannot register in activeGames');
+        // Register ALL tournament tables in activeGames and wire callbacks
+        for (const [tTableId, tGame] of tournament.tables) {
+          if (!activeGames.has(tTableId)) {
+            _wireTournamentGameCallbacks(io, tournament, tTableId, tGame, tournamentId);
+            activeGames.set(tTableId, tGame);
+            console.log('[tournament] Registered game in activeGames:', tTableId, '| activeGames size:', activeGames.size);
+            setupGameWatchdog(io, tTableId, tGame);
+          }
         }
+
+        if (tournament.tables.size === 0) {
+          console.error('[tournament] tournament.tables is empty after start() — no games registered');
+        }
+
+        // Persist result and clean up all tables when tournament finishes
+        tournament.onTournamentEnd = async ({ winner }) => {
+          console.log('[tournament] Tournament ended — winner:', winner?.username);
+          try {
+            await supabaseAdmin
+              .from('tournaments')
+              .update({ status: 'completed', ended_at: new Date().toISOString() })
+              .eq('id', tournamentId);
+            if (winner) {
+              await supabaseAdmin
+                .from('tournament_players')
+                .update({ status: 'winner', placement: 1 })
+                .eq('tournament_id', tournamentId)
+                .eq('user_id', winner.userId);
+            }
+          } catch {}
+          // Remove all table entries from activeGames
+          for (const tTableId of tournament.tables.keys()) activeGames.delete(tTableId);
+          activeTournaments.delete(tournamentId);
+        };
 
         // Push initial standings
         io.to(`tournament_${tournamentId}`).emit('tournament_standings', {
@@ -1920,10 +2041,9 @@ function setupSocketHandlers(io) {
         });
         console.log('[tournament] Emitted tournament_standings to room tournament_' + tournamentId);
 
-        // Broadcast initial game state to anyone already in the room
-        if (tGame) {
-          broadcastGameState(io, tGame.tableId, tGame);
-          console.log('[tournament] Broadcast initial game state to', tGame.tableId);
+        // Broadcast initial game state for each table
+        for (const [tTableId, tGame] of tournament.tables) {
+          broadcastGameState(io, tTableId, tGame);
         }
 
         console.log('[tournament] Start sequence complete for', tournamentId);

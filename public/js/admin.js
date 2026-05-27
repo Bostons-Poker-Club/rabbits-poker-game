@@ -1842,7 +1842,7 @@ function renderTournamentsAdmin(list) {
     const statusColor = { registering: 'var(--chip-green)', active: 'var(--red)', completed: '#888' }[t.status] || '#888';
     const isActive = t.status === 'active';
     const isRegistering = t.status === 'registering';
-    const meta = JSON.stringify({id:t.id,name:t.name,buy_in:t.buy_in,starting_chips:t.starting_chips,status:t.status});
+    const meta = esc(JSON.stringify({id:t.id,name:t.name,buy_in:t.buy_in,starting_chips:t.starting_chips,status:t.status}));
     return `
     <tr>
       <td data-label="Name">${esc(t.name)}</td>
@@ -1965,16 +1965,23 @@ async function openTournamentPlayersModal(tournamentId, tournamentMeta) {
 
     if (listEl) listEl.innerHTML = players.map(p => {
       const u = p.users || {};
+      const isElim = p.is_eliminated || p.status === 'eliminated';
       const paidBadge = p.buy_in_paid
         ? `<span style="color:var(--chip-green);font-size:.78rem;font-weight:700">✓ Paid</span>`
         : `<span style="color:var(--red);font-size:.78rem">✗ Unpaid</span>`;
-      const elimBadge = p.is_eliminated ? `<span style="color:var(--red);font-size:.72rem;margin-left:4px">✗ out</span>` : '';
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+      const bustInfo = isElim && p.placement
+        ? `<span style="color:var(--red);font-size:.72rem;margin-left:4px">✗ ${_admOrdinal(p.placement)} out</span>`
+        : (isElim ? `<span style="color:var(--red);font-size:.72rem;margin-left:4px">✗ out</span>` : '');
+      const regTime = p.registered_at
+        ? `<div style="color:var(--text-dim);font-size:.72rem;margin-top:2px">Registered ${new Date(p.registered_at).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</div>`
+        : '';
+      return `<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:9px 0;border-bottom:1px solid rgba(255,255,255,.05);${isElim?'opacity:.55':''}">
         <div>
-          <strong style="color:var(--gold)">${esc(u.nickname || u.username || '—')}</strong>${elimBadge}
+          <div><strong style="color:${isElim?'#888':'var(--gold)'}">${esc(u.nickname || u.username || '—')}</strong>${bustInfo}</div>
           ${u.nickname && u.username && u.nickname !== u.username ? `<div style="color:var(--text-dim);font-size:.75rem">@${esc(u.username)}</div>` : ''}
+          ${regTime}
         </div>
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px">
           ${paidBadge}
           ${!p.buy_in_paid
             ? `<button class="btn btn-sm btn-outline" style="font-size:.7rem;padding:2px 8px" onclick="markTournamentPlayerPaid('${tournamentId}','${p.user_id}',true)">Pay</button>`

@@ -20,19 +20,27 @@ class Tournament {
       { level: 8, small_blind: 500, big_blind: 1000, duration_minutes: 15 }
     ];
 
-    this.players = new Map(); // userId -> { userId, username, chips, placement, isEliminated }
-    this.currentBlindLevel = 0;
+    this.players = new Map();      // userId -> { userId, username, chips, placement, isEliminated }
+    this.tables = new Map();       // tableId -> PokerGame  (all active tables)
+    this.playerTables = new Map(); // userId -> tableId     (which table each active player is at)
+
+    // Backward compat: points to the only/final table, null for multi-table while >1 table exists
     this.game = null;
+
+    this.maxPlayersPerTable = config.maxPlayersPerTable || 9;
+    this.minPlayersToConsolidate = 4; // move players off a table when it drops below this
+
+    this.currentBlindLevel = 0;
     this.blindTimer = null;
-    this.warnTimer = null;        // 30-second warning before next level
+    this.warnTimer = null;
     this.startedAt = null;
     this.endedAt = null;
 
     // Timer tracking
-    this.levelStartedAt = null;   // Date when current level began
-    this.levelDurationMs = 0;     // Total ms for current level
+    this.levelStartedAt = null;
+    this.levelDurationMs = 0;
     this.isPaused = false;
-    this.pausedRemainingMs = null; // ms remaining when paused
+    this.pausedRemainingMs = null;
 
     // Break state
     this.isOnBreak = false;
@@ -73,6 +81,8 @@ class Tournament {
     this.players.delete(userId);
   }
 
+  // ─── Start ────────────────────────────────────────────────────────────────
+
   start(tableConfig = {}) {
     if (this.status !== 'registering') {
       throw new Error('Tournament already started');
@@ -86,37 +96,78 @@ class Tournament {
     this.currentBlindLevel = 0;
 
     const currentBlinds = this.blindSchedule[0];
+    const perTable = this.maxPlayersPerTable;
 
-    this.game = new PokerGame({
-      tableId: tableConfig.tableId || `tournament_${this.id}`,
-      gameType: tableConfig.gameType || 'holdem',
-      smallBlind: currentBlinds.small_blind,
-      bigBlind: currentBlinds.big_blind,
-      maxPlayers: Math.min(this.players.size, 9),
-      rakePercent: 0,
-      ...tableConfig
-    });
+    // Shuffle players for random seating
+    const playerArray = Array.from(this.players.values());
+    for (let i = playerArray.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [playerArray[i], playerArray[j]] = [playerArray[j], playerArray[i]];
+    }
 
-    let seatNumber = 1;
-    for (const [userId, player] of this.players) {
-      this.game.addPlayer(userId, player.username, player.chips, seatNumber++);
+    const numTables = Math.max(1, Math.ceil(playerArray.length / perTable));
+
+    for (let t = 0; t < numTables; t++) {
+      // Single table uses the legacy ID; multi-table adds a numeric suffix
+      const tableId = numTables === 1
+        ? `tournament_${this.id}`
+        : `tournament_${this.id}_${t + 1}`;
+
+      // Distribute players evenly: table 0 gets indices 0, numTables, 2*numTables, …
+      const tablePlayers = playerArray.filter((_, i) => i % numTables === t);
+
+      const game = new PokerGame({
+        tableId,
+        gameType: tableConfig.gameType || 'holdem',
+        smallBlind: currentBlinds.small_blind,
+        bigBlind: currentBlinds.big_blind,
+        maxPlayers: perTable,
+        rakePercent: 0,
+      });
+
+      tablePlayers.forEach((p, i) => {
+        game.addPlayer(p.userId, p.username, p.chips, i + 1);
+        this.playerTables.set(p.userId, tableId);
+      });
+
+      this.tables.set(tableId, game);
+    }
+
+    // Backward compat: this.game is the single/final table
+    if (this.tables.size === 1) {
+      this.game = this.tables.values().next().value;
     }
 
     this._startBlindTimer();
 
     if (this.onBroadcast) {
+      // Build per-player table assignments so lobby/table clients can redirect
+      const tableAssignments = {};
+      for (const [uid, tid] of this.playerTables) {
+        tableAssignments[uid] = tid;
+      }
       this.onBroadcast('tournament_started', {
         tournamentId: this.id,
         blindLevel: this.currentBlindLevel + 1,
         smallBlind: currentBlinds.small_blind,
         bigBlind: currentBlinds.big_blind,
         players: this.getStandings(),
-        timerState: this.getTimerState()
+        timerState: this.getTimerState(),
+        tables: Array.from(this.tables.keys()),
+        tableAssignments,
       });
     }
 
-    return this.game;
+    return this.tables;
   }
+
+  // ─── Table Lookup ─────────────────────────────────────────────────────────
+
+  getTableForPlayer(userId) {
+    return this.playerTables.get(userId) || null;
+  }
+
+  // ─── Blind Timer ──────────────────────────────────────────────────────────
 
   _startBlindTimer(remainingMs = null) {
     if (this.blindTimer) clearTimeout(this.blindTimer);
@@ -181,7 +232,6 @@ class Tournament {
   callBreak(durationMinutes = 15) {
     if (this.status !== 'active') return;
 
-    // Pause blind timer and record remaining ms
     if (!this.isPaused) {
       if (this.blindTimer) clearTimeout(this.blindTimer);
       if (this.warnTimer)  clearTimeout(this.warnTimer);
@@ -189,7 +239,6 @@ class Tournament {
       this.pausedRemainingMs = this._getRemainingMs();
     }
 
-    // Clear any existing break timers
     if (this.breakTimer)     clearTimeout(this.breakTimer);
     if (this.breakWarnTimer) clearTimeout(this.breakWarnTimer);
 
@@ -197,7 +246,6 @@ class Tournament {
     this.isOnBreak  = true;
     this.breakEndsAt = new Date(Date.now() + breakMs);
 
-    // 2-minute warning before break ends
     const warnMs = breakMs - 2 * 60 * 1000;
     if (warnMs > 0) {
       this.breakWarnTimer = setTimeout(() => {
@@ -210,7 +258,6 @@ class Tournament {
       }, warnMs);
     }
 
-    // Auto-end break
     this.breakTimer = setTimeout(() => this.endBreak(), breakMs);
 
     if (this.onBroadcast) {
@@ -266,7 +313,6 @@ class Tournament {
     this.isOnBreak  = false;
     this.breakEndsAt = null;
 
-    // Resume the blind timer
     this.resume();
 
     if (this.onBroadcast) {
@@ -287,41 +333,26 @@ class Tournament {
   advanceBlindLevel() {
     const nextLevel = this.currentBlindLevel + 1;
 
+    let newBlinds;
     if (nextLevel >= this.blindSchedule.length) {
-      const lastLevel   = this.blindSchedule[this.blindSchedule.length - 1];
-      const multiplier  = 2 ** (nextLevel - this.blindSchedule.length + 1);
+      const lastLevel  = this.blindSchedule[this.blindSchedule.length - 1];
+      const multiplier = 2 ** (nextLevel - this.blindSchedule.length + 1);
       this.currentBlindLevel = nextLevel;
-
-      const newBlinds = {
+      newBlinds = {
         level: nextLevel + 1,
         small_blind: lastLevel.small_blind * multiplier,
         big_blind:   lastLevel.big_blind   * multiplier,
         duration_minutes: lastLevel.duration_minutes
       };
-
-      if (this.game) {
-        this.game.smallBlind = newBlinds.small_blind;
-        this.game.bigBlind   = newBlinds.big_blind;
-      }
-
-      this._startBlindTimer();
-      if (this.onBroadcast) {
-        this.onBroadcast('blind_increase', {
-          tournamentId: this.id,
-          blindLevel: nextLevel + 1,
-          ...newBlinds,
-          timerState: this.getTimerState()
-        });
-      }
-      return;
+    } else {
+      this.currentBlindLevel = nextLevel;
+      newBlinds = this.blindSchedule[nextLevel];
     }
 
-    this.currentBlindLevel = nextLevel;
-    const newLevel = this.blindSchedule[nextLevel];
-
-    if (this.game) {
-      this.game.smallBlind = newLevel.small_blind;
-      this.game.bigBlind   = newLevel.big_blind;
+    // Apply new blinds to ALL active tables
+    for (const game of this.tables.values()) {
+      game.smallBlind = newBlinds.small_blind;
+      game.bigBlind   = newBlinds.big_blind;
     }
 
     this._startBlindTimer();
@@ -330,14 +361,14 @@ class Tournament {
       this.onBroadcast('blind_increase', {
         tournamentId: this.id,
         blindLevel: nextLevel + 1,
-        small_blind: newLevel.small_blind,
-        big_blind:   newLevel.big_blind,
-        duration_minutes: newLevel.duration_minutes,
+        small_blind: newBlinds.small_blind,
+        big_blind:   newBlinds.big_blind,
+        duration_minutes: newBlinds.duration_minutes,
         timerState: this.getTimerState()
       });
     }
 
-    if (this.onBlindIncrease) this.onBlindIncrease(newLevel);
+    if (this.onBlindIncrease) this.onBlindIncrease(newBlinds);
   }
 
   _currentLevelConfig() {
@@ -387,21 +418,30 @@ class Tournament {
       nextLevel:       this.currentBlindLevel + 2,
       nextSmallBlind:  next.small_blind,
       nextBigBlind:    next.big_blind,
-      schedule:        this.blindSchedule
+      schedule:        this.blindSchedule,
+      activeTables:    this.tables.size
     };
   }
 
-  // ─── Player Elimination & Standings ───────────────────────────────────────
+  // ─── Player Elimination ────────────────────────────────────────────────────
 
   eliminatePlayer(userId) {
     const player = this.players.get(userId);
-    if (!player) return;
+    if (!player || player.isEliminated) return { moves: [], closedTables: [] };
 
-    const remainingPlayers = Array.from(this.players.values()).filter(p => !p.isEliminated);
+    const remainingActive = Array.from(this.players.values()).filter(p => !p.isEliminated);
     player.isEliminated = true;
-    player.placement = remainingPlayers.length;
+    player.placement = remainingActive.length;
 
-    if (this.game) this.game.removePlayer(userId);
+    // Remove from their specific table
+    const tableId = this.playerTables.get(userId);
+    if (tableId) {
+      const game = this.tables.get(tableId);
+      if (game) game.removePlayer(userId);
+      this.playerTables.delete(userId);
+    } else if (this.game) {
+      this.game.removePlayer(userId);
+    }
 
     if (this.onPlayerEliminated) {
       this.onPlayerEliminated({ userId, username: player.username, placement: player.placement });
@@ -414,7 +454,6 @@ class Tournament {
         username: player.username,
         placement: player.placement
       });
-      // Broadcast updated standings
       this.onBroadcast('tournament_standings', {
         tournamentId: this.id,
         standings: this.getStandings(),
@@ -423,8 +462,156 @@ class Tournament {
       });
     }
 
+    const consolidation = this.consolidateIfNeeded();
+
     this.checkFinished();
+
+    return consolidation;
   }
+
+  // ─── Table Consolidation ──────────────────────────────────────────────────
+
+  consolidateIfNeeded() {
+    const moves = [];
+    const closedTables = [];
+
+    if (this.tables.size <= 1) return { moves, closedTables };
+
+    const getOccupancy = (tableId) => {
+      let count = 0;
+      for (const [uid, tid] of this.playerTables) {
+        if (tid !== tableId) continue;
+        const p = this.players.get(uid);
+        if (p && !p.isEliminated) count++;
+      }
+      return count;
+    };
+
+    // Repeatedly find and consolidate under-full tables until none remain
+    let changed = true;
+    while (changed && this.tables.size > 1) {
+      changed = false;
+      for (const [tableId] of this.tables) {
+        const occ = getOccupancy(tableId);
+        if (occ === 0) {
+          // Empty table — just close it
+          const oldGame = this.tables.get(tableId);
+          if (oldGame) oldGame.destroy();
+          this.tables.delete(tableId);
+          closedTables.push(tableId);
+          if (this.tables.size === 1) {
+            this.game = this.tables.values().next().value;
+            if (this.onBroadcast) {
+              this.onBroadcast('tournament_final_table', {
+                tournamentId: this.id,
+                tableId: this.game.tableId
+              });
+            }
+          }
+          changed = true;
+          break;
+        }
+
+        if (occ < this.minPlayersToConsolidate && this.tables.size > 1) {
+          // Gather active players at this table
+          const sourcePlayers = [];
+          for (const [uid, tid] of this.playerTables) {
+            if (tid !== tableId) continue;
+            const p = this.players.get(uid);
+            if (p && !p.isEliminated) sourcePlayers.push(uid);
+          }
+
+          // Find target tables with available seats, fewest players first
+          const targets = [];
+          for (const [tid] of this.tables) {
+            if (tid === tableId) continue;
+            const cnt = getOccupancy(tid);
+            if (cnt < this.maxPlayersPerTable) targets.push({ tableId: tid, count: cnt });
+          }
+          targets.sort((a, b) => a.count - b.count);
+
+          if (!targets.length) continue;
+
+          const batchMoves = [];
+          for (let i = 0; i < sourcePlayers.length; i++) {
+            const uid = sourcePlayers[i];
+            const target = targets[i % targets.length];
+            this._movePlayerToTable(uid, tableId, target.tableId);
+            target.count++;
+            const p = this.players.get(uid);
+            batchMoves.push({ userId: uid, username: p?.username, fromTableId: tableId, toTableId: target.tableId });
+          }
+          moves.push(...batchMoves);
+
+          const oldGame = this.tables.get(tableId);
+          if (oldGame) oldGame.destroy();
+          this.tables.delete(tableId);
+          closedTables.push(tableId);
+
+          if (this.onBroadcast) {
+            this.onBroadcast('tournament_table_closed', {
+              tournamentId: this.id,
+              tableId,
+              moves: batchMoves
+            });
+          }
+
+          if (this.tables.size === 1) {
+            this.game = this.tables.values().next().value;
+            if (this.onBroadcast) {
+              this.onBroadcast('tournament_final_table', {
+                tournamentId: this.id,
+                tableId: this.game.tableId
+              });
+            }
+          }
+
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    return { moves, closedTables };
+  }
+
+  _movePlayerToTable(userId, fromTableId, toTableId) {
+    const player = this.players.get(userId);
+    if (!player) return;
+
+    // Sync chips from the game being left
+    const fromGame = this.tables.get(fromTableId);
+    if (fromGame) {
+      const gp = fromGame.getPlayer(userId);
+      if (gp) player.chips = gp.chips;
+      fromGame.removePlayer(userId);
+    }
+
+    // Add to the new game
+    const toGame = this.tables.get(toTableId);
+    if (toGame) {
+      const seat = this._findOpenSeat(toGame);
+      if (seat) {
+        try {
+          toGame.addPlayer(userId, player.username, player.chips, seat);
+        } catch (e) {
+          console.warn('[tournament] _movePlayerToTable failed:', e.message);
+        }
+      }
+    }
+
+    this.playerTables.set(userId, toTableId);
+  }
+
+  _findOpenSeat(game) {
+    const taken = new Set(Array.from(game.players.values()).map(p => p.seatNumber));
+    for (let s = 1; s <= (game.maxPlayers || 9); s++) {
+      if (!taken.has(s)) return s;
+    }
+    return null;
+  }
+
+  // ─── End Condition ────────────────────────────────────────────────────────
 
   checkFinished() {
     const activePlayers = Array.from(this.players.values()).filter(p => !p.isEliminated);
@@ -455,6 +642,8 @@ class Tournament {
       }
     }
   }
+
+  // ─── Standings / State ────────────────────────────────────────────────────
 
   getTotalPrize() {
     return this.players.size * this.buyIn;
@@ -491,7 +680,8 @@ class Tournament {
       players: this.getStandings(),
       startedAt: this.startedAt,
       endedAt: this.endedAt,
-      timerState: this.status === 'active' ? this.getTimerState() : null
+      timerState: this.status === 'active' ? this.getTimerState() : null,
+      tables: Array.from(this.tables.keys()),
     };
   }
 
@@ -500,7 +690,8 @@ class Tournament {
     if (this.warnTimer)      { clearTimeout(this.warnTimer);      this.warnTimer  = null; }
     if (this.breakTimer)     { clearTimeout(this.breakTimer);     this.breakTimer = null; }
     if (this.breakWarnTimer) { clearTimeout(this.breakWarnTimer); this.breakWarnTimer = null; }
-    if (this.game) this.game.destroy();
+    for (const game of this.tables.values()) game.destroy();
+    this.tables.clear();
   }
 }
 
