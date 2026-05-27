@@ -656,25 +656,48 @@ function setupSocketHandlers(io) {
           console.log('[tournament] Assigned chips:', chips, 'for player:', userId);
           // No bank deduction and no seat record for tournament tables
         } else {
+          const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
+
+          // Check for a recent seat record (within 2 hours) — if found, this is a rejoin
+          // after a server restart and we skip the 0-chips guard; restore chips from the seat record
+          let isRejoin = false;
+          let rejoinChips = 0;
           if (!isLocalAdmin && user.chips <= 0) {
-            return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
+            try {
+              const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+              const { data: seatRecord } = await supabaseAdmin
+                .from('table_seats')
+                .select('chips_on_table, updated_at')
+                .eq('table_id', tableId)
+                .eq('user_id', userId)
+                .gte('updated_at', twoHoursAgo)
+                .single();
+              if (seatRecord && seatRecord.chips_on_table > 0) {
+                isRejoin = true;
+                rejoinChips = seatRecord.chips_on_table;
+              }
+            } catch (_) {}
+            if (!isRejoin) {
+              return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
+            }
           }
 
-          const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
-          chips = Math.max(buyInChips || minBuyIn, minBuyIn);
+          chips = isRejoin
+            ? rejoinChips
+            : Math.max(buyInChips || minBuyIn, minBuyIn);
 
-          if (!isLocalAdmin && user.chips < minBuyIn) {
+          if (!isLocalAdmin && !isRejoin && user.chips < minBuyIn) {
             return socket.emit('error', { message: `Insufficient chips. Minimum buy-in for this table is $${minBuyIn}. Contact admin to add chips.` });
           }
-          if (!isLocalAdmin && user.chips < chips) {
+          if (!isLocalAdmin && !isRejoin && user.chips < chips) {
             return socket.emit('error', { message: `Insufficient chips. You need $${chips} to join with that buy-in.` });
           }
-          if (!isLocalAdmin && chips < minBuyIn) {
+          if (!isLocalAdmin && !isRejoin && chips < minBuyIn) {
             return socket.emit('error', { message: `Minimum buy-in for this table is $${minBuyIn}.` });
           }
 
-          // Deduct chips from bank (only if user exists in DB)
-          if (dbUser) {
+          // Deduct chips from bank only for fresh buys (not rejoins after server restart)
+          if (dbUser && !isRejoin) {
             await supabaseAdmin.from('users').update({ chips: user.chips - chips }).eq('id', userId);
             logTransaction({ userId, username, type: 'table_buyin', amount: chips, tableName: table.name || tableId });
           }

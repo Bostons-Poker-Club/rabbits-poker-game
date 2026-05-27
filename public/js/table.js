@@ -780,6 +780,8 @@ function connect() {
     toast(message, 'error');
     if (message === 'No open seats') {
       _showWaitlistOffer();
+    } else if (message === 'Table not found') {
+      setTimeout(() => { window.location.href = '/lobby.html?error=table_not_found'; }, 2000);
     }
   });
 
