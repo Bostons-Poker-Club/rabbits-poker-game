@@ -1986,6 +1986,18 @@ input, select, textarea { font-family: inherit; }
   body.table-page #seats-container {
     inset: -20px;
   }
+
+  body.table-page .seat-avatar {
+    width: 80px;
+    height: 80px;
+  }
+
+  body.table-page .seat-cam-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 50%;
+  }
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
