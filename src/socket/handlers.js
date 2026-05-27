@@ -3145,4 +3145,89 @@ function _postStraddleAction(io, tableId, game) {
   game.lastActionAt = Date.now();
 }
 
-module.exports = { setupSocketHandlers, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, pendingMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats, tableSpectators, buildTableOverview };
+// Preload all active/open tables from Supabase into activeGames on server startup.
+// Prevents "Table not found" after Railway restarts wipe in-memory state.
+async function preloadActiveGames(io) {
+  try {
+    const { data: tables, error } = await supabaseAdmin
+      .from('tables')
+      .select('*')
+      .in('status', ['active', 'open']);
+
+    if (error) {
+      console.error('[startup] preloadActiveGames — Supabase error:', error.message);
+      return;
+    }
+
+    let loaded = 0;
+    for (const table of (tables || [])) {
+      if (activeGames.has(table.id)) continue;
+      const tableId = table.id;
+      const { rakePercent, rakeCap } = getRakeConfig(table.stakes_small_blind, table.stakes_big_blind);
+      const game = new PokerGame({
+        tableId,
+        gameType:      table.game_type,
+        smallBlind:    table.stakes_small_blind,
+        bigBlind:      table.stakes_big_blind,
+        maxPlayers:    table.max_players,
+        rakePercent,
+        rakeCap,
+        jackpotFlatContrib: JACKPOT_CONTRIB,
+        shotClockSeconds:   SHOT_CLOCK
+      });
+      game.tableName = table.name || tableId;
+      game.feltColor = table.felt_color || '#1a5c2a';
+
+      if (table.host_id) {
+        try {
+          const { data: hostUser } = await supabaseAdmin
+            .from('users').select('username, is_admin, host_type').eq('id', table.host_id).single();
+          if (hostUser) {
+            game.hostId      = table.host_id;
+            game.hostUsername = hostUser.username;
+            game.hostType    = hostUser.is_admin ? 'admin' : (hostUser.host_type || 'host');
+            game.hostPercent = game.hostType === 'admin' ? 20 : 40;
+          }
+        } catch {}
+      }
+
+      game.onBroadcast = (event, data) => io.to(tableId).emit(event, data);
+      game.onPrivate   = (uid, event, data) => {
+        const sid = userSockets.get(uid);
+        if (sid) io.to(sid).emit(event, data);
+      };
+      game.onHandEnd = (result) => persistHandResult(tableId, result);
+      if (table.game_type !== 'plo') {
+        game.onJackpotCheck = (rank, uid, uname, desc) => checkTableJackpot(io, tableId, rank, uid, uname, desc);
+        if (!tableJackpots.has(tableId)) {
+          tableJackpots.set(tableId, {
+            tableName: game.tableName, gameType: table.game_type || 'holdem',
+            amount: 0, highHandRank: -1, highHandUserId: null,
+            highHandUsername: null, highHandDescription: null,
+            timerStart: Date.now(), isActive: false, isOnHold: false,
+            awaitingPayout: false, pausedAt: null
+          });
+        }
+      }
+      game.onShotClockExpired = (uid) => {
+        try {
+          const cur = game.getPlayerBySeat(game.currentPlayerSeat);
+          if (!cur || cur.userId !== uid || !game.handActive) return;
+          const result = game.processAction(uid, 'fold');
+          broadcastGameState(io, tableId, game);
+          handleActionResult(io, tableId, game, result);
+        } catch {}
+      };
+
+      activeGames.set(tableId, game);
+      setupGameWatchdog(io, tableId, game);
+      loaded++;
+    }
+
+    console.log(`[startup] Loaded ${loaded} tables from Supabase into activeGames (${(tables || []).length} total active/open in DB)`);
+  } catch (err) {
+    console.error('[startup] preloadActiveGames crashed:', err.message);
+  }
+}
+
+module.exports = { setupSocketHandlers, preloadActiveGames, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, pendingMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats, tableSpectators, buildTableOverview };
