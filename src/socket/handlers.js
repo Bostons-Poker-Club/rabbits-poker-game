@@ -503,6 +503,7 @@ function setupSocketHandlers(io) {
 
     socket.on('join_table', async ({ tableId: rawTableId, seatNumber, buyInChips }) => {
       let tableId = rawTableId;
+      console.log('[join_table] RECEIVED — userId:', userId, 'rawTableId:', rawTableId, 'seatNumber:', seatNumber, 'buyInChips:', buyInChips);
 
       // Multi-table redirect: player joins "tournament_<id>" base ID, server routes to their assigned table
       if (tableId?.startsWith('tournament_')) {
@@ -571,13 +572,13 @@ function setupSocketHandlers(io) {
         }
 
         // ── Fresh join ────────────────────────────────────────────────────
-        if (isTournJoin) console.log('[tournament] Fresh join path — looking up table in DB:', tableId);
+        console.log('[join_table] Fresh join — querying DB for tableId:', tableId);
         const { data: dbTable, error: dbTableErr } = await supabaseAdmin
           .from('tables')
           .select('*')
           .eq('id', tableId)
           .single();
-        if (isTournJoin) console.log('[tournament] DB table lookup — found:', !!dbTable, 'error:', dbTableErr?.message);
+        console.log('[join_table] DB result — found:', !!dbTable, 'error:', dbTableErr?.code, dbTableErr?.message, 'table.id:', dbTable?.id, 'table.status:', dbTable?.status);
 
         // Fall back to config from existing in-memory game if Supabase unavailable
         const table = dbTable || (existingGame ? {
@@ -591,9 +592,10 @@ function setupSocketHandlers(io) {
         } : null);
 
         if (!table) {
-          if (isTournJoin) console.error('[tournament] Table not found — no DB row and no in-memory game for:', tableId);
+          console.error('[join_table] TABLE NOT FOUND — emitting error. tableId:', tableId, 'dbErr:', dbTableErr?.message, 'existingGame:', !!existingGame);
           return socket.emit('error', { message: 'Table not found' });
         }
+        console.log('[join_table] Table resolved — name:', table.name, 'status:', table.status, 'host_id:', table.host_id);
 
         // Try with extended columns first; fall back to base columns if any don't exist yet
         let dbUser = null;
@@ -623,9 +625,11 @@ function setupSocketHandlers(io) {
         // Local admin bypass only — all real players must exist in DB
         const isLocalAdmin = userId === 'local-admin-000';
         if (!dbUser && !isLocalAdmin) {
+          console.error('[join_table] USER NOT FOUND — emitting error. userId:', userId);
           return socket.emit('error', { message: 'Account not found. Please log out and log in again.' });
         }
         const user = dbUser || { chips: 999999, is_banned: false };
+        console.log('[join_table] User resolved — chips:', user.chips, 'is_banned:', user.is_banned, 'userId:', userId);
 
         if (user.is_banned) return socket.emit('error', { message: 'Account is banned' });
 
@@ -713,9 +717,11 @@ function setupSocketHandlers(io) {
           } catch (_) {}
         }
 
+        console.log('[join_table] Chips determined:', chips, 'for userId:', userId);
+
         // Get or create game
         let game = activeGames.get(tableId);
-        if (isTournamentTable) console.log('[tournament] Game lookup at join — found in activeGames:', !!game, 'tableId:', tableId);
+        console.log('[join_table] activeGames lookup — found:', !!game, 'tableId:', tableId, 'activeGames.size:', activeGames.size);
         if (!game) {
           const { rakePercent, rakeCap } = getRakeConfig(table.stakes_small_blind, table.stakes_big_blind);
           game = new PokerGame({
@@ -788,14 +794,14 @@ function setupSocketHandlers(io) {
         }
 
         const finalSeat = seatNumber || findOpenSeat(game, table.max_players);
+        console.log('[join_table] Seat determined:', finalSeat, 'seatNumber param was:', seatNumber, 'max_players:', table.max_players);
         if (!finalSeat) {
-          if (isTournamentTable) console.error('[tournament] No open seats at:', tableId);
+          console.error('[join_table] NO OPEN SEATS — emitting error. tableId:', tableId);
           return socket.emit('error', { message: 'No open seats' });
         }
 
-        if (isTournamentTable) console.log('[tournament] Adding player to game — seat:', finalSeat, 'userId:', userId, 'chips:', chips);
         game.addPlayer(userId, username, chips, finalSeat);
-        if (isTournamentTable) console.log('[tournament] Player added successfully — total players in game:', game.players?.size ?? '?');
+        console.log('[join_table] Player added — seat:', finalSeat, 'userId:', userId, 'chips:', chips, 'total in game:', game.players?.size ?? '?');
         playerProfiles.set(userId, { avatarUrl: dbUser?.avatar_url || null, isAdmin, isHost: dbUser?.is_host || false });
 
         // Increment sessions_played on first join to any table this session
@@ -817,6 +823,7 @@ function setupSocketHandlers(io) {
         socket.join(tableId);
         socket.currentTableId = tableId;
 
+        console.log('[join_table] EMITTING joined_table — tableId:', tableId, 'seat:', finalSeat, 'chips:', chips, 'userId:', userId);
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips, feltColor: game.feltColor || '#1a5c2a' });
         broadcastGameState(io, tableId, game);
 
