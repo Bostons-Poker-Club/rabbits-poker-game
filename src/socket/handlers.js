@@ -503,6 +503,8 @@ function setupSocketHandlers(io) {
 
     socket.on('join_table', async ({ tableId: rawTableId, seatNumber, buyInChips }) => {
       let tableId = rawTableId;
+      console.log('[join] Player attempting to join table:', rawTableId, userId);
+      console.log('[join] Table found in activeGames:', !!activeGames.get(rawTableId), '— activeGames.size:', activeGames.size);
       console.log('[join_table] RECEIVED — userId:', userId, 'rawTableId:', rawTableId, 'seatNumber:', seatNumber, 'buyInChips:', buyInChips);
 
       // Multi-table redirect: player joins "tournament_<id>" base ID, server routes to their assigned table
@@ -824,6 +826,7 @@ function setupSocketHandlers(io) {
         socket.join(tableId);
         socket.currentTableId = tableId;
 
+        console.log('[join] Player seated successfully at seat:', finalSeat, '— tableId:', tableId, 'userId:', userId, 'chips:', chips);
         console.log('[join_table] EMITTING joined_table — tableId:', tableId, 'seat:', finalSeat, 'chips:', chips, 'userId:', userId);
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips, feltColor: game.feltColor || '#1a5c2a' });
         broadcastGameState(io, tableId, game);

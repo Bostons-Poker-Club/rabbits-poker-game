@@ -17,6 +17,7 @@ let myState = null;
 let shotClockInterval = null;
 let _reconnectTimer = null;
 let _reconnectTapTimer = null;
+let _joinTimeoutId = null;
 let shotClockEnd = 0;
 let chatOpen = false;
 let chatUnread = 0;
@@ -196,6 +197,20 @@ function toggleSoundThemePanel() {
 }
 
 // ─── Spectator / Observer Mode ────────────────────────────────────────────
+
+function _handleJoinTimeout() {
+  console.error('[join] Timed out waiting for joined_table after 15s — tableId:', tableId, 'userId:', user?.id);
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px';
+  overlay.innerHTML = `
+    <div style="font-size:2.5rem;margin-bottom:12px">⚠️</div>
+    <h2 style="color:#c8a84b;margin:0 0 8px;font-size:1.2rem">Unable to Join Table</h2>
+    <p style="color:#aaa;font-size:.88rem;margin:0 0 24px;max-width:320px;line-height:1.5">
+      The server did not confirm your seat. This can happen if the table is full, your session expired, or there was a connection issue.
+    </p>
+    <a href="/lobby.html" style="padding:10px 28px;background:#c8a84b;color:#000;border-radius:8px;font-weight:700;text-decoration:none;font-size:.95rem">← Back to Lobby</a>`;
+  document.body.appendChild(overlay);
+}
 
 function _enterSpectatorMode(tableName) {
   const banner = document.getElementById('spectator-banner');
@@ -412,9 +427,13 @@ function connect() {
       socket.emit('admin:spectate', { tableId });
       checkMicPermission();
     } else {
+      console.log('[join] Player attempting to join table:', tableId, user.id);
+      console.log('[join] Table found in activeGames: (server-side check pending)');
       socket.emit('join_table', { tableId, buyInChips: buyIn });
       checkMicPermission();
       renderHostControls();
+      // If joined_table doesn't arrive within 15s, show a clear error
+      _joinTimeoutId = setTimeout(_handleJoinTimeout, 15000);
     }
   });
 
@@ -426,6 +445,9 @@ function connect() {
   });
 
   socket.on('joined_table', ({ seatNumber, chips, tableName, feltColor }) => {
+    clearTimeout(_joinTimeoutId);
+    _joinTimeoutId = null;
+    console.log('[join] Player seated successfully at seat:', seatNumber);
     toast(`Joined seat ${seatNumber} with ${fmt(chips)} chips`);
     document.getElementById('hdr-chips').textContent = fmt(chips);
     if (tableName) document.getElementById('hdr-table-name').textContent = tableName;
@@ -777,6 +799,9 @@ function connect() {
   });
 
   socket.on('error', ({ message }) => {
+    clearTimeout(_joinTimeoutId);
+    _joinTimeoutId = null;
+    console.error('[join] Server error:', message);
     toast(message, 'error');
     if (message === 'No open seats') {
       _showWaitlistOffer();

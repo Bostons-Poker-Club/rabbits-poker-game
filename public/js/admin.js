@@ -24,7 +24,7 @@ if (typeof io !== 'undefined') {
     reconnection: true,
     reconnectionAttempts: Infinity,
     reconnectionDelay: 2000,
-    auth: { token: sessionStorage.getItem('rp_token') }
+    auth: { token: getToken() }
   });
   adminSocket.on('connect', () => { adminSocket.emit('lobby:join'); adminSocket.emit('admin:get_overview'); _loadMaintenanceState(); });
 
@@ -2362,7 +2362,7 @@ async function refillAdminChips() {
     toast(`Chips refilled to ${fmt(r.chips)}`);
     // Update local display
     const u = getUser();
-    if (u) { u.chips = r.chips; sessionStorage.setItem('rp_user', JSON.stringify(u)); }
+    if (u) { u.chips = r.chips; localStorage.setItem('rp_user', JSON.stringify(u)); }
   } catch (e) { toast(e.message, 'error'); }
 }
 
@@ -3035,7 +3035,7 @@ async function downloadCSV(type) {
   if (to)   params.set('to', to);
   const url = `/api/admin/export/${type}.csv${params.toString() ? '?' + params : ''}`;
   try {
-    const token = sessionStorage.getItem('rp_token');
+    const token = getToken();
     const resp  = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
     if (!resp.ok) { const d = await resp.json().catch(() => ({})); throw new Error(d.error || 'Export failed'); }
     const blob  = await resp.blob();
