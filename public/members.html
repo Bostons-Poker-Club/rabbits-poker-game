@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RabbsRoom – Members</title>
+  <meta name="theme-color" content="#c8a84b">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icons/icon-192.svg">
+  <link rel="icon" type="image/svg+xml" href="/images/favicon.svg">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .members-wrap {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 20px 16px 40px;
+    }
+    .members-title {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+    .members-title h1 {
+      color: var(--gold);
+      font-size: 1.8rem;
+      margin: 0 0 4px;
+    }
+    .members-title p {
+      color: var(--text-dim);
+      font-size: .88rem;
+      margin: 0;
+    }
+    .members-count {
+      display: inline-block;
+      background: rgba(200,168,75,.12);
+      border: 1px solid rgba(200,168,75,.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: .82rem;
+      font-weight: 700;
+      color: var(--gold);
+      margin-top: 8px;
+    }
+    .members-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .members-search {
+      flex: 1;
+      min-width: 180px;
+      padding: 9px 14px;
+      background: rgba(255,255,255,.07);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .members-search:focus {
+      border-color: var(--gold);
+    }
+    .members-search::placeholder {
+      color: var(--text-dim);
+    }
+    .sort-btn {
+      padding: 8px 14px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-dim);
+      font-size: .82rem;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: border-color .15s, color .15s;
+    }
+    .sort-btn.active {
+      border-color: var(--gold);
+      color: var(--gold);
+      background: rgba(200,168,75,.08);
+    }
+    .members-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .member-card {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 14px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: border-color .15s, background .15s;
+    }
+    .member-card:hover {
+      border-color: rgba(200,168,75,.35);
+      background: rgba(255,255,255,.06);
+    }
+    .member-avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+    }
+    .member-avatar {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+    .member-initials {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .9rem;
+      color: #111;
+      flex-shrink: 0;
+    }
+    .member-online-dot {
+      position: absolute;
+      bottom: 1px;
+      right: 1px;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      background: #2ecc71;
+      border: 2px solid var(--bg);
+    }
+    .member-info {
+      min-width: 0;
+      flex: 1;
+    }
+    .member-name {
+      font-weight: 700;
+      font-size: .95rem;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .member-since {
+      font-size: .72rem;
+      color: var(--text-dim);
+      margin-top: 2px;
+    }
+    .member-sessions {
+      font-size: .72rem;
+      color: var(--chip-green);
+      margin-top: 1px;
+      font-weight: 600;
+    }
+    .members-empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      padding: 40px 16px;
+      color: var(--text-dim);
+      font-size: .9rem;
+    }
+    @media (max-width: 480px) {
+      .members-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body class="lobby-page">
+
+<header class="lobby-header">
+  <div class="logo" style="display:flex;align-items:center;gap:8px">
+    <a href="/lobby.html" style="color:inherit;text-decoration:none;display:flex;align-items:center;gap:8px">
+      <img src="/images/logo.svg" alt="" style="width:36px;height:auto">
+      RabbsRoom
+    </a>
+  </div>
+  <div class="player-info">
+    <span id="header-username" style="color:var(--text-dim)"></span>
+    <a href="/lobby.html"><button class="btn btn-sm btn-outline">← Lobby</button></a>
+  </div>
+</header>
+
+<div class="members-wrap">
+  <div class="members-title">
+    <h1>👥 Members</h1>
+    <p>Boston Poker Club</p>
+    <div class="members-count" id="member-count">Loading…</div>
+  </div>
+
+  <div class="members-controls">
+    <input
+      type="search"
+      class="members-search"
+      id="member-search"
+      placeholder="Search by nickname…"
+      autocomplete="off"
+      oninput="filterMembers()"
+    >
+    <button class="sort-btn active" id="sort-newest" onclick="setSort('newest', this)">Newest first</button>
+    <button class="sort-btn" id="sort-alpha" onclick="setSort('alpha', this)">A–Z</button>
+  </div>
+
+  <div class="members-grid" id="members-grid">
+    <div class="members-empty">Loading members…</div>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuth();
+const user = getUser();
+if (user) document.getElementById('header-username').textContent = user.nickname || user.username || '';
+
+let allMembers = [];
+let currentSort = 'newest';
+
+const AVATAR_COLORS = ['#27ae60','#2980b9','#8e44ad','#e67e22','#16a085','#c0392b','#2c3e50','#d35400'];
+
+function avatarColor(name) {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = ((h << 5) - h) + name.charCodeAt(i);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+
+function initials(name) {
+  return (name || '?').split(/\s+/).map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s || '');
+  return d.innerHTML;
+}
+
+function memberCardHtml(m) {
+  const name = m.displayName || '?';
+  const color = avatarColor(name);
+  const avatar = m.avatarUrl
+    ? `<img class="member-avatar" src="${esc(m.avatarUrl)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      + `<div class="member-initials" style="background:${color};display:none">${esc(initials(name))}</div>`
+    : `<div class="member-initials" style="background:${color}">${esc(initials(name))}</div>`;
+
+  const dot = m.isOnline ? '<div class="member-online-dot" title="Online now"></div>' : '';
+  const sessions = m.sessionsPlayed === 1 ? '1 session' : `${m.sessionsPlayed} sessions`;
+
+  return `
+    <div class="member-card">
+      <div class="member-avatar-wrap">
+        ${avatar}
+        ${dot}
+      </div>
+      <div class="member-info">
+        <div class="member-name" title="${esc(name)}">${esc(name)}</div>
+        <div class="member-since">Since ${esc(m.memberSince)}</div>
+        <div class="member-sessions">${sessions}</div>
+      </div>
+    </div>`;
+}
+
+function setSort(mode, btn) {
+  currentSort = mode;
+  document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderMembers();
+}
+
+function filterMembers() {
+  renderMembers();
+}
+
+function renderMembers() {
+  const query = document.getElementById('member-search').value.trim().toLowerCase();
+  let list = allMembers.filter(m =>
+    !query || (m.displayName || '').toLowerCase().includes(query)
+  );
+
+  if (currentSort === 'alpha') {
+    list = list.slice().sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+  }
+  // 'newest' order comes from the API (already sorted by created_at desc)
+  // Keep online members at top within each sort
+  list = [
+    ...list.filter(m => m.isOnline),
+    ...list.filter(m => !m.isOnline)
+  ];
+
+  const grid = document.getElementById('members-grid');
+  if (!list.length) {
+    grid.innerHTML = `<div class="members-empty">${query ? 'No members match your search.' : 'No members yet.'}</div>`;
+    return;
+  }
+  grid.innerHTML = list.map(memberCardHtml).join('');
+}
+
+async function loadMembers() {
+  try {
+    const data = await apiFetch('/api/members');
+    allMembers = data.members || [];
+    const total = data.total || 0;
+    document.getElementById('member-count').textContent =
+      total === 1 ? '1 Member' : `${total} Members`;
+    renderMembers();
+  } catch (err) {
+    document.getElementById('members-grid').innerHTML =
+      `<div class="members-empty" style="color:var(--red)">${esc(err.message)}</div>`;
+    document.getElementById('member-count').textContent = '–';
+  }
+}
+
+loadMembers();
+// Refresh online status every 30s
+setInterval(loadMembers, 30000);
+</script>
+<script src="/js/maintenance-banner.js"></script>
+</body>
+</html>

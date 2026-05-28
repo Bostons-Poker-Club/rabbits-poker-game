@@ -2423,6 +2423,52 @@ router.get('/players/:id/stats', authMiddleware, async (req, res) => {
   }
 });
 
+// GET /api/members  — public member list (nickname, avatar, join date, sessions, online)
+// No personal info (no email, phone, real name, chip counts) exposed.
+router.get('/members', authMiddleware, async (req, res) => {
+  try {
+    // Fetch all non-banned users with public fields
+    const { data: users, error } = await supabaseAdmin
+      .from('users')
+      .select('id, username, nickname, avatar_url, created_at')
+      .eq('is_banned', false)
+      .order('created_at', { ascending: false });
+
+    if (error) return res.status(500).json({ error: error.message });
+
+    // Fetch session counts for all users
+    const { data: statsRows } = await supabaseAdmin
+      .from('player_stats')
+      .select('user_id, sessions_played');
+
+    const statsMap = new Map((statsRows || []).map(s => [s.user_id, s.sessions_played]));
+
+    // Check who is currently connected via socket
+    let onlineSet = new Set();
+    try {
+      const { userSockets } = require('../socket/handlers');
+      onlineSet = new Set(userSockets.keys());
+    } catch {}
+
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+    const members = (users || []).map(u => {
+      const d = new Date(u.created_at);
+      return {
+        displayName: u.nickname || u.username,
+        avatarUrl: u.avatar_url || null,
+        memberSince: `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`,
+        sessionsPlayed: statsMap.get(u.id) || 0,
+        isOnline: onlineSet.has(u.id)
+      };
+    });
+
+    res.json({ members, total: members.length });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/admin/leaderboard/reset  (admin only — wipes player_stats)
 router.post('/admin/leaderboard/reset', authMiddleware, adminMiddleware, async (req, res) => {
   try {

@@ -3274,4 +3274,4 @@ async function preloadActiveGames(io) {
   }
 }
 
-module.exports = { setupSocketHandlers, preloadActiveGames, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, pendingMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats, tableSpectators, buildTableOverview };
+module.exports = { setupSocketHandlers, preloadActiveGames, activeGames, activeTournaments, sessionRake, adminNotifs, railQueue, tableRequests, bannedUsers, broadcastMessages, pendingMessages, playerReplies, tableJackpots, pendingJackpotPayouts, awardTableJackpot, getAllJackpotState, broadcastJackpotState, getAdminSockets, tableMicMuted, tablePttMode, tableMicStatus, tableWaitlists, tableStats, getTableStats, tableSpectators, buildTableOverview, userSockets };
