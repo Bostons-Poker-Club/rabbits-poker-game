@@ -425,15 +425,12 @@ function connect() {
     }, 500);
     if (spectateMode) {
       socket.emit('admin:spectate', { tableId });
-      checkMicPermission();
     } else {
-      console.log('[join] Player attempting to join table:', tableId, user.id);
-      console.log('[join] Table found in activeGames: (server-side check pending)');
+      console.log('[join] Starting join for user:', user.id, 'table:', tableId);
       socket.emit('join_table', { tableId, buyInChips: buyIn });
-      checkMicPermission();
       renderHostControls();
-      // If joined_table doesn't arrive within 15s, show a clear error
-      _joinTimeoutId = setTimeout(_handleJoinTimeout, 15000);
+      // If joined_table doesn't arrive within 20s, show a clear error
+      _joinTimeoutId = setTimeout(_handleJoinTimeout, 20000);
     }
   });
 
@@ -447,7 +444,7 @@ function connect() {
   socket.on('joined_table', ({ seatNumber, chips, tableName, feltColor }) => {
     clearTimeout(_joinTimeoutId);
     _joinTimeoutId = null;
-    console.log('[join] Player seated successfully at seat:', seatNumber);
+    console.log('[join] Sending joined_table to player — seat:', seatNumber, 'chips:', chips, 'table:', tableName);
     toast(`Joined seat ${seatNumber} with ${fmt(chips)} chips`);
     document.getElementById('hdr-chips').textContent = fmt(chips);
     if (tableName) document.getElementById('hdr-table-name').textContent = tableName;
@@ -2063,30 +2060,36 @@ function _expandCamVideo(vid, userId) {
 function _showCamPrompt() {
   if (camStream) return;
   if (localStorage.getItem('rp_cam_opt_in') === '1') { _camEnable(); return; }
-  if (sessionStorage.getItem('rp_cam_skip')) return;
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.id = 'cam-prompt-modal';
-  modal.innerHTML = `
-    <div class="modal" style="max-width:380px;text-align:center;padding:28px 24px">
-      <div style="font-size:3rem;margin-bottom:10px">📸</div>
-      <h3 style="color:var(--gold);margin:0 0 8px">Enable Camera?</h3>
-      <p style="color:var(--text-dim);font-size:.88rem;margin:0 0 22px">Other players can see you during the game.<br>You can turn it off anytime.</p>
-      <div style="display:flex;gap:12px;justify-content:center">
-        <button class="btn btn-outline" onclick="_camPromptSkip()">Skip</button>
-        <button class="btn btn-gold" onclick="_camPromptEnable()">📷 Enable Camera</button>
-      </div>
-    </div>`;
-  document.body.appendChild(modal);
+  // Persisted skip: localStorage so the choice survives browser restart
+  if (localStorage.getItem('rp_cam_skip') === '1') return;
+  if (document.getElementById('cam-prompt-banner')) return;
+
+  // Non-blocking banner at the bottom — never covers the table
+  const banner = document.createElement('div');
+  banner.id = 'cam-prompt-banner';
+  banner.style.cssText = [
+    'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
+    'z-index:8000;background:rgba(10,20,14,.96);border:1px solid rgba(200,168,75,.4)',
+    'border-radius:12px;padding:12px 18px;display:flex;align-items:center',
+    'gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.6);max-width:92vw;font-size:.88rem'
+  ].join(';');
+  banner.innerHTML = `
+    <span style="color:var(--text-dim)">📷 Share your camera?</span>
+    <button class="btn btn-sm btn-outline" onclick="_camPromptSkip()" style="font-size:.78rem;padding:4px 10px">Not now</button>
+    <button class="btn btn-sm btn-gold"    onclick="_camPromptEnable()" style="font-size:.78rem;padding:4px 10px">Enable</button>`;
+  document.body.appendChild(banner);
+
+  // Auto-dismiss after 8s if the player doesn't respond
+  setTimeout(() => _camPromptSkip(false), 8000);
 }
 
-function _camPromptSkip() {
-  sessionStorage.setItem('rp_cam_skip', '1');
-  document.getElementById('cam-prompt-modal')?.remove();
+function _camPromptSkip(persist = true) {
+  if (persist) localStorage.setItem('rp_cam_skip', '1');
+  document.getElementById('cam-prompt-banner')?.remove();
 }
 
 function _camPromptEnable() {
-  document.getElementById('cam-prompt-modal')?.remove();
+  document.getElementById('cam-prompt-banner')?.remove();
   localStorage.setItem('rp_cam_opt_in', '1'); // auto-enable on future joins
   _camEnable();
 }

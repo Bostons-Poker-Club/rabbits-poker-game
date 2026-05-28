@@ -724,6 +724,7 @@ function setupSocketHandlers(io) {
 
         // Get or create game
         let game = activeGames.get(tableId);
+        console.log('[join] Game found:', !!game, '— tableId:', tableId, 'activeGames.size:', activeGames.size);
         console.log('[join_table] activeGames lookup — found:', !!game, 'tableId:', tableId, 'activeGames.size:', activeGames.size);
         if (!game) {
           const { rakePercent, rakeCap } = getRakeConfig(table.stakes_small_blind, table.stakes_big_blind);
@@ -827,6 +828,7 @@ function setupSocketHandlers(io) {
         socket.currentTableId = tableId;
 
         console.log('[join] Player seated successfully at seat:', finalSeat, '— tableId:', tableId, 'userId:', userId, 'chips:', chips);
+        console.log('[join] Sending joined_table to player — tableId:', tableId, 'seat:', finalSeat, 'chips:', chips);
         console.log('[join_table] EMITTING joined_table — tableId:', tableId, 'seat:', finalSeat, 'chips:', chips, 'userId:', userId);
         socket.emit('joined_table', { tableId, tableName: game.tableName || tableId, seatNumber: finalSeat, chips, feltColor: game.feltColor || '#1a5c2a' });
         broadcastGameState(io, tableId, game);
