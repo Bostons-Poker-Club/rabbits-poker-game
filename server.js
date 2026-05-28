@@ -41,9 +41,13 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 
 // HTTPS redirect — must be before all other middleware so no request is
 // processed over plain HTTP. Health check above is the only exception.
+// Guard: only fire in production AND when not on localhost, to avoid loops
+// if NODE_ENV is accidentally set to production in a local dev environment.
 if (process.env.NODE_ENV === 'production') {
   app.use((req, res, next) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
+    const proto = req.header('x-forwarded-proto');
+    const host  = req.hostname;
+    if (proto !== 'https' && host !== 'localhost' && host !== '127.0.0.1') {
       return res.redirect(301, `https://${req.headers.host}${req.url}`);
     }
     next();

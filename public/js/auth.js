@@ -2,9 +2,26 @@
 
 const API = '';
 
-// Auth state is stored in localStorage so sessions survive page refresh and tab
-// close/reopen. The session timeout modal enforces idle logout for security.
-function getToken() { return localStorage.getItem('rp_token'); }
+// Auth state stored in localStorage (persists across refresh/tab-close).
+// Falls back to sessionStorage for browsers that block localStorage in private
+// mode (old iOS Safari, strict Firefox ETP) — keeps incognito working.
+function _lsSet(k, v) {
+  try { localStorage.setItem(k, v); return true; } catch (_) {}
+  try { sessionStorage.setItem(k, v); } catch (_) {}
+}
+function _lsGet(k) {
+  try {
+    const v = localStorage.getItem(k);
+    if (v != null) return v;
+  } catch (_) {}
+  try { return sessionStorage.getItem(k); } catch (_) { return null; }
+}
+function _lsDel(k) {
+  try { localStorage.removeItem(k); } catch (_) {}
+  try { sessionStorage.removeItem(k); } catch (_) {}
+}
+
+function getToken() { return _lsGet('rp_token'); }
 
 function decodeJwt(token) {
   try {
@@ -13,7 +30,7 @@ function decodeJwt(token) {
 }
 
 function getUser() {
-  const u = localStorage.getItem('rp_user');
+  const u = _lsGet('rp_user');
   const stored = u ? JSON.parse(u) : null;
   if (!stored) return null;
   // Always derive isAdmin from the JWT payload — source of truth
@@ -25,19 +42,21 @@ function getUser() {
   };
 }
 function saveAuth(token, user) {
-  localStorage.setItem('rp_token', token);
-  localStorage.setItem('rp_user', JSON.stringify(user));
+  _lsSet('rp_token', token);
+  _lsSet('rp_user', JSON.stringify(user));
 }
 function clearAuth() {
-  localStorage.removeItem('rp_token');
-  localStorage.removeItem('rp_user');
+  _lsDel('rp_token');
+  _lsDel('rp_user');
 }
 function requireAuth() {
-  if (!getToken()) window.location.href = '/index.html';
+  // replace() instead of href so the login page doesn't push onto history —
+  // that would let the back button create a redirect loop.
+  if (!getToken()) window.location.replace('/index.html');
 }
 function logout() {
   clearAuth();
-  window.location.href = '/index.html';
+  window.location.replace('/index.html');
 }
 
 async function apiFetch(path, options = {}) {
@@ -121,7 +140,7 @@ async function register(username, email, password, nickname, phone, full_name) {
       try { window.socket.emit('leave_table'); } catch (_) {}
     }
     clearAuth();
-    window.location.href = '/index.html?reason=timeout';
+    window.location.replace('/index.html?reason=timeout');
   }
 
   function _reset() {
