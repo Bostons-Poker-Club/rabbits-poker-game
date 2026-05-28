@@ -1702,7 +1702,7 @@ input, select, textarea { font-family: inherit; }
     height: 90%;
     max-width: 85vw;
     max-height: 75dvh;
-    margin-top: -15px;
+    margin-top: -35px;
   }
 
   /* Seats: tighter inset so top seats don't extend into the header */
@@ -1731,6 +1731,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page .action-area {
     display: flex;
     flex-direction: row;
+    flex-wrap: nowrap;
     flex: 1;
     gap: 3px;
     align-items: stretch;
@@ -1866,18 +1867,6 @@ input, select, textarea { font-family: inherit; }
     pointer-events: none;
   }
   .chat-bubble-badge.visible { display: flex; }
-
-  /* Force action buttons into a horizontal row regardless of global overrides */
-  body.table-page .action-area {
-    display: flex !important;
-    flex-direction: row !important;
-    flex-wrap: nowrap !important;
-    width: 100% !important;
-  }
-  body.table-page .action-btn {
-    flex: 1 !important;
-    min-width: 0 !important;
-  }
 
   /* Hide admin cam overlay and other players' camera feeds on mobile */
   #admin-cam-overlay { display: none !important; }
