@@ -39,8 +39,24 @@ app.set('trust proxy', 1);
 // directly over HTTP, so a redirect here would return 301 instead of 200.
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// HTTPS redirect — must be before all other middleware so no request is
+// processed over plain HTTP. Health check above is the only exception.
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      return res.redirect(301, `https://${req.headers.host}${req.url}`);
+    }
+    next();
+  });
+}
+
 // Security headers via helmet
 app.use(helmet({
+  // HSTS: tell browsers to always use HTTPS for the next year
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true
+  },
   contentSecurityPolicy: {
     directives: {
       defaultSrc:  ["'self'"],
@@ -56,16 +72,6 @@ app.use(helmet({
   },
   crossOriginEmbedderPolicy: false,  // needed for some browser APIs used (WebRTC, AudioContext)
 }));
-
-// HTTPS redirect in production (Railway terminates TLS at proxy)
-if (process.env.NODE_ENV === 'production') {
-  app.use((req, res, next) => {
-    if (req.header('x-forwarded-proto') !== 'https') {
-      return res.redirect(301, `https://${req.headers.host}${req.url}`);
-    }
-    next();
-  });
-}
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
