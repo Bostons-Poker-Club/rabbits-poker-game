@@ -1173,6 +1173,8 @@ function setupSocketHandlers(io) {
       if (!isAdmin) return;
       socket.join(tId);
       socket.spectatingTableId = tId;
+      // currentTableId is required by ptt:mesh_join and other table-scoped handlers
+      socket.currentTableId = tId;
       if (!tableSpectators.has(tId)) tableSpectators.set(tId, new Set());
       tableSpectators.get(tId).add(socket.id);
 
@@ -1217,6 +1219,7 @@ function setupSocketHandlers(io) {
         tableSpectators.get(tId)?.delete(socket.id);
         socket.leave(tId);
         socket.spectatingTableId = null;
+        socket.currentTableId = null;
         // No broadcast to players — admin exit is silent
       }
     });

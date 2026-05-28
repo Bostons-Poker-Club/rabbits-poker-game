@@ -897,8 +897,9 @@ function connect() {
 
   // Server sends list of existing peers at table → we are the offerer to each
   socket.on('ptt:mesh_peers', async ({ peers }) => {
-    console.log('[PTT] mesh_peers:', peers.map(p => p.username));
+    console.log('[PTT] mesh_peers received:', peers.length, 'peers:', peers.map(p => p.username));
     for (const peer of peers) {
+      console.log('[PTT] sending offer to', peer.username, peer.userId, '— micStream:', !!micStream);
       await _pttOffer(peer.userId);
     }
   });
@@ -2323,6 +2324,7 @@ async function _pttAcquireMic() {
       video: false
     });
     micStream.getAudioTracks().forEach(t => { t.enabled = false; }); // start muted
+    console.log('[MIC] Local stream tracks:', micStream.getTracks().map(t => `${t.kind}:${t.label}`));
     console.log('[PTT] mic acquired:', micStream.getAudioTracks().map(t => t.label));
     _pttShowMicReady();
     return true;
@@ -2340,6 +2342,7 @@ async function _pttAcquireMic() {
 // Acquire mic then join PTT mesh — called on joined_table
 async function _pttInit() {
   await _pttAcquireMic(); // request permission; shows banner on denial
+  console.log('[PTT] _pttInit: micStream acquired:', !!micStream, '— emitting ptt:mesh_join');
   socket.emit('ptt:mesh_join'); // join mesh regardless (can receive audio even without mic)
 }
 
@@ -2376,11 +2379,29 @@ async function startPTT(e) {
   if (!micStream) {
     const ok = await _pttAcquireMic();
     if (!ok) return;
-    // Rejoin mesh now that we have a mic track to include in the SDP
+    // Rejoin mesh with the new mic track included in the SDP
     _pttCloseMesh();
     socket.emit('ptt:mesh_join');
-    // Wait for ICE negotiation (TURN can take up to ~1s)
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 2000));
+  } else if (pttPeers.size === 0) {
+    // Mic was acquired but no peers connected (e.g. admin spectate mesh_join was
+    // ignored before the server fix, or peers joined while this client was offline).
+    console.warn('[PTT] micStream exists but no peer connections — rejoining mesh');
+    _pttCloseMesh();
+    socket.emit('ptt:mesh_join');
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  const [audioTrack] = micStream?.getAudioTracks() || [];
+  console.log('[MIC] Local stream tracks:', micStream?.getTracks().map(t => `${t.kind}:${t.label}`));
+  console.log('[MIC] Audio track enabled:', audioTrack?.enabled, 'readyState:', audioTrack?.readyState);
+  for (const [pid, pc] of pttPeers) {
+    const senders = pc.getSenders();
+    const audioSender = senders.find(s => s.track?.kind === 'audio');
+    console.log('[MIC] Senders for peer', pid, ':', senders.map(s => s.track?.kind || 'null'));
+    if (audioSender && audioSender.track) {
+      audioSender.track.enabled = true;
+    }
   }
 
   micStream.getAudioTracks().forEach(t => { t.enabled = true; });
@@ -2393,7 +2414,10 @@ async function startPTT(e) {
 
 function stopPTT() {
   if (!pttActive) return;
-  if (micStream) micStream.getAudioTracks().forEach(t => { t.enabled = false; });
+  if (micStream) {
+    micStream.getAudioTracks().forEach(t => { t.enabled = false; });
+    console.log('[MIC] Audio track disabled (PTT released)');
+  }
   pttActive = false;
   const btn = document.getElementById('ptt-btn');
   if (btn) { btn.classList.remove('speaking'); btn.textContent = '🎙 Hold to Talk'; }
