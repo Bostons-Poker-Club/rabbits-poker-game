@@ -436,7 +436,7 @@ function connect() {
       if (hhBtn) hhBtn.style.display = '';
     }
     _pttInit();
-    _camEnable();
+    _showCamPrompt();
     // Request current table stats
     socket.emit('table:get_stats', { tableId });
     // Restore chat history
@@ -1879,10 +1879,16 @@ function _getCamVideoSender(pc) {
 async function _camEnable() {
   console.log('[CAM] enabling camera...');
   try {
-    camStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
-      audio: false
-    });
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error('Timed out waiting for camera'), { name: 'TimeoutError' })), 5000)
+    );
+    camStream = await Promise.race([
+      navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+        audio: false
+      }),
+      timeout
+    ]);
     camEnabled = true;
     const [videoTrack] = camStream.getVideoTracks();
     console.log('[CAM] got video track:', videoTrack?.label, 'readyState:', videoTrack?.readyState);
@@ -1903,10 +1909,18 @@ async function _camEnable() {
     socket?.emit('cam:state_change', { enabled: true });
   } catch (err) {
     console.error('[CAM] getUserMedia error:', err.name, err.message);
+    camStream = null;
+    camEnabled = false;
+    // Ensure avatars show instead of a blank/loading state
+    _updateSeatVideos();
     if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-      toast('Camera permission denied — check browser settings', 'error');
+      toast('Camera access denied — click 📷 to retry', 'error');
+    } else if (err.name === 'TimeoutError') {
+      toast('Camera timed out — click 📷 to retry', 'error');
+    } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+      console.warn('[CAM] no camera device found — showing avatar');
     } else {
-      toast('Camera error: ' + err.message, 'error');
+      toast('Camera unavailable — click 📷 to retry', 'error');
     }
   }
 }
@@ -1972,7 +1986,6 @@ function _setAvatarVideo(avatarEl, stream, muted) {
     vid.autoplay = true;   vid.setAttribute('autoplay', '');
     vid.playsInline = true; vid.setAttribute('playsinline', '');
     if (muted) { vid.muted = true; vid.setAttribute('muted', ''); }
-    vid.onplaying = () => console.log(`[CAM] video playing for uid=${uid}`);
     vid.onclick = () => _expandCamVideo(vid, avatarEl.dataset.camUid);
     avatarEl.appendChild(vid);
   }
@@ -1980,8 +1993,12 @@ function _setAvatarVideo(avatarEl, stream, muted) {
     vid.srcObject = stream;
     console.log(`[CAM] set srcObject for uid=${uid}`);
   }
-  // Add class after paint so CSS opacity transition fires (avatar fades out, video fades in)
-  requestAnimationFrame(() => avatarEl.classList.add('has-video'));
+  // Only hide the avatar once the video frame is actually rendering — prevents
+  // a blank/loading circle if the stream exists but video hasn't started yet.
+  vid.onplaying = () => {
+    console.log(`[CAM] video playing for uid=${uid}`);
+    avatarEl.classList.add('has-video');
+  };
   vid.play().catch(err => console.warn(`[CAM] play() failed for uid=${uid}:`, err.message));
 }
 
@@ -2155,9 +2172,24 @@ function _pttCreatePC(peerId, addTrackNow = true) {
   };
 
   pc.onconnectionstatechange = () => console.log(`[PTT] ${peerId} connection: ${pc.connectionState}`);
+
+  // Close the peer connection if ICE hasn't connected within 10 seconds
+  const iceTimeout = setTimeout(() => {
+    const state = pc.iceConnectionState;
+    if (state !== 'connected' && state !== 'completed' && state !== 'closed') {
+      console.warn(`[PTT] ICE timeout with ${peerId} (state: ${state}) — closing`);
+      pc.close();
+      pttPeers.delete(peerId);
+    }
+  }, 10000);
+
   pc.oniceconnectionstatechange = () => {
     console.log(`[PTT] ${peerId} ICE: ${pc.iceConnectionState}`);
+    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+      clearTimeout(iceTimeout);
+    }
     if (pc.iceConnectionState === 'failed') {
+      clearTimeout(iceTimeout);
       console.warn(`[PTT] ICE failed with ${peerId} — attempting restart`);
       pc.restartIce();
     }
