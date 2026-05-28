@@ -2,9 +2,9 @@
 
 const API = '';
 
-// Auth state is stored in sessionStorage so each browser tab maintains its own
-// independent login session — admin in one tab, player in another, no conflicts.
-function getToken() { return sessionStorage.getItem('rp_token'); }
+// Auth state is stored in localStorage so sessions survive page refresh and tab
+// close/reopen. The session timeout modal enforces idle logout for security.
+function getToken() { return localStorage.getItem('rp_token'); }
 
 function decodeJwt(token) {
   try {
@@ -13,7 +13,7 @@ function decodeJwt(token) {
 }
 
 function getUser() {
-  const u = sessionStorage.getItem('rp_user');
+  const u = localStorage.getItem('rp_user');
   const stored = u ? JSON.parse(u) : null;
   if (!stored) return null;
   // Always derive isAdmin from the JWT payload — source of truth
@@ -25,12 +25,12 @@ function getUser() {
   };
 }
 function saveAuth(token, user) {
-  sessionStorage.setItem('rp_token', token);
-  sessionStorage.setItem('rp_user', JSON.stringify(user));
+  localStorage.setItem('rp_token', token);
+  localStorage.setItem('rp_user', JSON.stringify(user));
 }
 function clearAuth() {
-  sessionStorage.removeItem('rp_token');
-  sessionStorage.removeItem('rp_user');
+  localStorage.removeItem('rp_token');
+  localStorage.removeItem('rp_user');
 }
 function requireAuth() {
   if (!getToken()) window.location.href = '/index.html';

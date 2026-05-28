@@ -662,11 +662,12 @@ function setupSocketHandlers(io) {
         } else {
           const minBuyIn = getMinBuyIn(table.stakes_small_blind, table.stakes_big_blind, table.game_type);
 
-          // Check for a recent seat record (within 2 hours) — if found, this is a rejoin
-          // after a server restart and we skip the 0-chips guard; restore chips from the seat record
+          // Always check for a recent seat record first — if found, this player is
+          // returning to their seat (page refresh, server restart) and chips must be
+          // restored from DB rather than deducted again from their bank balance.
           let isRejoin = false;
           let rejoinChips = 0;
-          if (!isLocalAdmin && user.chips <= 0) {
+          if (!isLocalAdmin) {
             try {
               const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
               const { data: seatRecord } = await supabaseAdmin
@@ -681,7 +682,7 @@ function setupSocketHandlers(io) {
                 rejoinChips = seatRecord.chips_on_table;
               }
             } catch (_) {}
-            if (!isRejoin) {
+            if (!isRejoin && user.chips <= 0) {
               return socket.emit('error', { message: 'You have 0 chips. Contact the admin to receive chips before joining a table.' });
             }
           }
@@ -3023,6 +3024,13 @@ async function persistHandResult(tableId, result) {
           });
         }
       }
+
+      // Sync each player's current chip count to table_seats so a server restart
+      // can restore accurate stacks rather than stale buy-in amounts.
+      const seatUpdates = Array.from(game.players.values()).map(p =>
+        supabaseAdmin.from('table_seats').update({ chips_on_table: p.chips }).eq('table_id', tableId).eq('user_id', p.userId)
+      );
+      await Promise.allSettled(seatUpdates);
     }
   } catch {}
 }
@@ -3220,6 +3228,43 @@ async function preloadActiveGames(io) {
 
       activeGames.set(tableId, game);
       setupGameWatchdog(io, tableId, game);
+
+      // Restore seated players from table_seats so reconnect shortcut fires on
+      // player refresh — avoids double chip deduction after server restart.
+      try {
+        const fourHoursAgo = new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString();
+        const { data: seats } = await supabaseAdmin
+          .from('table_seats')
+          .select('user_id, seat_number, chips_on_table')
+          .eq('table_id', tableId)
+          .gte('updated_at', fourHoursAgo)
+          .gt('chips_on_table', 0);
+
+        if (seats?.length) {
+          const userIds = seats.map(s => s.user_id);
+          const { data: dbUsers } = await supabaseAdmin
+            .from('users')
+            .select('id, username, avatar_url, is_host, is_admin')
+            .in('id', userIds);
+          const userMap = new Map((dbUsers || []).map(u => [u.id, u]));
+
+          for (const seat of seats) {
+            const u = userMap.get(seat.user_id);
+            if (!u) continue;
+            try {
+              const player = game.addPlayer(seat.user_id, u.username, seat.chips_on_table, seat.seat_number);
+              player.isConnected = false;
+              playerProfiles.set(seat.user_id, { avatarUrl: u.avatar_url || null, isAdmin: !!u.is_admin, isHost: !!u.is_host });
+            } catch (e) {
+              console.warn('[preload] Could not restore player', seat.user_id, 'seat', seat.seat_number, '—', e.message);
+            }
+          }
+          console.log(`[startup] Restored ${seats.length} player(s) to table ${tableId}`);
+        }
+      } catch (seatErr) {
+        console.warn('[startup] Failed to restore seats for table', tableId, '—', seatErr.message);
+      }
+
       loaded++;
     }
 
