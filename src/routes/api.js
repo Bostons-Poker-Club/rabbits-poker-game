@@ -1072,16 +1072,19 @@ router.get('/admin/players', authMiddleware, adminMiddleware, async (req, res) =
     ]);
     const tIds = new Set((tpRows || []).map(r => r.user_id));
     const cIds = new Set((txRows || []).map(r => r.user_id));
+    const { userSockets } = require('../socket/handlers');
     res.json((data || []).map(p => ({
       ...p,
       is_host: hostSet.has(p.id),
+      isOnline: userSockets.has(p.id),
       participation_type: tIds.has(p.id) && cIds.has(p.id) ? 'both'
                         : tIds.has(p.id) ? 'tournament'
                         : cIds.has(p.id) ? 'cash'
                         : 'none'
     })));
   } catch {
-    res.json((data || []).map(p => ({ ...p, is_host: hostSet.has(p.id) })));
+    const { userSockets } = require('../socket/handlers');
+    res.json((data || []).map(p => ({ ...p, is_host: hostSet.has(p.id), isOnline: userSockets.has(p.id) })));
   }
 });
 
@@ -1610,20 +1613,22 @@ router.get('/admin/messages', authMiddleware, adminMiddleware, (req, res) => {
 
 // Send a broadcast message to all connected sockets (or a specific user)
 router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, res) => {
-  const { message, targetUserId } = req.body;
+  const { message, targetUserIds } = req.body;
   if (!message || !message.trim()) return res.status(400).json({ error: 'Message is required' });
 
   const io = req.app.get('io');
-  const { broadcastMessages } = require('../socket/handlers');
+  const { broadcastMessages, pendingMessages } = require('../socket/handlers');
 
-  // Build next sequence ID
+  // targetUserIds: null or [] = broadcast to all; [uid, ...] = targeted
+  const isTargeted = Array.isArray(targetUserIds) && targetUserIds.length > 0;
+
   const id = Date.now();
   const msg = {
     id,
     from: req.user.username,
     message: message.trim().slice(0, 500),
-    targetUserId: targetUserId || null,
-    targetAll: !targetUserId,
+    targetUserIds: isTargeted ? targetUserIds : null,
+    targetAll: !isTargeted,
     sentAt: Date.now()
   };
 
@@ -1631,25 +1636,26 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
   broadcastMessages.unshift(msg);
   if (broadcastMessages.length > 200) broadcastMessages.pop();
 
-  console.log(`[broadcast/api] "${req.user.username}" → ${targetUserId ? 'uid=' + targetUserId : 'ALL'} | "${msg.message}"`);
+  console.log(`[broadcast/api] "${req.user.username}" → ${isTargeted ? `${targetUserIds.length} users` : 'ALL'} | "${msg.message}"`);
 
-  const { pendingMessages } = require('../socket/handlers');
   let delivered = 0;
   let queued = 0;
   if (io) {
-    if (targetUserId) {
-      let sent = false;
-      for (const [, s] of io.sockets.sockets) {
-        if (s.user && s.user.id === targetUserId) {
-          s.emit('broadcast_message', msg);
-          delivered++;
-          sent = true;
+    if (isTargeted) {
+      for (const uid of targetUserIds) {
+        let sent = false;
+        for (const [, s] of io.sockets.sockets) {
+          if (s.user && s.user.id === uid) {
+            s.emit('broadcast_message', msg);
+            delivered++;
+            sent = true;
+          }
         }
-      }
-      if (!sent) {
-        if (!pendingMessages.has(targetUserId)) pendingMessages.set(targetUserId, []);
-        pendingMessages.get(targetUserId).push(msg);
-        queued++;
+        if (!sent) {
+          if (!pendingMessages.has(uid)) pendingMessages.set(uid, []);
+          pendingMessages.get(uid).push(msg);
+          queued++;
+        }
       }
     } else {
       // Send to every connected socket — no exceptions, no filtering
@@ -1661,7 +1667,7 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
     console.warn('[broadcast/api] io not available on app');
   }
 
-  // Email + SMS all players (broadcast only — not for targeted single-user messages)
+  // Email + SMS all players (broadcast only — not for targeted messages)
   let emailsSent = 0;
   let smsSent = 0;
   let emailRecipients = [];
@@ -1682,8 +1688,8 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
 
     const others = (allUsers || []).filter(u => u.id !== req.user.id);
 
-    // Queue offline players for banner on next login
-    if (!targetUserId) {
+    // Queue offline players for banner on next login (broadcast only)
+    if (!isTargeted) {
       for (const u of others.filter(u => !onlineIds.has(u.id))) {
         if (!pendingMessages.has(u.id)) pendingMessages.set(u.id, []);
         pendingMessages.get(u.id).push(msg);
@@ -1691,8 +1697,8 @@ router.post('/admin/send-message', authMiddleware, adminMiddleware, async (req, 
       }
     }
 
-    // Only email + SMS for broadcasts, not targeted messages
-    if (!targetUserId) {
+    // Only email + SMS for full broadcasts, not targeted messages
+    if (!isTargeted) {
       emailRecipients = others.filter(u => u.email);
       smsRecipients   = others.filter(u => u.phone);
 

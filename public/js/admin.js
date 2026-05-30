@@ -655,22 +655,58 @@ async function loadMessages() {
   try {
     const list = await apiFetch('/api/admin/messages');
     renderMessages(list);
-    populateRecipientSelector();
+    buildRecipientList();
   } catch {}
 }
 
-function populateRecipientSelector() {
-  const sel = document.getElementById('msg-recipient');
-  if (!sel) return;
-  const currentOptions = Array.from(sel.options).map(o => o.value);
-  // Add any players not yet in the selector
-  for (const p of allPlayers) {
-    if (!currentOptions.includes(p.id)) {
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = `${p.username}${p.nickname ? ` "${p.nickname}"` : ''}`;
-      sel.appendChild(opt);
-    }
+function buildRecipientList() {
+  const list = document.getElementById('msg-player-list');
+  const allCb = document.getElementById('msg-all');
+  if (!list || !allCb) return;
+
+  list.innerHTML = allPlayers.filter(p => !p.is_banned).map(p => {
+    const displayName = p.nickname
+      ? `<strong style="color:var(--text)">${esc(p.nickname)}</strong> <span style="color:var(--text-dim);font-size:.76rem">${esc(p.username)}</span>`
+      : `<span style="color:var(--text)">${esc(p.username)}</span>`;
+    const dot = p.isOnline
+      ? `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#2ecc71;flex-shrink:0" title="Online"></span>`
+      : `<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#555;flex-shrink:0" title="Offline"></span>`;
+    return `<label style="display:flex;align-items:center;gap:8px;padding:3px 4px;cursor:pointer;border-radius:4px;transition:background .1s" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+      <input type="checkbox" class="msg-player-cb" value="${esc(p.id)}" checked style="accent-color:var(--chip-green);width:13px;height:13px;flex-shrink:0">
+      ${dot}
+      <span style="font-size:.83rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${displayName}</span>
+    </label>`;
+  }).join('');
+
+  // Wire individual checkboxes
+  list.querySelectorAll('.msg-player-cb').forEach(cb => {
+    cb.addEventListener('change', _updateRecipientCount);
+  });
+
+  // Wire Select All
+  allCb.addEventListener('change', function () {
+    list.querySelectorAll('.msg-player-cb').forEach(cb => { cb.checked = this.checked; });
+    _updateRecipientCount();
+  });
+
+  _updateRecipientCount();
+}
+
+function _updateRecipientCount() {
+  const allCb = document.getElementById('msg-all');
+  const cbs = Array.from(document.querySelectorAll('.msg-player-cb'));
+  const checked = cbs.filter(cb => cb.checked);
+  const countEl = document.getElementById('msg-selected-count');
+
+  if (cbs.length === 0 || checked.length === cbs.length) {
+    if (countEl) countEl.textContent = 'All players';
+    if (allCb) { allCb.checked = true; allCb.indeterminate = false; }
+  } else if (checked.length === 0) {
+    if (countEl) countEl.textContent = 'None selected';
+    if (allCb) { allCb.checked = false; allCb.indeterminate = false; }
+  } else {
+    if (countEl) countEl.textContent = `${checked.length} player${checked.length !== 1 ? 's' : ''} selected`;
+    if (allCb) { allCb.checked = false; allCb.indeterminate = true; }
   }
 }
 
@@ -684,12 +720,16 @@ function renderMessages(list) {
   el.innerHTML = list.map(m => {
     const time = new Date(m.sentAt).toLocaleTimeString();
     let targetLabel;
-    if (m.targetAll) {
+    if (m.targetAll || !m.targetUserIds?.length) {
       targetLabel = '<span style="color:var(--gold)">All Players</span>';
     } else {
-      const p = allPlayers.find(pl => pl.id === m.targetUserId);
-      const name = p ? (p.nickname ? `${p.username} "${p.nickname}"` : p.username) : (m.targetUserId || 'Unknown');
-      targetLabel = `<span style="color:var(--chip-green)">${esc(name)}</span>`;
+      const names = m.targetUserIds.map(id => {
+        const p = allPlayers.find(pl => pl.id === id);
+        return p ? (p.nickname || p.username) : (id.slice(0, 8) + '…');
+      });
+      const displayNames = names.slice(0, 3).map(n => esc(n)).join(', ');
+      const extra = names.length > 3 ? ` +${names.length - 3} more` : '';
+      targetLabel = `<span style="color:var(--chip-green)" title="${names.map(n => esc(n)).join(', ')}">${displayNames}${extra} (${names.length})</span>`;
     }
 
     let deliveryHtml = '';
@@ -729,7 +769,13 @@ function renderMessages(list) {
 }
 
 async function sendAdminMessage() {
-  const targetUserId = document.getElementById('msg-recipient').value || null;
+  const cbs = Array.from(document.querySelectorAll('.msg-player-cb'));
+  const checked = cbs.filter(cb => cb.checked);
+  const isAll = cbs.length === 0 || checked.length === cbs.length;
+  const targetUserIds = isAll ? null : checked.map(cb => cb.value);
+
+  if (!isAll && targetUserIds.length === 0) return toast('Select at least one player', 'error');
+
   const message = document.getElementById('msg-text').value.trim();
   if (!message) return toast('Enter a message', 'error');
   const status = document.getElementById('msg-status');
@@ -737,11 +783,12 @@ async function sendAdminMessage() {
   try {
     const result = await apiFetch('/api/admin/send-message', {
       method: 'POST',
-      body: { message, targetUserId }
+      body: { message, targetUserIds }
     });
     console.log('[admin] send-message result:', result);
     document.getElementById('msg-text').value = '';
     if (status) {
+      const recipientCount = isAll ? 'all players' : `${targetUserIds.length} player${targetUserIds.length !== 1 ? 's' : ''}`;
       const d = result.delivered || 0;
       const q = result.queued || 0;
       const e = result.emailsSent || 0;
@@ -750,7 +797,7 @@ async function sendAdminMessage() {
       if (q > 0) parts.push(`${q} queued`);
       if (e > 0) parts.push(`${e} emails`);
       if (s > 0) parts.push(`${s} SMS`);
-      status.textContent = `Message delivered — ${parts.join(' · ')}`;
+      status.textContent = `Message sent to ${recipientCount} — ${parts.join(' · ')}`;
       setTimeout(() => { status.textContent = ''; }, 8000);
     }
     loadMessages();
@@ -939,7 +986,7 @@ async function loadPlayers() {
     allPlayers = await apiFetch('/api/admin/players');
     renderPlayers(allPlayers);
     document.getElementById('stat-players').textContent = allPlayers.length;
-    populateRecipientSelector();
+    buildRecipientList();
     populatePromoteSelector();
     _loadNoteCounts();
   } catch (e) { toast(e.message, 'error'); }

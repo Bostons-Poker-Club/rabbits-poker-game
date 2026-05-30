@@ -495,10 +495,19 @@
     <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px">
       <h3 style="color:var(--chip-green);margin:0 0 14px;font-size:.95rem">Send Message</h3>
       <div class="form-group">
-        <label>Recipient</label>
-        <select id="msg-recipient" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">
-          <option value="">All Players (Broadcast)</option>
-        </select>
+        <label style="display:flex;align-items:center;gap:8px">
+          Recipients
+          <span id="msg-selected-count" style="color:var(--gold);font-weight:600;font-size:.78rem;background:rgba(200,168,75,.12);border:1px solid rgba(200,168,75,.3);border-radius:10px;padding:1px 8px">All players</span>
+        </label>
+        <div id="msg-recipients-wrap" style="max-height:180px;overflow-y:auto;background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:var(--radius);padding:8px 10px">
+          <label style="display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:6px">
+            <input type="checkbox" id="msg-all" checked style="accent-color:var(--gold);width:14px;height:14px">
+            <span style="color:var(--gold);font-weight:700;font-size:.88rem">All Players</span>
+          </label>
+          <div id="msg-player-list" style="display:flex;flex-direction:column;gap:2px">
+            <div style="color:var(--text-dim);font-size:.82rem;padding:4px">Loading players…</div>
+          </div>
+        </div>
       </div>
       <div class="form-group" style="margin-top:10px">
         <label>Message</label>
