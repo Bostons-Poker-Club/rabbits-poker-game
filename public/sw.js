@@ -1,6 +1,6 @@
 'use strict';
 
-const CACHE = 'bpc-v2';
+const CACHE = 'bpc-v3';
 
 const SHELL = [
   '/index.html',
@@ -42,8 +42,10 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
-  // Never intercept API calls, socket connections, or cross-origin requests
-  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/socket.io/')) return;
+  // Never intercept API calls, auth routes, socket connections, or cross-origin requests
+  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/auth/')) return;
+  if (url.pathname.startsWith('/socket.io/')) return;
   if (url.origin !== self.location.origin) return;
 
   // Navigation requests: network-first, fall back to cached page, then offline page
