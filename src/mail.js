@@ -20,6 +20,7 @@ const TWILIO_FROM  = process.env.TWILIO_PHONE       || '';
 const TWILIO_OK    = !!(TWILIO_SID && TWILIO_TOKEN && TWILIO_FROM);
 
 let _twilio = null;
+let _twilioSuspended = false; // set true on error 20003 to stop spamming logs
 if (TWILIO_OK) {
   _twilio = require('twilio')(TWILIO_SID, TWILIO_TOKEN);
   console.log('[SMS] Twilio configured | from:', TWILIO_FROM);
@@ -95,10 +96,7 @@ async function sendAdminPush(text, title) {
 async function sendStartupTestSMS() {
   const ts = new Date().toISOString();
   await sendAdminPush(`RabbsRoom server started ${ts} — push notifications active`, 'RabbsRoom Started');
-  if (TWILIO_OK) {
-    console.log('[SMS] Sending Twilio startup test to', ADMIN_PHONE);
-    await sendPlayerSMS({ phone: ADMIN_PHONE, text: `RabbsRoom server started ${ts} — Twilio SMS working` });
-  }
+  // Twilio startup test disabled — account suspended (20003)
 }
 
 async function sendStartupTestEmail() {
@@ -198,32 +196,38 @@ async function sendPlayerSMS({ phone, text }) {
     return;
   }
 
-  if (TWILIO_OK) {
+  if (TWILIO_OK && !_twilioSuspended) {
     const truncated = text.length > 1600 ? text.slice(0, 1597) + '...' : text;
     console.log('[SMS] Twilio sending | from:', TWILIO_FROM, '| to:', e164, '| text:', truncated.substring(0, 60));
     try {
       const msg = await _twilio.messages.create({ body: truncated, from: TWILIO_FROM, to: e164 });
       console.log('[SMS] Twilio OK | sid:', msg.sid, '| status:', msg.status, '| to:', e164, '| price:', msg.price || 'pending');
+      return;
     } catch (e) {
-      console.error('[SMS] Twilio FAILED | to:', e164, '| message:', e.message, '| code:', e.code || 'n/a', '| status:', e.status || 'n/a', '| moreInfo:', e.moreInfo || 'n/a');
+      if (e.code === 20003) {
+        _twilioSuspended = true;
+        console.warn('[SMS] Twilio account suspended (20003) — disabling SMS for this session, falling back to email gateways');
+      } else {
+        console.error('[SMS] Twilio FAILED | to:', e164, '| message:', e.message, '| code:', e.code || 'n/a');
+        return;
+      }
     }
-    return;
   }
 
-  // Fallback: email-to-SMS gateways when Twilio is not configured
-  const digits10  = e164.slice(2); // strip +1
-  const truncated = text.length > 160 ? text.slice(0, 157) + '...' : text;
-  const subject   = 'RabbsRoom';
-  const vtextAddr  = `${digits10}@vtext.com`;
-  const vzwpixAddr = `${digits10}@vzwpix.com`;
-  const attAddr    = `${digits10}@mms.att.net`;
+  // Fallback: email-to-SMS gateways (Twilio not configured or suspended)
+  const digits10    = e164.slice(2); // strip +1
+  const truncated160 = text.length > 160 ? text.slice(0, 157) + '...' : text;
+  const subject     = 'RabbsRoom';
+  const vtextAddr   = `${digits10}@vtext.com`;
+  const vzwpixAddr  = `${digits10}@vzwpix.com`;
+  const attAddr     = `${digits10}@mms.att.net`;
 
   console.log('[SMS] Gateway fallback | to:', e164, '| addresses:', vtextAddr, vzwpixAddr, attAddr);
 
   const results = await Promise.allSettled([
-    _send({ from: FROM, to: vtextAddr,  subject, text: truncated }),
-    _send({ from: FROM, to: vzwpixAddr, subject, text: truncated }),
-    _send({ from: FROM, to: attAddr,    subject, text: truncated })
+    _send({ from: FROM, to: vtextAddr,  subject, text: truncated160 }),
+    _send({ from: FROM, to: vzwpixAddr, subject, text: truncated160 }),
+    _send({ from: FROM, to: attAddr,    subject, text: truncated160 })
   ]);
   console.log('[SMS] Gateway results — vtext:', results[0].status, '| vzwpix:', results[1].status, '| att:', results[2].status);
 }
