@@ -112,4 +112,20 @@ server.listen(PORT, '0.0.0.0', () => {
   sendStartupTestEmail();
   sendStartupTestSMS();
   preloadActiveGames(io).catch(err => console.error('[startup] preloadActiveGames error:', err.message));
+
+  // Self-ping every 4 minutes to prevent Railway from idling the container
+  const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
+  if (domain) {
+    const https = require('https');
+    setInterval(() => {
+      https.get(`https://${domain}/ping`, (res) => {
+        console.log('[keepalive] ping →', res.statusCode);
+      }).on('error', (err) => {
+        console.warn('[keepalive] ping failed:', err.message);
+      });
+    }, 4 * 60 * 1000);
+    console.log(`[keepalive] self-ping every 4 min → https://${domain}/ping`);
+  } else {
+    console.log('[keepalive] RAILWAY_PUBLIC_DOMAIN not set — self-ping disabled');
+  }
 });
