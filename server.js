@@ -38,6 +38,7 @@ app.set('trust proxy', 1);
 // Health check must come before HTTPS redirect — Railway probes the container
 // directly over HTTP, so a redirect here would return 301 instead of 200.
 app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/ping',   (req, res) => res.status(200).send('pong'));
 
 // HTTPS redirect — must be before all other middleware so no request is
 // processed over plain HTTP. Health check above is the only exception.
