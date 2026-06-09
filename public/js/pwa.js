@@ -1,10 +1,10 @@
 'use strict';
 
 (function () {
-  // Register the service worker
+  // Service worker disabled — unregister any previously installed workers
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js').catch(function (err) {
-      console.warn('[PWA] Service worker registration failed:', err);
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+      registrations.forEach(function (reg) { reg.unregister(); });
     });
   }
 
