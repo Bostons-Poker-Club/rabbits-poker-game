@@ -347,6 +347,13 @@
 <script src="/js/sounds.js"></script>
 <script src="/js/dealerVoice.js"></script>
 <script src="/js/table.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+    registrations.forEach(function(reg) { reg.unregister(); });
+  });
+}
+</script>
 <script src="/js/pwa.js"></script>
 <script src="/js/maintenance-banner.js"></script>
 </body>
