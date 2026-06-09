@@ -210,6 +210,7 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
     } catch {}
   }
 
+  try {
   // Try Supabase first
   const { data: user, error: dbError } = await supabaseAdmin
     .from('users').select('*').eq('username', username).single();
@@ -302,6 +303,10 @@ router.post('/auth/login', loginLimiter, async (req, res) => {
 
   await _audit(null, false, 'user_not_found');
   return res.status(401).json({ error: 'Invalid credentials' });
+  } catch (err) {
+    console.error('[login] unhandled error:', err.message);
+    return res.status(503).json({ error: 'Login service temporarily unavailable. Please try again.' });
+  }
 });
 
 // ─── 2FA Verify ────────────────────────────────────────────────────────────────
@@ -316,6 +321,8 @@ router.post('/auth/2fa/verify', async (req, res) => {
     return res.status(401).json({ error: 'Verification session expired. Please log in again.' });
   }
   if (payload.type !== 'pending_2fa') return res.status(401).json({ error: 'Invalid token type' });
+
+  try {
 
   const userId = payload.id;
   _prunePending2FA();
@@ -398,6 +405,10 @@ router.post('/auth/2fa/verify', async (req, res) => {
   const token = jwt.sign({ id: user.id, username: user.username, isAdmin: user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
   const backupCodesLeft = (user.two_fa_backup_codes || []).filter(c => !c.used).length;
   return res.json({ token, user: { id: user.id, username: user.username, email: user.email, chips: user.chips, isAdmin: user.is_admin }, backupCodesLeft });
+  } catch (err) {
+    console.error('[2fa/verify] unhandled error:', err.message);
+    return res.status(503).json({ error: 'Verification service temporarily unavailable. Please try again.' });
+  }
 });
 
 router.post('/auth/forgot-password', async (req, res) => {
