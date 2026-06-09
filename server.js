@@ -2,12 +2,8 @@
 
 // deploy trigger
 // Prevent unhandled promise rejections or uncaught exceptions from killing the process
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('[server] Unhandled Rejection at:', promise, 'reason:', reason);
-});
-process.on('uncaughtException', (err) => {
-  console.error('[server] Uncaught Exception:', err);
-});
+process.on('unhandledRejection', (err) => console.error('[crash] unhandledRejection:', err));
+process.on('uncaughtException',  (err) => console.error('[crash] uncaughtException:',  err));
 
 require('dotenv').config();
 const express = require('express');
@@ -114,18 +110,14 @@ server.listen(PORT, '0.0.0.0', () => {
   preloadActiveGames(io).catch(err => console.error('[startup] preloadActiveGames error:', err.message));
 
   // Self-ping every 4 minutes to prevent Railway from idling the container
-  const domain = process.env.RAILWAY_PUBLIC_DOMAIN;
-  if (domain) {
-    const https = require('https');
-    setInterval(() => {
-      https.get(`https://${domain}/ping`, (res) => {
-        console.log('[keepalive] ping →', res.statusCode);
-      }).on('error', (err) => {
-        console.warn('[keepalive] ping failed:', err.message);
-      });
-    }, 4 * 60 * 1000);
-    console.log(`[keepalive] self-ping every 4 min → https://${domain}/ping`);
-  } else {
-    console.log('[keepalive] RAILWAY_PUBLIC_DOMAIN not set — self-ping disabled');
-  }
+  const _pingDomain   = process.env.RAILWAY_PUBLIC_DOMAIN || `localhost:${PORT}`;
+  const _pingProtocol = process.env.RAILWAY_PUBLIC_DOMAIN ? 'https' : 'http';
+  setInterval(() => {
+    require(_pingProtocol).get(`${_pingProtocol}://${_pingDomain}/ping`, (r) => {
+      console.log('[keepalive] ping →', r.statusCode);
+    }).on('error', (err) => {
+      console.warn('[keepalive] ping failed:', err.message);
+    });
+  }, 4 * 60 * 1000);
+  console.log(`[keepalive] self-ping every 4 min → ${_pingProtocol}://${_pingDomain}/ping`);
 });
