@@ -109,15 +109,15 @@ server.listen(PORT, '0.0.0.0', () => {
   sendStartupTestSMS();
   preloadActiveGames(io).catch(err => console.error('[startup] preloadActiveGames error:', err.message));
 
-  // Self-ping every 4 minutes to prevent Railway from idling the container
-  const _pingDomain   = process.env.RAILWAY_PUBLIC_DOMAIN || `localhost:${PORT}`;
-  const _pingProtocol = process.env.RAILWAY_PUBLIC_DOMAIN ? 'https' : 'http';
+  // Self-ping every 4 minutes to prevent Railway from idling the container.
+  // Always ping localhost — Railway containers cannot reach their own public domain internally.
+  const _pingUrl = `http://localhost:${PORT}/ping`;
   setInterval(() => {
-    require(_pingProtocol).get(`${_pingProtocol}://${_pingDomain}/ping`, (r) => {
+    require('http').get(_pingUrl, (r) => {
       console.log('[keepalive] ping →', r.statusCode);
     }).on('error', (err) => {
       console.warn('[keepalive] ping failed:', err.message);
     });
   }, 4 * 60 * 1000);
-  console.log(`[keepalive] self-ping every 4 min → ${_pingProtocol}://${_pingDomain}/ping`);
+  console.log(`[keepalive] self-ping every 4 min → ${_pingUrl}`);
 });
