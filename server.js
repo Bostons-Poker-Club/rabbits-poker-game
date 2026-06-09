@@ -17,6 +17,7 @@ const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers, preloadActiveGames } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
 const { sendStartupTestEmail, sendStartupTestSMS } = require('./src/mail');
+const { runMigrations } = require('./src/db/migrate');
 const maintenance = require('./src/maintenance');
 
 const app = express();
@@ -98,26 +99,33 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-setupSocketHandlers(io);
-startFeeScheduler();
-
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🃏 Rabbits Poker running on port ${PORT}`);
-  console.log('[mail] SendGrid configured:', !!process.env.SENDGRID_API_KEY, '| from:', 'bostonspokerclub.amitureflops@gmail.com');
-  sendStartupTestEmail();
-  sendStartupTestSMS();
-  preloadActiveGames(io).catch(err => console.error('[startup] preloadActiveGames error:', err.message));
 
-  // Self-ping every 4 minutes to prevent Railway from idling the container.
-  // Always ping localhost — Railway containers cannot reach their own public domain internally.
-  const _pingUrl = `http://localhost:${PORT}/ping`;
-  setInterval(() => {
-    require('http').get(_pingUrl, (r) => {
-      console.log('[keepalive] ping →', r.statusCode);
-    }).on('error', (err) => {
-      console.warn('[keepalive] ping failed:', err.message);
+runMigrations()
+  .then(() => {
+    setupSocketHandlers(io);
+    startFeeScheduler();
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log(`🃏 Rabbits Poker running on port ${PORT}`);
+      console.log('[mail] SendGrid configured:', !!process.env.SENDGRID_API_KEY, '| from:', 'bostonspokerclub.amitureflops@gmail.com');
+      sendStartupTestEmail();
+      sendStartupTestSMS();
+      preloadActiveGames(io).catch(err => console.error('[startup] preloadActiveGames error:', err.message));
+
+      // Self-ping every 4 minutes to prevent Railway from idling the container.
+      // Always ping localhost — Railway containers cannot reach their own public domain internally.
+      const _pingUrl = `http://localhost:${PORT}/ping`;
+      setInterval(() => {
+        require('http').get(_pingUrl, (r) => {
+          console.log('[keepalive] ping →', r.statusCode);
+        }).on('error', (err) => {
+          console.warn('[keepalive] ping failed:', err.message);
+        });
+      }, 4 * 60 * 1000);
+      console.log(`[keepalive] self-ping every 4 min → ${_pingUrl}`);
     });
-  }, 4 * 60 * 1000);
-  console.log(`[keepalive] self-ping every 4 min → ${_pingUrl}`);
-});
+  })
+  .catch(err => {
+    console.error('[db] Migration failed — server cannot start:', err.message);
+    process.exit(1);
+  });

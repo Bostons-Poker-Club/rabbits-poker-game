@@ -490,10 +490,8 @@ router.post('/auth/2fa/resend', async (req, res) => {
 // ─── Health / Diagnostics ───────────────────────────────────────────────────
 
 router.get('/health', async (req, res) => {
-  const supabaseUrl = process.env.SUPABASE_URL || 'NOT SET';
-  const hasAnonKey  = !!process.env.SUPABASE_ANON_KEY && process.env.SUPABASE_ANON_KEY !== 'placeholder';
-  const hasSvcKey   = !!process.env.SUPABASE_SERVICE_KEY && process.env.SUPABASE_SERVICE_KEY !== 'placeholder';
-  const hasJwt      = !!process.env.JWT_SECRET && process.env.JWT_SECRET !== 'dev-secret-change-me';
+  const hasDb  = !!process.env.DATABASE_URL;
+  const hasJwt = !!process.env.JWT_SECRET && process.env.JWT_SECRET !== 'dev-secret-change-me';
 
   let dbStatus = 'untested';
   let userCount = null;
@@ -509,12 +507,10 @@ router.get('/health', async (req, res) => {
 
   res.json({
     status: 'ok',
-    supabaseUrl: supabaseUrl.replace(/https?:\/\//, '').split('.')[0] + '.supabase.co',
-    hasAnonKey,
-    hasSvcKey,
-    hasJwt,
     db: dbStatus,
     userCount,
+    hasDatabaseUrl: hasDb,
+    hasJwt,
     nodeVersion: process.version
   });
 });

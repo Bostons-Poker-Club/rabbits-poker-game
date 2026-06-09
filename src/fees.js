@@ -1,14 +1,15 @@
 'use strict';
-const { supabaseAdmin } = require('./db/supabase');
+
+const pool = require('./db');
 
 // In-memory set of fee-suspended user IDs for fast auth checks
 const feeSuspendedUsers = new Set();
 
 async function _loadFeeSuspended() {
   try {
-    const { data } = await supabaseAdmin.from('users').select('id').eq('fee_suspended', true);
+    const { rows } = await pool.query('SELECT id FROM users WHERE fee_suspended = TRUE');
     feeSuspendedUsers.clear();
-    if (data) data.forEach(u => feeSuspendedUsers.add(u.id));
+    rows.forEach(u => feeSuspendedUsers.add(u.id));
   } catch (e) {
     console.warn('[fees] Could not load fee-suspended users:', e.message);
   }
@@ -21,13 +22,11 @@ async function runDailyFeeCheck() {
     const todayStr = today.toISOString().slice(0, 10);
     console.log(`[fees] Daily check — ${todayStr} (day ${day})`);
 
-    // Mark overdue where next_due_date is before today
     try {
-      const result = await supabaseAdmin
-        .from('monthly_fees')
-        .update({ is_overdue: true, updated_at: new Date().toISOString() })
-        .lt('next_due_date', todayStr);
-      if (result.error) console.warn('[fees] Overdue update error:', result.error.message);
+      await pool.query(
+        `UPDATE monthly_fees SET is_overdue = TRUE, updated_at = NOW() WHERE next_due_date < $1`,
+        [todayStr]
+      );
     } catch (e) {
       console.warn('[fees] Overdue update exception:', e.message);
     }
@@ -51,11 +50,12 @@ async function _sendFeeReminders(type) {
 
     let fees = [];
     try {
-      const result = await supabaseAdmin
-        .from('monthly_fees')
-        .select('user_id, username, fee_amount, role_type')
-        .or(`${col}.is.null,${col}.lt.${cycleStart}`);
-      fees = result.data || [];
+      const { rows } = await pool.query(
+        `SELECT user_id, username, fee_amount, role_type FROM monthly_fees
+         WHERE ${col} IS NULL OR ${col} < $1`,
+        [cycleStart]
+      );
+      fees = rows;
     } catch (e) {
       console.warn('[fees] _sendFeeReminders select error:', e.message);
       return;
@@ -71,12 +71,11 @@ async function _sendFeeReminders(type) {
       try {
         let user = null;
         try {
-          const result = await supabaseAdmin
-            .from('users')
-            .select('email, phone')
-            .eq('id', fee.user_id)
-            .single();
-          user = result.data;
+          const { rows } = await pool.query(
+            'SELECT email, phone FROM users WHERE id = $1',
+            [fee.user_id]
+          );
+          user = rows[0] || null;
         } catch (e) {
           console.warn('[fees] user lookup error:', e.message);
         }
@@ -94,11 +93,10 @@ async function _sendFeeReminders(type) {
         }
 
         try {
-          const result = await supabaseAdmin
-            .from('monthly_fees')
-            .update({ [col]: new Date().toISOString() })
-            .eq('user_id', fee.user_id);
-          if (result.error) console.warn('[fees] Reminder timestamp update error:', result.error.message);
+          await pool.query(
+            `UPDATE monthly_fees SET ${col} = NOW() WHERE user_id = $1`,
+            [fee.user_id]
+          );
         } catch (e) {
           console.warn('[fees] Reminder timestamp update exception:', e.message);
         }
@@ -119,12 +117,11 @@ async function suspendOverdueAccounts() {
   try {
     let overdue = [];
     try {
-      const result = await supabaseAdmin
-        .from('monthly_fees')
-        .select('user_id, username, fee_amount')
-        .eq('is_overdue', true)
-        .eq('fee_suspended', false);
-      overdue = result.data || [];
+      const { rows } = await pool.query(
+        `SELECT user_id, username, fee_amount FROM monthly_fees
+         WHERE is_overdue = TRUE AND fee_suspended = FALSE`
+      );
+      overdue = rows;
     } catch (e) {
       console.warn('[fees] suspendOverdueAccounts select error:', e.message);
       return;
@@ -137,21 +134,17 @@ async function suspendOverdueAccounts() {
 
     for (const fee of overdue) {
       try {
-        const r1 = await supabaseAdmin
-          .from('users')
-          .update({ fee_suspended: true })
-          .eq('id', fee.user_id);
-        if (r1.error) console.warn('[fees] User suspend error:', r1.error.message);
+        await pool.query('UPDATE users SET fee_suspended = TRUE WHERE id = $1', [fee.user_id]);
       } catch (e) {
         console.warn('[fees] User suspend exception:', e.message);
       }
 
       try {
-        const r2 = await supabaseAdmin
-          .from('monthly_fees')
-          .update({ fee_suspended: true, suspended_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-          .eq('user_id', fee.user_id);
-        if (r2.error) console.warn('[fees] Fee suspend error:', r2.error.message);
+        await pool.query(
+          `UPDATE monthly_fees SET fee_suspended = TRUE, suspended_at = NOW(), updated_at = NOW()
+           WHERE user_id = $1`,
+          [fee.user_id]
+        );
       } catch (e) {
         console.warn('[fees] Fee suspend exception:', e.message);
       }
@@ -165,11 +158,9 @@ async function suspendOverdueAccounts() {
 }
 
 function startFeeScheduler() {
-  // Defer DB call so it doesn't compete with server startup / health check
   setTimeout(_loadFeeSuspended, 5000);
-  // setInterval disabled temporarily — re-enable once Supabase query compatibility confirmed
+  // setInterval disabled temporarily — re-enable once pg query compatibility confirmed
   // setInterval(runDailyFeeCheck, 6 * 60 * 60 * 1000);
-  // setTimeout(runDailyFeeCheck, 30 * 1000);
   console.log('[fees] Fee scheduler started (periodic checks disabled)');
 }
 

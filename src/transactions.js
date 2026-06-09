@@ -1,18 +1,14 @@
 'use strict';
 
-const { supabaseAdmin } = require('./db/supabase');
+const pool = require('./db');
 
 async function logTransaction({ userId, username, type, amount, tableName, paymentMethod, notes }) {
   try {
-    await supabaseAdmin.from('transactions').insert({
-      user_id: userId || null,
-      username: username || null,
-      type,
-      amount,
-      table_name: tableName || null,
-      payment_method: paymentMethod || null,
-      notes: notes || null
-    });
+    await pool.query(
+      `INSERT INTO transactions (user_id, username, type, amount, table_name, payment_method, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [userId || null, username || null, type, amount, tableName || null, paymentMethod || null, notes || null]
+    );
   } catch (e) {
     console.warn('[tx] log error:', e.message);
   }
