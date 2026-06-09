@@ -17,7 +17,7 @@ const apiRoutes = require('./src/routes/api');
 const { setupSocketHandlers, preloadActiveGames } = require('./src/socket/handlers');
 const { startFeeScheduler } = require('./src/fees');
 const { sendStartupTestEmail, sendStartupTestSMS } = require('./src/mail');
-const { runMigrations } = require('./src/db/migrate');
+const { runMigrations } = require('./src/db');
 const maintenance = require('./src/maintenance');
 
 const app = express();
