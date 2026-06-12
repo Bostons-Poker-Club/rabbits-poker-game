@@ -126,6 +126,5 @@ runMigrations()
     });
   })
   .catch(err => {
-    console.error('[db] Migration failed — server cannot start:', err.message);
-    process.exit(1);
+    console.error('[db] Migration error:', err.message);
   });
