@@ -106,8 +106,18 @@ async function runMigrations() {
     )
   `);
 
-  // Drop and recreate jackpot to fix schema (old version had UUID id)
-  await _create('jackpot (drop old)', `DROP TABLE IF EXISTS jackpot CASCADE`);
+  // Drop jackpot only if it still has the old UUID id column — one-time schema fix
+  await _create('jackpot (drop if wrong type)', `
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'jackpot' AND column_name = 'id' AND data_type = 'uuid'
+      ) THEN
+        DROP TABLE IF EXISTS jackpot CASCADE;
+      END IF;
+    END $$
+  `);
   await _create('jackpot', `
     CREATE TABLE IF NOT EXISTS jackpot (
       id                    INTEGER PRIMARY KEY,

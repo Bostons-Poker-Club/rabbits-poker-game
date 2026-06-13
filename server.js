@@ -18,6 +18,7 @@ const { setupSocketHandlers, preloadActiveGames } = require('./src/socket/handle
 const { startFeeScheduler } = require('./src/fees');
 const { sendStartupTestEmail, sendStartupTestSMS } = require('./src/mail');
 const { runMigrations } = require('./src/db');
+const { startBackupScheduler } = require('./src/backup');
 const maintenance = require('./src/maintenance');
 
 const app = express();
@@ -105,6 +106,7 @@ runMigrations()
   .then(() => {
     setupSocketHandlers(io);
     startFeeScheduler();
+    startBackupScheduler();
     server.listen(PORT, '0.0.0.0', () => {
       console.log(`🃏 Rabbits Poker running on port ${PORT}`);
       console.log('[mail] SendGrid configured:', !!process.env.SENDGRID_API_KEY, '| from:', 'bostonspokerclub.amitureflops@gmail.com');
