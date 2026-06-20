@@ -584,9 +584,17 @@ function connect() {
     toast(`✅ +${fmt(amount)} chips added to player`);
   });
 
-  socket.on('chips_received', ({ amount, from }) => {
+  socket.on('chips_received', ({ amount, from, newTotal }) => {
     toast(`🪙 +${fmt(amount)} chips added by ${from}`);
-    document.getElementById('hdr-chips').textContent = fmt((parseInt(document.getElementById('hdr-chips').textContent.replace(/,/g,'')) || 0) + amount);
+    // Update localStorage so the next join_table emit uses the correct balance
+    try {
+      const u = getUser();
+      if (u) {
+        u.chips = newTotal != null ? newTotal : (u.chips || 0) + amount;
+        localStorage.setItem('rp_user', JSON.stringify(u));
+        document.getElementById('hdr-chips').textContent = fmt(u.chips);
+      }
+    } catch (_) {}
   });
 
   socket.on('hand_ended', (result) => {

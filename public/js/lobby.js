@@ -101,8 +101,19 @@ if (typeof io !== 'undefined') {
     showToast(message);
     setTimeout(() => location.reload(), 1500);
   });
-  lobbySocket.on('chips_received', ({ amount, from }) => {
+  lobbySocket.on('chips_received', ({ amount, from, newTotal }) => {
     showToast(`🪙 ${fmtChips(amount)} chips added by ${from}`);
+    // Optimistically update localStorage immediately using newTotal from server,
+    // then confirm with a profile fetch in case anything else changed
+    try {
+      const u = getUser();
+      if (u && newTotal != null) {
+        u.chips = newTotal;
+        localStorage.setItem('rp_user', JSON.stringify(u));
+        const el = document.getElementById('header-chips');
+        if (el) el.textContent = u.isAdmin ? '♛ Admin' : fmtChips(newTotal);
+      }
+    } catch (_) {}
     setTimeout(refreshChips, 500);
   });
 
