@@ -1924,15 +1924,19 @@ async function _camEnable() {
     const [videoTrack] = camStream.getVideoTracks();
     console.log('[CAM] got video track:', videoTrack?.label, 'readyState:', videoTrack?.readyState);
     // Push video track to all existing peer connections
+    console.log(`[CAM] pushing video to ${pttPeers.size} existing peer(s)`);
     for (const [peerId, pc] of pttPeers) {
       const sender = _getCamVideoSender(pc);
+      console.log(`[CAM] peer ${peerId} — sender found: ${!!sender}, iceState: ${pc.iceConnectionState}, connState: ${pc.connectionState}`);
       if (sender) {
         try {
           await sender.replaceTrack(videoTrack);
-          console.log(`[CAM] replaceTrack sent to ${peerId}`);
+          console.log(`[CAM] replaceTrack OK → ${peerId}`);
         } catch (err) {
-          console.warn(`[CAM] replaceTrack failed for ${peerId}:`, err.message);
+          console.warn(`[CAM] replaceTrack FAILED → ${peerId}:`, err.message);
         }
+      } else {
+        console.warn(`[CAM] no video sender for ${peerId} — transceiver missing or wrong kind`);
       }
     }
     _updateCamBtn();
@@ -1999,6 +2003,7 @@ function _updateSeatVideos() {
     const enabled = peerCamEnabled.get(uid);
     const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
     const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
+    console.log(`[CAM] _updateSeatVideos remote uid=${uid} enabled=${enabled} hasLiveVideo=${hasLiveVideo} avatarEl=${!!avatarEl} tracks=${stream?.getVideoTracks().map(t => t.readyState)}`);
     if (!avatarEl) { _checkAdminCamStream(); continue; }
     if (enabled || hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
     else _clearAvatarVideo(avatarEl);
@@ -2183,18 +2188,22 @@ function _pttCreatePC(peerId, addTrackNow = true) {
 
   // Route incoming tracks — audio to the dedicated audio element, video to the seat avatar
   pc.ontrack = (e) => {
-    const stream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
+    const hasStream = !!(e.streams && e.streams[0]);
+    const stream = hasStream ? e.streams[0] : new MediaStream([e.track]);
+    console.log(`[CAM] ontrack from ${peerId}: kind=${e.track.kind} readyState=${e.track.readyState} muted=${e.track.muted} streams=${e.streams?.length} usingFallback=${!hasStream}`);
     if (e.track.kind === 'audio') {
       console.log(`[PTT] audio track from ${peerId}`);
       audio.srcObject = stream;
       audio.play().catch(err => console.warn('[PTT] autoplay blocked:', err.message));
     } else if (e.track.kind === 'video') {
-      console.log(`[CAM] video track from ${peerId}, readyState=${e.track.readyState}`);
       peerCamStreams.set(peerId, stream);
       peerCamEnabled.set(peerId, true);
+      const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${peerId}"]`);
+      console.log(`[CAM] video track from ${peerId} — avatarEl found: ${!!avatarEl}, track.muted: ${e.track.muted}`);
       _updateSeatVideos();
+      e.track.onmute   = () => console.log(`[CAM] video track MUTED from ${peerId}`);
       e.track.onunmute = () => {
-        console.log(`[CAM] video track unmuted (live) from ${peerId}`);
+        console.log(`[CAM] video track UNMUTED (live) from ${peerId}`);
         peerCamEnabled.set(peerId, true);
         _updateSeatVideos();
       };
@@ -2295,15 +2304,24 @@ async function _pttAnswer(fromUserId, sdp) {
       }
     }
     // Set up video transceiver on answerer side
-    const videoTransceiver = pc.getTransceivers().find(t => t.receiver.track.kind === 'video');
+    const allTransceivers = pc.getTransceivers();
+    console.log(`[CAM] answer transceivers for ${fromUserId}:`, allTransceivers.map(t => `${t.receiver.track.kind}:${t.direction}`));
+    const videoTransceiver = allTransceivers.find(t => t.receiver.track.kind === 'video');
     if (videoTransceiver) {
       if (camStream) {
         const [videoTrack] = camStream.getVideoTracks();
         if (videoTrack) {
           await videoTransceiver.sender.replaceTrack(videoTrack);
           videoTransceiver.direction = 'sendrecv';
+          console.log(`[CAM] answer: sent cam track to ${fromUserId} via replaceTrack`);
+        } else {
+          console.warn(`[CAM] answer: camStream exists but no video track for ${fromUserId}`);
         }
+      } else {
+        console.log(`[CAM] answer: no local camStream — video transceiver will be recvonly for ${fromUserId}`);
       }
+    } else {
+      console.warn(`[CAM] answer: NO video transceiver found for ${fromUserId} — remote cam will not work`);
     }
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
