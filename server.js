@@ -21,13 +21,30 @@ const { runMigrations } = require('./src/db');
 const { startBackupScheduler } = require('./src/backup');
 const maintenance = require('./src/maintenance');
 
+const ALLOWED_ORIGINS = [
+  'https://rabbsroom.com',
+  'https://www.rabbsroom.com',
+  'https://bostons-poker-club-production.up.railway.app',
+];
+
+const corsOptions = {
+  origin: (origin, cb) => {
+    // Allow requests with no origin (curl, mobile apps, same-origin)
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) return cb(null, true);
+    cb(new Error(`CORS: origin not allowed — ${origin}`));
+  },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   transports: ['websocket'],
   pingInterval: 25000,
   pingTimeout: 20000,
-  cors: { origin: '*', methods: ['GET', 'POST'] }
+  cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] }
 });
 
 // Trust Railway's proxy so req.ip reflects the real client IP
@@ -76,7 +93,8 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,  // needed for some browser APIs used (WebRTC, AudioContext)
 }));
 
-app.use(cors());
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // preflight for all routes
 app.use(express.json({ limit: '10mb' }));
 
 // Public maintenance state — clients poll this to show/hide the banner
