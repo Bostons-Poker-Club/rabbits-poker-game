@@ -1198,6 +1198,21 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
   }
   if (updateError) return res.status(500).json({ error: updateError.message });
 
+  // Notify player's live socket if chips changed
+  const chipsChanged = updates.chips !== undefined;
+  if (chipsChanged) {
+    const io = req.app.get('io');
+    if (io) {
+      const newChipsVal = updates.chips;
+      const delta = newChipsVal - (current?.chips || 0);
+      for (const [, s] of io.sockets.sockets) {
+        if (s.user && s.user.id === targetId) {
+          s.emit('chips_received', { amount: delta, from: 'Admin', newTotal: newChipsVal });
+        }
+      }
+    }
+  }
+
   // Fire side effects
   if (roleChanged) {
     const isNowHost = role === 'host';
@@ -1243,6 +1258,16 @@ router.post('/admin/players/:id/chips', authMiddleware, adminMiddleware, async (
     .eq('id', req.params.id);
 
   if (error) return res.status(500).json({ error: error.message });
+
+  // Notify player's live socket so their UI updates immediately
+  const io = req.app.get('io');
+  if (io) {
+    for (const [, s] of io.sockets.sockets) {
+      if (s.user && s.user.id === req.params.id) {
+        s.emit('chips_received', { amount, from: 'Admin', newTotal: newChips });
+      }
+    }
+  }
 
   if (amount > 0 && (user?.phone || user?.email)) {
     const { sendPlayerEmail, sendPlayerSMS } = require('../mail');
