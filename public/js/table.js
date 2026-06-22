@@ -1,4 +1,5 @@
 'use strict';
+console.log('[table.js] build: 2026-06-22T-v2');
 
 requireAuth();
 

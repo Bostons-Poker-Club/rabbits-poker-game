@@ -2252,7 +2252,9 @@ function setupSocketHandlers(io) {
 
     socket.on('disconnect', async () => {
       socketUsers.delete(socket.id);
-      userSockets.delete(userId);
+      // Only clear userSockets if this socket is still the active one — a reconnect
+      // may have already registered a new socket ID, and deleting here would wipe it.
+      if (userSockets.get(userId) === socket.id) userSockets.delete(userId);
       if (socket.currentTableId) {
         const tId = socket.currentTableId;
         const game = activeGames.get(tId);
