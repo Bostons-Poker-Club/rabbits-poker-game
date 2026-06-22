@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v4 | fire-emoji-fix');
+console.log('[table.js] build: 20260622-v5 | webrtc-reconnect');
 
 requireAuth();
 
@@ -935,6 +935,12 @@ function connect() {
   // New peer joined → they will send us an offer; nothing to do
   socket.on('ptt:new_peer', ({ userId: pid, username: pname }) => {
     console.log('[PTT] new peer:', pname, '— waiting for offer');
+  });
+
+  // Other peer's ICE failed and they need us to re-offer
+  socket.on('ptt:request_offer', ({ fromUserId }) => {
+    console.log(`[PTT] ${fromUserId} requested re-offer — sending`);
+    _pttOffer(fromUserId);
   });
 
   // WebRTC signaling relay: offer / answer / ICE
@@ -2028,7 +2034,8 @@ function _updateSeatVideos() {
     const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
     console.log(`[CAM] _updateSeatVideos remote uid=${uid} enabled=${enabled} hasLiveVideo=${hasLiveVideo} avatarEl=${!!avatarEl} tracks=${stream?.getVideoTracks().map(t => t.readyState)}`);
     if (!avatarEl) { _checkAdminCamStream(); continue; }
-    if (enabled || hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
+    // Only show video if there are actually live tracks — don't attach ended/dead streams
+    if (hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
     else _clearAvatarVideo(avatarEl);
   }
 }
@@ -2246,21 +2253,34 @@ function _pttCreatePC(peerId, addTrackNow = true) {
   const iceTimeout = setTimeout(() => {
     const state = pc.iceConnectionState;
     if (state !== 'connected' && state !== 'completed' && state !== 'closed') {
-      console.warn(`[PTT] ICE timeout with ${peerId} (state: ${state}) — closing`);
-      pc.close();
-      pttPeers.delete(peerId);
+      console.warn(`[PTT] ICE timeout with ${peerId} (state: ${state}) — triggering reconnect`);
+      _pttReconnectPeer(peerId);
     }
   }, 10000);
 
+  let _disconnectTimer = null;
   pc.oniceconnectionstatechange = () => {
-    console.log(`[PTT] ${peerId} ICE: ${pc.iceConnectionState}`);
-    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+    const s = pc.iceConnectionState;
+    console.log(`[PTT] ${peerId} ICE: ${s}`);
+    if (s === 'connected' || s === 'completed') {
       clearTimeout(iceTimeout);
+      clearTimeout(_disconnectTimer);
+      _disconnectTimer = null;
     }
-    if (pc.iceConnectionState === 'failed') {
+    if (s === 'disconnected') {
+      // Give it 5 s to recover on its own before forcing reconnect
+      _disconnectTimer = setTimeout(() => {
+        if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+          console.warn(`[PTT] ICE still ${pc.iceConnectionState} after 5s — reconnecting ${peerId}`);
+          _pttReconnectPeer(peerId);
+        }
+      }, 5000);
+    }
+    if (s === 'failed') {
       clearTimeout(iceTimeout);
-      console.warn(`[PTT] ICE failed with ${peerId} — attempting restart`);
-      pc.restartIce();
+      clearTimeout(_disconnectTimer);
+      console.warn(`[PTT] ICE failed with ${peerId} — reconnecting immediately`);
+      _pttReconnectPeer(peerId);
     }
   };
 
@@ -2286,6 +2306,28 @@ function _pttCreatePC(peerId, addTrackNow = true) {
   }
 
   return pc;
+}
+
+// Reconnect a single peer after ICE failure.
+// Uses deterministic role selection: lexicographically larger userId is always
+// the offerer, so both sides agree on who re-initiates without coordinating.
+function _pttReconnectPeer(peerId) {
+  const existing = pttPeers.get(peerId);
+  if (existing) { existing.close(); pttPeers.delete(peerId); }
+  peerCamStreams.delete(peerId);
+  // Don't clear peerCamEnabled here — _updateSeatVideos will fall back to
+  // hasLiveVideo check and show the placeholder when there's no live track.
+  _updateSeatVideos();
+
+  if (user.id > peerId) {
+    // I am the designated offerer — re-offer immediately
+    console.log(`[PTT] reconnect: I am offerer for ${peerId} — re-offering`);
+    _pttOffer(peerId);
+  } else {
+    // I am the designated answerer — ask the other side to re-offer
+    console.log(`[PTT] reconnect: requesting re-offer from ${peerId}`);
+    socket?.emit('ptt:request_offer', { targetUserId: peerId });
+  }
 }
 
 // Send an offer to peerId (we initiate)
@@ -2396,6 +2438,20 @@ async function _pttInit() {
   await _pttAcquireMic(); // request permission; shows banner on denial
   console.log('[PTT] _pttInit: micStream acquired:', !!micStream, '— emitting ptt:mesh_join');
   socket.emit('ptt:mesh_join'); // join mesh regardless (can receive audio even without mic)
+
+  // Periodic health check: every 30 s scan all peer connections and reconnect any
+  // that have died silently (failed/closed without triggering oniceconnectionstatechange).
+  setInterval(() => {
+    for (const [pid, pc] of pttPeers) {
+      const bad = pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed' ||
+                  pc.connectionState === 'failed' || pc.connectionState === 'closed';
+      if (bad) {
+        console.warn(`[PTT] health-check: ${pid} is ${pc.iceConnectionState}/${pc.connectionState} — reconnecting`);
+        _pttReconnectPeer(pid);
+      }
+    }
+    _updateSeatVideos(); // re-sync video elements with current stream state
+  }, 30000);
 }
 
 function _pttShowMicReady() {

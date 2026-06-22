@@ -1047,6 +1047,12 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Peer's ICE failed — relay request for the other side to re-offer
+    socket.on('ptt:request_offer', ({ targetUserId }) => {
+      const targetSid = userSockets.get(targetUserId);
+      if (targetSid) io.to(targetSid).emit('ptt:request_offer', { fromUserId: userId });
+    });
+
     // Player unmuted (actively talking)
     socket.on('ptt:talking', () => {
       const tId = socket.currentTableId;
