@@ -786,10 +786,12 @@ input, select, textarea { font-family: inherit; }
 /* ─── Hand Ended Overlay ─────────────────────────────────────────────────── */
 .hand-result-overlay {
   position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.7);
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: transparent;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   z-index: 500;
   pointer-events: none;
