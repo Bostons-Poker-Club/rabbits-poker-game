@@ -492,6 +492,7 @@ function connect() {
     myState = state;
     renderMyCards(state);
     updateActionButtons(state);
+    console.log('[my_state] isMyTurn:', state.isMyTurn, 'seat:', state.currentPlayerSeat, 'handActive:', state.handActive);
   });
 
   socket.on('hand_started', ({ handNumber, dealerSeat }) => {
@@ -541,8 +542,29 @@ function connect() {
   });
 
   socket.on('shot_clock_start', ({ userId, seconds, seatNumber }) => {
-    if (userId === user.id) startShotClock(seconds);
     startSeatTimer(seatNumber, seconds);
+    if (userId === user.id) {
+      startShotClock(seconds);
+      // Fallback: if my_state was lost/dropped (stale socket mapping), buttons may still
+      // be disabled. If we receive the shot clock for ourselves, force-enable them now.
+      const fold = document.getElementById('btn-fold');
+      if (fold && fold.disabled && myState) {
+        console.warn('[shot_clock] buttons still disabled when it is our turn — forcing updateActionButtons');
+        updateActionButtons({ ...myState, isMyTurn: true, currentPlayerSeat: seatNumber });
+      } else if (fold && fold.disabled && gameState) {
+        console.warn('[shot_clock] no myState — deriving action state from gameState');
+        const me = gameState.players?.find(p => p.userId === user.id);
+        const derived = {
+          ...gameState,
+          isMyTurn: true,
+          canCheck: me ? (me.currentBet >= (gameState.currentBet || 0)) : false,
+          callAmount: me ? Math.max(0, (gameState.currentBet || 0) - (me.currentBet || 0)) : 0,
+          minRaiseAmount: (gameState.currentBet || 0) + (gameState.minRaise || gameState.bigBlind || 2),
+          maxRaiseAmount: me ? (me.chips + (me.currentBet || 0)) : 0,
+        };
+        updateActionButtons(derived);
+      }
+    }
   });
 
   socket.on('shot_clock_warning', ({ secondsLeft }) => {

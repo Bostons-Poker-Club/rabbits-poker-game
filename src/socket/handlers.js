@@ -2462,6 +2462,10 @@ async function startNewHand(io, tableId, game) {
   // Start shot clock for first player + SMS warning after 10s
   const firstPlayer = game.getPlayerBySeat(game.currentPlayerSeat);
   if (firstPlayer && !straddleOffered) {
+    // Re-send my_state to the active player so buttons are always enabled even
+    // if the earlier broadcastGameState my_state was dropped (stale userSockets entry)
+    const firstSid = userSockets.get(firstPlayer.userId);
+    if (firstSid) sendPersonalizedState(io, { emit: (ev, d) => io.to(firstSid).emit(ev, d) }, game, firstPlayer.userId);
     game.startShotClock(firstPlayer.userId);
     const _smsUid0 = firstPlayer.userId;
     setTimeout(async () => {
@@ -2658,6 +2662,8 @@ function handleActionResult(io, tableId, game, result, _depth = 0) {
         minRaise: game.currentBet + game.minRaise,
         pot: game.pot
       });
+      const nextSid = userSockets.get(nextPlayer.userId);
+      if (nextSid) sendPersonalizedState(io, { emit: (ev, d) => io.to(nextSid).emit(ev, d) }, game, nextPlayer.userId);
       game.startShotClock(nextPlayer.userId);
       game.lastActionAt = Date.now();
       // SMS + email after 10s of inactivity on their turn
