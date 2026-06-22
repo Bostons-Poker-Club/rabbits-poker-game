@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 2026-06-22T-v3');
+console.log('[table.js] build: 20260622-v4 | fire-emoji-fix');
 
 requireAuth();
 
