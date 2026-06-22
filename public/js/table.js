@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 2026-06-22T-v2');
+console.log('[table.js] build: 2026-06-22T-v3');
 
 requireAuth();
 
@@ -3186,7 +3186,6 @@ function openStickerPicker() {
   panel.className = 'sticker-panel';
   const stickers = [
     { key: 'nicehd', label: '🤝 Nice Hand' },
-    { key: 'onfire', label: '🔥 On Fire' },
     { key: 'bust',   label: '💀 Busted' },
     { key: 'money',  label: '🤑 Money' },
     { key: 'rabbit', label: '🐰 Rabbit' },
