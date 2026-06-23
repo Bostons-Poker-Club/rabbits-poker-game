@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v5 | webrtc-reconnect');
+console.log('[table.js] build: 20260622-v6 | card-index+sounds');
 
 requireAuth();
 

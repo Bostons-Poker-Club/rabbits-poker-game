@@ -1,10 +1,10 @@
 'use strict';
-/* Poker Sound Engine — Web Audio API synthesis, zero external files */
+/* Poker Sound Engine — arcade/video-game style, Web Audio API, zero external files */
 
 window.Sound = (() => {
   let _ctx = null;
   let _muted = localStorage.getItem('rp_sfx_muted') === '1';
-  let _theme = localStorage.getItem('rp_sfx_theme') || 'classic'; // 'classic' | 'modern' | 'silent'
+  let _theme = localStorage.getItem('rp_sfx_theme') || 'classic';
 
   function ctx() {
     if (!_ctx) {
@@ -68,7 +68,7 @@ window.Sound = (() => {
     o.frequency.setValueAtTime(freq, t);
     if (freqEnd) o.frequency.exponentialRampToValueAtTime(freqEnd, t + dur);
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.005);
+    g.gain.linearRampToValueAtTime(vol, t + 0.003);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     o.connect(g); g.connect(c.destination);
     o.start(t); o.stop(t + dur + 0.02);
@@ -82,28 +82,29 @@ window.Sound = (() => {
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     const src = c.createBufferSource();
     const flt = c.createBiquadFilter();
-    const g = c.createGain();
+    const g   = c.createGain();
     src.buffer = buf;
     flt.type = 'bandpass';
     flt.frequency.setValueAtTime(fHigh, t);
     flt.frequency.exponentialRampToValueAtTime(fLow, t + dur);
-    flt.Q.value = 1.2;
+    flt.Q.value = 1.5;
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
     src.connect(flt); flt.connect(g); g.connect(c.destination);
     src.start(t); src.stop(t + dur + 0.06);
   }
 
-  // Classic chip click: pitched "tik" with frequency drop
-  function _chip(t, vol = 0.28) {
-    _osc(1500, 'sine', t, 0.075, vol,      520);
-    _osc(2200, 'sine', t, 0.040, vol * 0.25, 900);
+  // Arcade chip: bright square "ting" — snappier than realistic clink
+  function _chip(t, vol = 0.22) {
+    _osc(2200, 'square',   t, 0.055, vol,       1100);
+    _osc(3300, 'triangle', t, 0.030, vol * 0.3, 1650);
   }
 
-  // Modern chip: sharp triangle click
-  function _chipM(t, vol = 0.22) {
-    _osc(2400, 'triangle', t, 0.050, vol,      1200);
-    _osc(3600, 'triangle', t, 0.025, vol * 0.3, 1800);
+  // Heavy chip: wider, deeper thud for big stacks
+  function _chipHeavy(t, vol = 0.26) {
+    _osc(1400, 'square',   t, 0.070, vol,       700);
+    _osc(2100, 'triangle', t, 0.040, vol * 0.35, 1050);
+    _noise(t, 0.04, vol * 0.2, 6000, 3000);
   }
 
   // ── Public sounds ──────────────────────────────────────────────────
@@ -112,13 +113,10 @@ window.Sound = (() => {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(1200, 'triangle', now,        0.05, 0.10, 2400);
-      _osc(1600, 'triangle', now + 0.06, 0.04, 0.08, 3200);
-    } else {
-      _noise(now,        0.09, 0.14, 5000, 2800);
-      _noise(now + 0.11, 0.08, 0.10, 4500, 2400);
-    }
+    // Crisp card-snap: sharp noise burst + high "zip" tone
+    _noise(now,        0.06, 0.18, 9000, 4000);
+    _osc(3200, 'square', now, 0.055, 0.10, 1600);
+    _noise(now + 0.08, 0.05, 0.12, 8000, 3500);
   }
 
   function chipBet(amount) {
@@ -126,64 +124,47 @@ window.Sound = (() => {
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
     const n = !amount ? 1 : amount >= 1000 ? 5 : amount >= 500 ? 4 : amount >= 200 ? 3 : amount >= 50 ? 2 : 1;
-    if (_theme === 'modern') {
-      for (let i = 0; i < n; i++) _chipM(now + i * 0.055);
-    } else {
-      for (let i = 0; i < n; i++) _chip(now + i * 0.070);
-    }
+    const fn = n >= 3 ? _chipHeavy : _chip;
+    for (let i = 0; i < n; i++) fn(now + i * 0.050, 0.22 - i * 0.01);
   }
 
   function potSlide() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      for (let i = 0; i < 7; i++) _chipM(now + i * 0.048, 0.18);
-      _osc(180, 'triangle', now + 0.18, 0.45, 0.14, 60);
-    } else {
-      for (let i = 0; i < 7; i++) _chip(now + i * 0.058, 0.21);
-      _noise(now, 0.40, 0.10, 800, 200);
-      _osc(95, 'triangle', now + 0.18, 0.45, 0.18, 45);
-    }
+    // Rapid chip cascade + rising power-up sweep
+    for (let i = 0; i < 8; i++) _chipHeavy(now + i * 0.044, 0.22 - i * 0.01);
+    _osc(220, 'sawtooth', now,        0.55, 0.14, 880);
+    _osc(440, 'square',   now + 0.18, 0.35, 0.10, 1760);
   }
 
   function fold() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(600, 'triangle', now, 0.18, 0.09, 200);
-      _osc(400, 'triangle', now + 0.06, 0.12, 0.06, 150);
-    } else {
-      _noise(now, 0.15, 0.11, 2200, 700);
-      _osc(200, 'sine', now + 0.04, 0.12, 0.07, 100);
-    }
+    // Descending "bworp" — classic game dismiss
+    _osc(700, 'sawtooth', now,        0.18, 0.13, 180);
+    _osc(500, 'square',   now + 0.05, 0.14, 0.08, 130);
+    _noise(now, 0.12, 0.08, 3000, 600);
   }
 
   function check() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(800,  'triangle', now,        0.06, 0.15, 600);
-      _osc(1000, 'triangle', now + 0.08, 0.05, 0.10, 750);
-    } else {
-      _osc(290, 'sine', now,        0.07, 0.18, 200);
-      _osc(265, 'sine', now + 0.09, 0.06, 0.12, 180);
-    }
+    // Double-tap UI confirm — satisfying two-beat "tik-tik"
+    _osc(1400, 'square', now,        0.055, 0.16, 1400);
+    _osc(1600, 'square', now + 0.07, 0.045, 0.13, 1600);
   }
 
   function call() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _chipM(now, 0.26);
-      _chipM(now + 0.065, 0.20);
-    } else {
-      _chip(now, 0.30);
-      _chip(now + 0.075, 0.22);
-    }
+    // Two-chip "ting ting" with brief rising tail
+    _chip(now,        0.26);
+    _chip(now + 0.06, 0.20);
+    _osc(1100, 'triangle', now, 0.12, 0.07, 2200);
   }
 
   function raise(amount) {
@@ -191,80 +172,65 @@ window.Sound = (() => {
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
     const n = !amount ? 3 : Math.min(5, Math.max(3, Math.round(Math.log10(Math.max(10, amount)) * 1.4)));
-    if (_theme === 'modern') {
-      for (let i = 0; i < n; i++) _chipM(now + i * 0.055, 0.26 - i * 0.02);
-      _osc(1200, 'triangle', now, 0.22, 0.07, 2400);
-    } else {
-      for (let i = 0; i < n; i++) _chip(now + i * 0.063, 0.30 - i * 0.025);
-      _osc(420, 'sine', now, 0.28, 0.07, 680);
-    }
+    // Escalating chip stack + power-up glide
+    for (let i = 0; i < n; i++) _chipHeavy(now + i * 0.048, 0.26 - i * 0.02);
+    _osc(440, 'sawtooth', now, 0.28, 0.11, 1760);
   }
 
   function allIn() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      for (let i = 0; i < 10; i++) _chipM(now + i * 0.048, 0.26);
-      _osc(300, 'triangle', now + 0.35, 0.80, 0.20, 80);
-      _osc(600, 'triangle', now + 0.35, 0.50, 0.12, 150);
-    } else {
-      for (let i = 0; i < 10; i++) _chip(now + i * 0.058, 0.30);
-      _osc(110, 'sawtooth', now + 0.35, 0.80, 0.22, 40);
-      _osc(220, 'triangle', now + 0.35, 0.50, 0.12, 80);
-    }
+    // All chips slam down + big game-over build
+    for (let i = 0; i < 10; i++) _chipHeavy(now + i * 0.042, 0.28 - i * 0.01);
+    _osc(110, 'sawtooth', now + 0.30, 0.70, 0.22, 55);
+    _osc(220, 'square',   now + 0.30, 0.55, 0.16, 110);
+    _osc(440, 'square',   now + 0.40, 0.40, 0.12, 880);
+    _noise(now + 0.30, 0.50, 0.12, 5000, 800);
   }
 
   function win() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      [659, 880, 1047, 1319].forEach((f, i) => _osc(f, 'triangle', now + i * 0.100, 0.40, 0.20));
-      for (let i = 0; i < 8; i++) _chipM(now + 0.05 + i * 0.075, 0.18);
-    } else {
-      [523, 659, 784, 1047].forEach((f, i) => _osc(f, 'sine', now + i * 0.115, 0.45, 0.22));
-      for (let i = 0; i < 8; i++) _chip(now + 0.06 + i * 0.085, 0.19);
-    }
+    // 8-bit victory fanfare: C-E-G-C-E ascending arpeggio + chip rain
+    const notes = [523, 659, 784, 1047, 1319];
+    notes.forEach((f, i) => {
+      _osc(f, 'square', now + i * 0.085, 0.35, 0.17);
+      _osc(f * 2, 'triangle', now + i * 0.085, 0.20, 0.06);
+    });
+    for (let i = 0; i < 10; i++) _chip(now + 0.04 + i * 0.065, 0.16 - i * 0.01);
+    // Final "ding" punch
+    _osc(1319, 'square', now + notes.length * 0.085, 0.45, 0.20);
   }
 
   function timerTick() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(1400, 'square', now, 0.045, 0.08);
-    } else {
-      _osc(900, 'square', now, 0.065, 0.10);
-    }
+    // Sharp game-clock tick
+    _osc(2000, 'square', now, 0.035, 0.09);
   }
 
   function newHand() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(1000, 'triangle', now,        0.06, 0.08, 2000);
-      _osc(1333, 'triangle', now + 0.07, 0.06, 0.07, 2666);
-      _osc(1667, 'triangle', now + 0.14, 0.05, 0.06, 3333);
-    } else {
-      _noise(now,        0.08, 0.09, 5000, 2500);
-      _noise(now + 0.09, 0.08, 0.08, 4500, 2200);
-      _noise(now + 0.18, 0.08, 0.06, 4000, 2000);
-    }
+    // Three-note game-start chime: G-A-B
+    [784, 880, 988].forEach((f, i) => {
+      _osc(f, 'square',   now + i * 0.08, 0.14, 0.13);
+      _osc(f, 'triangle', now + i * 0.08, 0.10, 0.05);
+    });
   }
 
   function notification() {
     if (_muted) return;
     const c = ctx(); if (!c) return;
     const now = c.currentTime;
-    if (_theme === 'modern') {
-      _osc(1320, 'triangle', now,        0.22, 0.16);
-      _osc(1760, 'triangle', now + 0.14, 0.18, 0.12);
-    } else {
-      _osc(880,  'sine', now,        0.28, 0.18);
-      _osc(1108, 'sine', now + 0.16, 0.25, 0.14);
-    }
+    // Rising two-tone ping — "your turn" alert
+    _osc(1320, 'square',   now,        0.18, 0.18, 1760);
+    _osc(1760, 'square',   now + 0.12, 0.16, 0.15, 2640);
+    _osc(1320, 'triangle', now,        0.18, 0.06, 1760);
   }
 
   return {
