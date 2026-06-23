@@ -1728,9 +1728,9 @@ input, select, textarea { font-family: inherit; }
     align-items: center;
     padding: 4px 6px;
     gap: 4px;
-    background: rgba(0,0,0,0.92);
-    border-top: 1px solid rgba(255,255,255,0.1);
-    z-index: 30;
+    background: rgba(0,0,0,0.95);
+    border-top: 1px solid rgba(255,255,255,0.15);
+    z-index: 200;
   }
 
   /* Action area: column layout — media bar on top, action buttons below */
@@ -1770,7 +1770,7 @@ input, select, textarea { font-family: inherit; }
     bottom: 100px;
     left: 0;
     right: 0;
-    z-index: 50;
+    z-index: 210;
     padding: 6px 10px;
     background: rgba(4,12,6,0.96);
     border-top: 1px solid rgba(200,168,75,0.3);
@@ -1873,11 +1873,9 @@ input, select, textarea { font-family: inherit; }
   }
   .chat-bubble-badge.visible { display: flex; }
 
-  /* Hide admin cam overlay and other players' camera feeds on mobile */
+  /* Hide admin cam overlay on mobile (screen too small) */
   #admin-cam-overlay { display: none !important; }
-  .seat-cam-video { display: none !important; }
-  /* Self-view only: show camera in the local player's own seat */
-  .seat-box.me .seat-cam-video { display: block !important; }
+  /* Camera feeds: show all — hiding remote feeds prevented players from seeing each other */
 
   /* Suppress hover chip-denomination breakdown on touch — tap triggers sticky hover */
   body.table-page .chip-breakdown { display: none !important; }

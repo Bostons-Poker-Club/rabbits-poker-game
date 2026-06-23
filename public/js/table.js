@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v7 | mobile-media-bar');
+console.log('[table.js] build: 20260622-v8 | break-cam-zindex');
 
 requireAuth();
 
@@ -795,6 +795,12 @@ function connect() {
   socket.on('break_granted', ({ breakPassesRemaining }) => {
     toast(`On break. ${breakPassesRemaining} passes remaining`);
     document.getElementById('btn-break').textContent = `☕ Break (${breakPassesRemaining})`;
+    _showBreakReturnBanner();
+  });
+
+  socket.on('break_ended', () => {
+    toast("Welcome back — you're in the next hand!");
+    _hideBreakReturnBanner();
   });
 
   socket.on('kicked', ({ message }) => {
@@ -1515,6 +1521,39 @@ function requestBreak() {
 
 function returnFromBreak() {
   socket.emit('return_from_break', { tableId });
+  _hideBreakReturnBanner();
+}
+
+function _showBreakReturnBanner() {
+  if (document.getElementById('break-return-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'break-return-banner';
+  el.style.cssText = [
+    'position:fixed',
+    'bottom:110px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'z-index:9100',
+    'background:#1a7a3a',
+    'color:#fff',
+    'font-size:1.05rem',
+    'font-weight:700',
+    'padding:14px 32px',
+    'border-radius:12px',
+    'cursor:pointer',
+    'box-shadow:0 4px 24px rgba(0,0,0,.6)',
+    'text-align:center',
+    'touch-action:manipulation',
+    'border:2px solid #2ecc71',
+    'white-space:nowrap',
+  ].join(';');
+  el.textContent = "✋ I'm Back — Return to Table";
+  el.onclick = () => returnFromBreak();
+  document.body.appendChild(el);
+}
+
+function _hideBreakReturnBanner() {
+  document.getElementById('break-return-banner')?.remove();
 }
 
 function leaveTable() {
@@ -1944,7 +1983,7 @@ async function _camEnable() {
     );
     camStream = await Promise.race([
       navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false
       }),
       timeout
@@ -2049,23 +2088,26 @@ function _setAvatarVideo(avatarEl, stream, muted) {
     vid.className = 'seat-cam-video';
     // Set both IDL properties and HTML attributes — iOS Safari requires the
     // attribute form for autoplay/playsinline/muted to take effect.
-    vid.autoplay = true;   vid.setAttribute('autoplay', '');
+    vid.autoplay = true;    vid.setAttribute('autoplay', '');
     vid.playsInline = true; vid.setAttribute('playsinline', '');
-    if (muted) { vid.muted = true; vid.setAttribute('muted', ''); }
+    // Always mute — camera streams are video-only (audio is on separate pttAudioEls).
+    // Muting is required for browser autoplay policy; without it Chrome/Safari block
+    // playback, leaving a solid-black circle even when the track is live.
+    vid.muted = true; vid.setAttribute('muted', '');
     vid.onclick = () => _expandCamVideo(vid, avatarEl.dataset.camUid);
     avatarEl.appendChild(vid);
   }
   if (vid.srcObject !== stream) {
     vid.srcObject = stream;
-    console.log(`[CAM] set srcObject for uid=${uid}`);
+    console.log(`[CAM] set srcObject uid=${uid} tracks=${stream?.getVideoTracks().map(t => t.readyState + '/' + (t.muted ? 'muted' : 'live'))}`);
   }
   // Only hide the avatar once the video frame is actually rendering — prevents
   // a blank/loading circle if the stream exists but video hasn't started yet.
   vid.onplaying = () => {
-    console.log(`[CAM] video playing for uid=${uid}`);
+    console.log(`[CAM] video playing uid=${uid} videoWidth=${vid.videoWidth}x${vid.videoHeight}`);
     avatarEl.classList.add('has-video');
   };
-  vid.play().catch(err => console.warn(`[CAM] play() failed for uid=${uid}:`, err.message));
+  vid.play().catch(err => console.warn(`[CAM] play() failed uid=${uid}:`, err.message, '— track states:', stream?.getVideoTracks().map(t => t.readyState)));
 }
 
 function _clearAvatarVideo(avatarEl) {
