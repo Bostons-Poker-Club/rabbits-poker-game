@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v9 | desktop-media-controls');
+console.log('[table.js] build: 20260622-v10 | break-cam-fixes');
 
 requireAuth();
 
@@ -493,6 +493,15 @@ function connect() {
     myState = state;
     renderMyCards(state);
     updateActionButtons(state);
+    // Keep break banner in sync with server state — covers page refresh and reconnects
+    const me = state.players?.find(p => p.userId === state.myUserId);
+    if (me?.isSittingOut) {
+      const el = document.getElementById('btn-break');
+      if (el) el.textContent = `☕ Break (${me.breakPassesRemaining ?? 0})`;
+      _showBreakReturnBanner();
+    } else {
+      _hideBreakReturnBanner();
+    }
     console.log('[my_state] isMyTurn:', state.isMyTurn, 'seat:', state.currentPlayerSeat, 'handActive:', state.handActive);
   });
 
@@ -1983,7 +1992,7 @@ async function _camEnable() {
     );
     camStream = await Promise.race([
       navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
         audio: false
       }),
       timeout
@@ -2069,11 +2078,11 @@ function _updateSeatVideos() {
   // Remote players
   for (const [uid, stream] of peerCamStreams) {
     const enabled = peerCamEnabled.get(uid);
-    const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
+    // Require readyState=live AND !muted — a muted live track has no frames (renders black)
+    const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live' && !t.muted);
     const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
-    console.log(`[CAM] _updateSeatVideos remote uid=${uid} enabled=${enabled} hasLiveVideo=${hasLiveVideo} avatarEl=${!!avatarEl} tracks=${stream?.getVideoTracks().map(t => t.readyState)}`);
+    console.log(`[CAM] _updateSeatVideos remote uid=${uid} enabled=${enabled} hasLiveVideo=${hasLiveVideo} avatarEl=${!!avatarEl} tracks=${stream?.getVideoTracks().map(t => t.readyState + '/' + (t.muted ? 'muted' : 'live'))}`);
     if (!avatarEl) { _checkAdminCamStream(); continue; }
-    // Only show video if there are actually live tracks — don't attach ended/dead streams
     if (hasLiveVideo) _setAvatarVideo(avatarEl, stream, false);
     else _clearAvatarVideo(avatarEl);
   }
@@ -2269,11 +2278,18 @@ function _pttCreatePC(peerId, addTrackNow = true) {
       audio.play().catch(err => console.warn('[PTT] autoplay blocked:', err.message));
     } else if (e.track.kind === 'video') {
       peerCamStreams.set(peerId, stream);
-      peerCamEnabled.set(peerId, true);
       const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${peerId}"]`);
       console.log(`[CAM] video track from ${peerId} — avatarEl found: ${!!avatarEl}, track.muted: ${e.track.muted}`);
-      _updateSeatVideos();
-      e.track.onmute   = () => console.log(`[CAM] video track MUTED from ${peerId}`);
+      // Don't show a black circle — only update UI once frames are actually flowing
+      if (!e.track.muted) {
+        peerCamEnabled.set(peerId, true);
+        _updateSeatVideos();
+      }
+      e.track.onmute = () => {
+        console.log(`[CAM] video track MUTED from ${peerId}`);
+        peerCamEnabled.set(peerId, false);
+        _updateSeatVideos(); // clears black circle
+      };
       e.track.onunmute = () => {
         console.log(`[CAM] video track UNMUTED (live) from ${peerId}`);
         peerCamEnabled.set(peerId, true);

@@ -1675,11 +1675,12 @@ input, select, textarea { font-family: inherit; }
     overflow: visible;
   }
 
-  /* poker-area: fixed slab between header and action bar */
+  /* poker-area: fixed slab between header and action bar — extra bottom clearance for seats that
+     extend outside the oval via seats-container inset:-20px */
   body.table-page .poker-area {
     position: fixed;
     top: 66px;
-    bottom: 100px;
+    bottom: 110px;
     left: 0;
     right: 0;
     display: flex;
@@ -2103,6 +2104,9 @@ input, select, textarea { font-family: inherit; }
 }
 /* Fade video in when active */
 .seat-avatar.has-video .seat-cam-video { opacity: 1; }
+
+/* Mirror own camera — front-facing cameras are flipped by default; mirror matches expectation */
+.seat-box.me .seat-cam-video { transform: scaleX(-1); }
 
 /* Gold ring — player's turn */
 .seat-box.active-player .seat-avatar {
