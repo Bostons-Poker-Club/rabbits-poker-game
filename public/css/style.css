@@ -640,8 +640,8 @@ input, select, textarea { font-family: inherit; }
   flex: 1;
 }
 
-/* Desktop: wrappers are transparent — children behave as direct action-area children */
-.mobile-media-bar { display: none; }
+/* Desktop: both wrappers are transparent — children behave as direct action-area children */
+.mobile-media-bar { display: contents; }
 .action-btns-row  { display: contents; }
 
 .action-btn {

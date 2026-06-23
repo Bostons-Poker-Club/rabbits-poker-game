@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v8 | break-cam-zindex');
+console.log('[table.js] build: 20260622-v9 | desktop-media-controls');
 
 requireAuth();
 
