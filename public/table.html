@@ -177,29 +177,35 @@
 
   <!-- Action buttons -->
   <div class="action-area" id="action-area">
-    <button class="action-btn btn-fold" id="btn-fold"
-      ontouchstart="actTouch('fold',event)" onclick="act('fold')" disabled>FOLD</button>
-    <button class="action-btn btn-check" id="btn-check"
-      ontouchstart="actTouch('check',event)" onclick="act('check')" disabled>CHECK</button>
-    <button class="action-btn btn-call" id="btn-call"
-      ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>CALL<span class="sub" id="call-amount"></span></button>
-    <button class="action-btn btn-raise" id="btn-raise"
-      ontouchstart="tapRaise(event)" onclick="tapRaise(event)" disabled>RAISE<span class="sub" id="raise-display">–</span></button>
-    <button class="action-btn btn-allin" id="btn-allin"
-      ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled>ALL IN<span class="sub" id="allin-amount"></span></button>
+    <!-- Mobile media controls — hidden on desktop, shown as compact icon row on mobile -->
+    <div class="mobile-media-bar" id="mobile-media-bar">
+      <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()" ontouchcancel="stopPTT()">🎙<span class="btn-label"> PTT</span></button>
+      <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" id="mic-test-btn">🎚<span class="btn-label"> Mic</span></button>
+      <button id="cam-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleCamera()" title="Camera off — click to enable" style="opacity:.5">📷<span class="btn-label"> Cam</span></button>
+      <button id="voice-toggle-btn" class="btn btn-sm btn-outline" onclick="DealerVoice.toggle()" title="Dealer voice on — click to mute">🔈<span class="btn-label"> Voice</span></button>
+    </div>
+    <!-- Action buttons row -->
+    <div class="action-btns-row">
+      <button class="action-btn btn-fold" id="btn-fold"
+        ontouchstart="actTouch('fold',event)" onclick="act('fold')" disabled>FOLD</button>
+      <button class="action-btn btn-check" id="btn-check"
+        ontouchstart="actTouch('check',event)" onclick="act('check')" disabled>CHECK</button>
+      <button class="action-btn btn-call" id="btn-call"
+        ontouchstart="actTouch('call',event)" onclick="act('call')" disabled>CALL<span class="sub" id="call-amount"></span></button>
+      <button class="action-btn btn-raise" id="btn-raise"
+        ontouchstart="tapRaise(event)" onclick="tapRaise(event)" disabled>RAISE<span class="sub" id="raise-display">–</span></button>
+      <button class="action-btn btn-allin" id="btn-allin"
+        ontouchstart="actTouch('allin',event)" onclick="setAllIn();act('raise')" disabled>ALL IN<span class="sub" id="allin-amount"></span></button>
+    </div>
     <!-- Raise slider panel — in landscape this becomes a floating overlay above the bar -->
     <div class="raise-controls" id="raise-controls">
       <input type="range" id="raise-slider" min="0" max="0" value="0" oninput="onRaiseSlider()" style="touch-action:none">
       <input type="number" id="raise-input" inputmode="numeric" style="width:72px;padding:6px;background:rgba(255,255,255,.1);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)" oninput="onRaiseInput()">
     </div>
     <button class="break-btn" id="btn-break" onclick="requestBreak()">☕ Break (3)</button>
-    <button class="ptt-btn" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()" ontouchstart="startPTT(event)" ontouchend="stopPTT()" ontouchcancel="stopPTT()">🎙 Hold to Talk</button>
-    <button class="btn btn-sm btn-outline" onclick="testMic()" title="Test microphone" style="font-size:.75rem;padding:4px 8px" id="mic-test-btn">🎚 Mic</button>
     <button id="sound-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleSoundThemePanel()" title="Sound settings" style="font-size:.75rem;padding:4px 8px">🔊</button>
-    <button id="cam-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleCamera()" title="Camera off — click to enable" style="font-size:.75rem;padding:4px 8px;opacity:.5">📷</button>
     <button id="btn-hand-rankings" class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button id="btn-hand-history" class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
-    <button id="voice-toggle-btn" class="btn btn-sm btn-outline" onclick="DealerVoice.toggle()" title="Dealer voice on — click to mute" style="font-size:.75rem;padding:4px 8px">🔈 Voice</button>
     <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
   </div>
 </div>

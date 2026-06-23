@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v6 | card-index+sounds');
+console.log('[table.js] build: 20260622-v7 | mobile-media-bar');
 
 requireAuth();
 

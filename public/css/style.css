@@ -640,6 +640,10 @@ input, select, textarea { font-family: inherit; }
   flex: 1;
 }
 
+/* Desktop: wrappers are transparent — children behave as direct action-area children */
+.mobile-media-bar { display: none; }
+.action-btns-row  { display: contents; }
+
 .action-btn {
   min-width: 80px;
   min-height: 56px;
@@ -1675,7 +1679,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page .poker-area {
     position: fixed;
     top: 66px;
-    bottom: 64px;
+    bottom: 100px;
     left: 0;
     right: 0;
     display: flex;
@@ -1718,8 +1722,8 @@ input, select, textarea { font-family: inherit; }
     bottom: 0;
     left: 0;
     width: 100%;
-    height: 64px;
-    min-height: 64px;
+    height: 100px;
+    min-height: 100px;
     display: flex;
     align-items: center;
     padding: 4px 6px;
@@ -1729,25 +1733,24 @@ input, select, textarea { font-family: inherit; }
     z-index: 30;
   }
 
-  /* Action buttons: horizontal row filling right side of bottom bar */
+  /* Action area: column layout — media bar on top, action buttons below */
   body.table-page .action-area {
     display: flex;
-    flex-direction: row;
-    flex-wrap: nowrap;
+    flex-direction: column;
     flex: 1;
-    gap: 3px;
+    gap: 4px;
     align-items: stretch;
     height: 100%;
   }
 
   body.table-page .action-btn {
     flex: 1;
-    height: 100%;
     font-size: 0.6rem;
     font-weight: bold;
     padding: 2px 3px;
     border-radius: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   body.table-page .card.large {
@@ -1764,7 +1767,7 @@ input, select, textarea { font-family: inherit; }
   /* Raise slider: hidden by default, floats above bottom bar when .visible */
   body.table-page .raise-controls {
     position: fixed;
-    bottom: 64px;
+    bottom: 100px;
     left: 0;
     right: 0;
     z-index: 50;
@@ -1813,7 +1816,7 @@ input, select, textarea { font-family: inherit; }
   /* Chat panel: slide-up from bottom, takes 40% height, above bottom bar */
   body.table-page .chat-panel {
     position: fixed;
-    bottom: 64px;
+    bottom: 100px;
     left: 0;
     right: 0;
     height: 40vh;
@@ -1839,7 +1842,7 @@ input, select, textarea { font-family: inherit; }
   body.table-page .chat-bubble-btn {
     display: flex;
     position: fixed;
-    bottom: 66px;
+    bottom: 102px;
     right: 12px;
     z-index: 140;
   }
@@ -1903,17 +1906,65 @@ input, select, textarea { font-family: inherit; }
   body.table-page .hand-result-box .winner-cards { flex-wrap: wrap; gap: 4px; }
 
   /* Hide utility buttons not needed in mobile action bar */
-  body.table-page .ptt-btn,
   body.table-page .break-btn,
-  body.table-page #mic-test-btn,
   body.table-page #sound-toggle-btn,
-  body.table-page #cam-toggle-btn,
-  body.table-page #voice-toggle-btn,
   body.table-page #action-leave-btn,
   body.table-page #btn-hand-rankings,
   body.table-page #btn-hand-history,
   body.table-page .hdr-right,
   body.table-page #chat-toggle { display: none; }
+
+  /* Mobile media controls bar — compact icon row above action buttons */
+  body.table-page .mobile-media-bar {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    gap: 4px;
+    height: 30px;
+    align-items: stretch;
+    flex-shrink: 0;
+  }
+  body.table-page .mobile-media-bar button {
+    flex: 1;
+    min-width: 0;
+    height: 30px;
+    font-size: 0.7rem;
+    padding: 0 2px;
+    border-radius: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body.table-page .mobile-media-bar .ptt-btn {
+    background: rgba(40,40,80,0.9);
+    border: 1px solid rgba(100,120,200,0.5);
+    color: #a0c0ff;
+    font-size: 0.7rem;
+    border-radius: 5px;
+    min-height: unset;
+  }
+  body.table-page .mobile-media-bar .ptt-btn.speaking {
+    background: rgba(180,20,20,0.9);
+    border-color: #e74c3c;
+    color: #fff;
+    animation: ptt-pulse 0.6s ease-in-out infinite alternate;
+  }
+  /* Action buttons row: flex row filling remaining height */
+  body.table-page .action-btns-row {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    gap: 3px;
+    align-items: stretch;
+    width: 100%;
+    min-height: 0;
+  }
+  body.table-page .action-btns-row .action-btn {
+    flex: 1;
+    height: 100%;
+    min-width: 0;
+  }
 
   /* Mobile header: show leave + lobby buttons, shrink center info */
   body.table-page .hdr-leave-btn {
