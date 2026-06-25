@@ -709,6 +709,22 @@ input, select, textarea { font-family: inherit; }
 }
 .break-btn:hover { border-color: var(--gold); color: var(--gold); }
 
+/* ─── Rebuy payment method buttons ──────────────────────────────────────── */
+.rebuy-pay-btn {
+  width: 100%;
+  padding: 9px 14px;
+  background: rgba(255,255,255,.06);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: .86rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+}
+.rebuy-pay-btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.3); }
+.rebuy-pay-btn.selected { border-color: var(--gold); background: rgba(212,175,55,.12); color: var(--gold); font-weight: 600; }
+
 /* ─── Shot Clock ─────────────────────────────────────────────────────────── */
 .shot-clock {
   width: 44px;
@@ -1717,6 +1733,14 @@ input, select, textarea { font-family: inherit; }
     inset: -20px;
   }
 
+  /* Shrink seat boxes so adjacent seats don't overlap on narrow viewports */
+  body.table-page .seat-box {
+    min-width: 80px;
+  }
+  body.table-page .seat-name {
+    max-width: 72px;
+  }
+
   /* Bottom bar: fixed at absolute bottom, always visible */
   body.table-page .my-cards-area {
     position: fixed;
@@ -1907,6 +1931,7 @@ input, select, textarea { font-family: inherit; }
   /* Hide utility buttons not needed in mobile action bar */
   body.table-page .break-btn,
   body.table-page #sound-toggle-btn,
+  body.table-page #btn-rebuy,
   body.table-page #action-leave-btn,
   body.table-page #btn-hand-rankings,
   body.table-page #btn-hand-history,
@@ -2038,6 +2063,31 @@ input, select, textarea { font-family: inherit; }
     height: 100%;
     object-fit: cover;
     border-radius: 50%;
+  }
+
+  /* Narrower seats in landscape so adjacent seats clear each other */
+  body.table-page .seat-box {
+    min-width: 68px;
+  }
+  body.table-page .seat-name {
+    max-width: 60px;
+  }
+
+  /* Winner popup: move below the oval so it doesn't cover community cards */
+  body.table-page .hand-result-overlay {
+    top: auto;
+    bottom: 115px;
+  }
+}
+
+/* ─── Desktop: shrink avatars so side seats don't overlap on standard 700px oval ── */
+@media (min-width: 901px) {
+  body.table-page .seat-avatar {
+    width: 72px;
+    height: 72px;
+  }
+  body.table-page .seat-initials {
+    font-size: 1.8rem;
   }
 }
 

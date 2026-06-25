@@ -469,6 +469,82 @@ function setupSocketHandlers(io) {
     bannedUsers.delete(userId);
   });
 
+  // Admin deleted a player from the database — evict from any live table immediately
+  appEvents.on('player:deleted', async ({ userId }) => {
+    for (const [tableId, game] of activeGames) {
+      const player = game.getPlayer(userId);
+      if (!player) continue;
+      const chipsToReturn = player.chips;
+      game.removePlayer(userId);
+      broadcastGameState(io, tableId, game);
+      // Return any chips on the table to the user's account before the record is gone
+      if (chipsToReturn > 0) {
+        try {
+          const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', userId).single();
+          if (u) await supabaseAdmin.from('users').update({ chips: u.chips + chipsToReturn }).eq('id', userId);
+        } catch {}
+      }
+      // Remove table_seats row so a server restart doesn't resurrect the seat
+      try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tableId).eq('user_id', userId); } catch {}
+    }
+    // Fallback: remove any orphaned table_seats rows regardless of activeGames membership
+    // (handles players who were disconnected or in a table that was already closed)
+    try { await supabaseAdmin.from('table_seats').delete().eq('user_id', userId); } catch {}
+    // Disconnect the socket if still connected
+    const sid = userSockets.get(userId);
+    if (sid) {
+      const s = io.sockets.sockets.get(sid);
+      if (s) s.disconnect(true);
+    }
+  });
+
+  // Admin ended the table session — clear in-memory game, return chips, notify clients
+  appEvents.on('table:closed', async ({ tableId }) => {
+    const game = activeGames.get(tableId);
+    if (game) {
+      // Return all seated players' chips to their bank balance
+      for (const [uid, player] of game.players) {
+        if (player.chips > 0) {
+          try {
+            const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', uid).single();
+            if (u) await supabaseAdmin.from('users').update({ chips: u.chips + player.chips }).eq('id', uid);
+          } catch {}
+        }
+      }
+      activeGames.delete(tableId);
+    }
+    // Wipe all seat records so a server restart can't resurrect ghost players
+    try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tableId); } catch {}
+    // Tell every client still on the table page that the session is over
+    io.to(tableId).emit('table_closed', { tableId });
+  });
+
+  // Rebuy approved: add chips directly to the player's live table stack
+  appEvents.on('rebuy:approved', async ({ userId, tableId, amount, adminName }) => {
+    const game = activeGames.get(tableId);
+    if (game) {
+      const player = game.getPlayer(userId);
+      if (player) {
+        player.chips += amount;
+        broadcastGameState(io, tableId, game);
+        try {
+          await supabaseAdmin.from('table_seats')
+            .update({ chips_on_table: player.chips })
+            .eq('table_id', tableId).eq('user_id', userId);
+        } catch {}
+      }
+    }
+    // Toast notification to the player
+    const sid = userSockets.get(userId);
+    if (sid) {
+      io.to(sid).emit('chips_received', {
+        amount,
+        from: adminName || 'Admin',
+        isRebuy: true  // tells table.js not to update bank balance in localStorage
+      });
+    }
+  });
+
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
     if (!token) return next(new Error('Authentication required'));
@@ -2180,6 +2256,9 @@ function setupSocketHandlers(io) {
             game.removePlayer(targetUserId);
             broadcastGameState(io, tId, game);
           }
+          // Delete table_seats row so the player doesn't reappear in their seat
+          // if the server restarts before they rejoin (preloadActiveGames restores from DB)
+          try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tId).eq('user_id', targetUserId); } catch {}
           break;
         }
         case 'add_chips': {

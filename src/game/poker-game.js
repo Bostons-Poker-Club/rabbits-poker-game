@@ -896,6 +896,7 @@ class PokerGame {
       straddlePlayerSeat: this.straddlePlayerSeat,
       straddleEnabled: this.straddleEnabled,
       rabbitHuntEnabled: this.rabbitHuntEnabled,
+      maxPlayers: this.maxPlayers,
       players
     };
   }

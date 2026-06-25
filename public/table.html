@@ -206,7 +206,8 @@
     <button id="sound-toggle-btn" class="btn btn-sm btn-outline" onclick="toggleSoundThemePanel()" title="Sound settings" style="font-size:.75rem;padding:4px 8px">🔊</button>
     <button id="btn-hand-rankings" class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button id="btn-hand-history" class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
-    <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()" style="margin-left:auto">Leave</button>
+    <button id="btn-rebuy" class="btn btn-sm btn-gold" onclick="openRebuyModal()" style="display:none;margin-left:auto">+ Rebuy</button>
+    <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()">Leave</button>
   </div>
 </div>
 
@@ -276,6 +277,44 @@
     <div class="modal-footer" style="justify-content:center;gap:12px">
       <button class="btn btn-outline" onclick="stayAtTable()">Stay</button>
       <button class="btn btn-gold" onclick="cashOutAndLeave()">Cash Out &amp; Leave</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rebuy / Add Chips modal -->
+<div class="modal-overlay hidden" id="rebuy-modal">
+  <div class="modal" style="max-width:380px">
+    <h2 style="color:var(--gold)">🪙 Add Chips / Rebuy</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin:0 0 18px">Admin will add chips directly to your stack once payment is confirmed.</p>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Amount</label>
+      <input type="number" id="rebuy-amount" inputmode="numeric"
+        style="width:100%;padding:10px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:1rem;box-sizing:border-box">
+      <div id="rebuy-amount-hint" style="font-size:.76rem;color:var(--text-dim);margin-top:5px"></div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:8px">Payment Method</label>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <button class="rebuy-pay-btn" data-method="CashApp $rabbsroom"      onclick="selectRebuyPay(this)">💚 CashApp — $rabbsroom</button>
+        <button class="rebuy-pay-btn" data-method="Venmo @Roger-Depina"     onclick="selectRebuyPay(this)">💙 Venmo — @Roger-Depina</button>
+        <button class="rebuy-pay-btn" data-method="Zelle rogerio.depinaslabor@gmail.com" onclick="selectRebuyPay(this)">💛 Zelle — rogerio.depinaslabor@gmail.com</button>
+        <button class="rebuy-pay-btn" data-method="Cash"                    onclick="selectRebuyPay(this)">💵 Cash (in person)</button>
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-bottom:14px">
+      <label style="font-size:.82rem;color:var(--text-dim);display:block;margin-bottom:6px">Notes <span style="opacity:.6">(optional)</span></label>
+      <input type="text" id="rebuy-notes" placeholder="e.g. already sent, screenshot coming"
+        style="width:100%;padding:8px 12px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.88rem;box-sizing:border-box">
+    </div>
+
+    <div id="rebuy-error" style="display:none;color:var(--red);font-size:.85rem;margin-bottom:10px"></div>
+
+    <div class="modal-footer" style="justify-content:flex-end;gap:10px">
+      <button class="btn btn-outline" onclick="closeModal('rebuy-modal')">Cancel</button>
+      <button class="btn btn-gold" onclick="submitRebuy()">Request Rebuy</button>
     </div>
   </div>
 </div>

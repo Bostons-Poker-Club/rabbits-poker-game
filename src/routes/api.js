@@ -678,6 +678,8 @@ router.delete('/tables/:id', authMiddleware, adminMiddleware, async (req, res) =
 
   const { error } = await supabaseAdmin.from('tables').update({ status: 'closed' }).eq('id', tableId);
   if (error) return res.status(500).json({ error: error.message });
+  // Tear down in-memory game state so the table vanishes immediately for all clients
+  appEvents.emit('table:closed', { tableId });
   res.json({ success: true });
 });
 
@@ -1233,6 +1235,11 @@ router.put('/admin/players/:id', authMiddleware, adminMiddleware, async (req, re
 });
 
 router.delete('/admin/players/:id', authMiddleware, adminMiddleware, async (req, res) => {
+  // Evict from any live table before deleting the DB record so the in-memory
+  // game state is cleared and chips are returned while the user row still exists.
+  appEvents.emit('player:deleted', { userId: req.params.id });
+  // Small delay to let the async eviction start before the user row is gone
+  await new Promise(r => setTimeout(r, 150));
   const { error } = await supabaseAdmin
     .from('users')
     .delete()
@@ -1875,7 +1882,7 @@ router.get('/messages', authMiddleware, (req, res) => {
 
 // Player submits a buy-in request
 router.post('/buyin-request', authMiddleware, async (req, res) => {
-  const { amount, paymentMethod, notes } = req.body;
+  const { amount, paymentMethod, notes, tableId: reqTableId, isRebuy } = req.body;
   if (!amount || amount <= 0) return res.status(400).json({ error: 'Amount required' });
 
   // Fetch nickname + phone so admin sees full player details
@@ -1898,7 +1905,9 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
     paymentMethod: String(paymentMethod || 'Cash').slice(0, 80),
     notes: String(notes || '').slice(0, 200),
     requestedAt: Date.now(),
-    status: 'pending'
+    status: 'pending',
+    tableId: reqTableId ? String(reqTableId).slice(0, 100) : null,
+    isRebuy: !!isRebuy
   };
   buyInRequests.unshift(request);
 
@@ -1918,11 +1927,16 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
   try {
     const { sendAdminEmail, sendAdminPush } = require('../mail');
     const displayName = nickname ? `${req.user.username} (${nickname})` : req.user.username;
-    const subject = `💰 Buy-In Request — ${displayName} $${amount} chips`;
+    const label = request.isRebuy ? '🔄 Rebuy' : '💰 Buy-In';
+    const subject = `${label} Request — ${displayName} $${amount} chips`;
+    const rebuyRow = request.isRebuy
+      ? `<tr style="background:#fffbe6"><td style="padding:8px 14px;color:#555">Type</td><td style="padding:8px 14px;font-weight:700;color:#b8860b">🔄 REBUY — chips go to table stack</td></tr>`
+      : '';
     const html = `
       <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
-        <h2 style="color:#1a7a3f">💰 Buy-In Request — RabbsRoom</h2>
+        <h2 style="color:#1a7a3f">${label} Request — RabbsRoom</h2>
         <table style="border-collapse:collapse;width:100%;background:#f9f9f9;border-radius:8px">
+          ${rebuyRow}
           <tr><td style="padding:8px 14px;color:#555;width:140px">Username</td><td style="padding:8px 14px;font-weight:700">${req.user.username}</td></tr>
           ${nickname ? `<tr style="background:#fff"><td style="padding:8px 14px;color:#555">Nickname</td><td style="padding:8px 14px">${nickname}</td></tr>` : ''}
           ${phone ? `<tr><td style="padding:8px 14px;color:#555">Phone</td><td style="padding:8px 14px">${phone}</td></tr>` : ''}
@@ -1932,10 +1946,10 @@ router.post('/buyin-request', authMiddleware, async (req, res) => {
         </table>
         <p style="margin-top:20px;color:#666">Log in to <a href="https://rabbsroom.com/admin.html" style="color:#1a7a3f">admin panel</a> → Pending Buy-Ins to approve.</p>
       </div>`;
-    const text = `Buy-In: ${displayName}${phone ? ' ' + phone : ''} wants $${amount} chips via ${request.paymentMethod}${notes ? '. ' + notes : ''}. Approve: rabbsroom.com/admin.html`;
+    const text = `${request.isRebuy ? 'REBUY' : 'Buy-In'}: ${displayName}${phone ? ' ' + phone : ''} wants $${amount} chips via ${request.paymentMethod}${notes ? '. ' + notes : ''}. Approve: rabbsroom.com/admin.html`;
     await sendAdminEmail({ subject, text, html });
-    await sendAdminPush(text, `Buy-In: ${displayName}`);
-    console.log(`[buyin] Notification sent for ${displayName} $${amount}`);
+    await sendAdminPush(text, `${request.isRebuy ? 'Rebuy' : 'Buy-In'}: ${displayName}`);
+    console.log(`[buyin] Notification sent for ${displayName} $${amount} (${request.isRebuy ? 'rebuy' : 'buyin'})`);
   } catch (e) {
     console.warn('[buyin] Notification error:', e.message);
   }
@@ -1955,49 +1969,68 @@ router.post('/admin/buyin-requests/:id/approve', authMiddleware, adminMiddleware
   if (!request) return res.status(404).json({ error: 'Request not found' });
   if (request.status !== 'pending') return res.status(400).json({ error: 'Already processed' });
 
-  // Add chips to player
   const { data: user, error: fetchErr } = await supabaseAdmin.from('users').select('chips, email, phone').eq('id', request.userId).single();
   if (fetchErr || !user) return res.status(404).json({ error: 'Player not found' });
-  const newChips = (user.chips || 0) + request.amount;
-  const { error: updateErr } = await supabaseAdmin.from('users').update({ chips: newChips }).eq('id', request.userId);
-  if (updateErr) return res.status(500).json({ error: updateErr.message });
 
   request.status = 'approved';
   request.approvedAt = Date.now();
   request.approvedBy = req.user.username;
 
+  const io = req.app.get('io');
+  let newChips;
+
+  if (request.isRebuy && request.tableId) {
+    // Rebuy: add chips directly to the player's live table stack via appEvents.
+    // The handler in socket/handlers.js updates the in-memory game object,
+    // persists to table_seats, and broadcasts game_state to all table clients.
+    appEvents.emit('rebuy:approved', {
+      userId: request.userId,
+      tableId: request.tableId,
+      amount: request.amount,
+      adminName: req.user.username
+    });
+    newChips = user.chips; // bank balance unchanged for rebuys
+  } else {
+    // Regular buy-in: add to the player's chip bank balance
+    newChips = (user.chips || 0) + request.amount;
+    const { error: updateErr } = await supabaseAdmin.from('users').update({ chips: newChips }).eq('id', request.userId);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+    // Notify all connected sockets for this player
+    if (io) {
+      for (const [, s] of io.sockets.sockets) {
+        if (s.user && s.user.id === request.userId) {
+          s.emit('chips_received', { amount: request.amount, from: 'Admin', newTotal: newChips });
+        }
+      }
+    }
+  }
+
   logTransaction({
     userId: request.userId,
     username: request.username,
-    type: 'buyin',
+    type: request.isRebuy ? 'rebuy' : 'buyin',
     amount: request.amount,
     paymentMethod: request.paymentMethod,
     notes: request.notes || null
   });
 
-  // Notify player via socket
-  const io = req.app.get('io');
-  if (io) {
-    for (const [, s] of io.sockets.sockets) {
-      if (s.user && s.user.id === request.userId) {
-        s.emit('chips_received', { amount: request.amount, from: 'Admin', newTotal: newChips });
-      }
-    }
-  }
-
   // Notify player via email + SMS
   try {
     const { sendPlayerEmail, sendPlayerSMS } = require('../mail');
-    const subject = `✅ Buy-In Approved — $${request.amount.toLocaleString()} chips added`;
-    const text = `Hi ${request.username},\n\nYour buy-in of $${request.amount.toLocaleString()} chips has been approved and added to your account.\n\nNew balance: $${newChips.toLocaleString()} chips.\n\nGood luck at the tables!\n— RabbsRoom`;
-    const html = `<p>Hi <strong>${request.username}</strong>,</p><p>Your buy-in of <strong>$${request.amount.toLocaleString()}</strong> chips has been approved and added to your account.</p><p>New balance: <strong>$${newChips.toLocaleString()}</strong> chips.</p><p>Good luck at the tables!<br>— RabbsRoom</p>`;
+    const label = request.isRebuy ? 'Rebuy' : 'Buy-In';
+    const subject = `✅ ${label} Approved — $${request.amount.toLocaleString()} chips added`;
+    const bodyDetail = request.isRebuy
+      ? `Your rebuy of $${request.amount.toLocaleString()} chips has been approved and added to your table stack.`
+      : `Your buy-in of $${request.amount.toLocaleString()} chips has been approved and added to your account.\n\nNew balance: $${newChips.toLocaleString()} chips.`;
+    const text = `Hi ${request.username},\n\n${bodyDetail}\n\nGood luck at the tables!\n— RabbsRoom`;
+    const html = `<p>Hi <strong>${request.username}</strong>,</p><p>${bodyDetail.replace(/\n/g, '<br>')}</p><p>Good luck at the tables!<br>— RabbsRoom</p>`;
     if (user.email) await sendPlayerEmail({ to: user.email, subject, text, html });
-    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips added to your account. You can now join a table!` });
+    if (user.phone) await sendPlayerSMS({ phone: user.phone, text: `Boston Poker Club: $${request.amount.toLocaleString()} chips ${request.isRebuy ? 'added to your table stack' : 'added to your account'}. Good luck!` });
   } catch (e) {
     console.warn('[buyin] Player notification error:', e.message);
   }
 
-  console.log(`[buyin] Approved: ${request.username} +$${request.amount} chips (now ${newChips})`);
+  console.log(`[buyin] Approved: ${request.username} +$${request.amount} chips (${request.isRebuy ? 'rebuy→table' : 'buyin→bank'})`);
   res.json({ ok: true, chips: newChips, request });
 });
 
@@ -2998,24 +3031,32 @@ router.post('/me/password/set-new', authMiddleware, async (req, res) => {
 });
 
 router.put('/me/password', authMiddleware, async (req, res) => {
-  const userId = req.user.id;
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
-  if (newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  try {
+    const userId = req.user.id;
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Current and new password required' });
 
-  const { data: user, error: fetchErr } = await supabaseAdmin
-    .from('users').select('password_hash').eq('id', userId).single();
-  if (fetchErr || !user) return res.status(404).json({ error: 'User not found' });
+    const current = String(currentPassword).trim();
+    const newPw   = String(newPassword).trim();
+    if (newPw.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters' });
 
-  const valid = await bcrypt.compare(currentPassword, user.password_hash);
-  if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
+    const { data: user, error: fetchErr } = await supabaseAdmin
+      .from('users').select('password_hash').eq('id', userId).single();
+    if (fetchErr || !user) return res.status(404).json({ error: 'User not found' });
 
-  const newHash = await bcrypt.hash(newPassword, 10);
-  const { error: updateErr } = await supabaseAdmin
-    .from('users').update({ password_hash: newHash }).eq('id', userId);
-  if (updateErr) return res.status(500).json({ error: updateErr.message });
+    const valid = await bcrypt.compare(current, user.password_hash);
+    if (!valid) return res.status(400).json({ error: 'Current password is incorrect' });
 
-  res.json({ ok: true });
+    const newHash = await bcrypt.hash(newPw, 10);
+    const { error: updateErr } = await supabaseAdmin
+      .from('users').update({ password_hash: newHash }).eq('id', userId);
+    if (updateErr) return res.status(500).json({ error: updateErr.message });
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('[change-password] Unexpected error:', e.message);
+    res.status(500).json({ error: 'Something went wrong updating your password, please try again' });
+  }
 });
 
 // ─── Table Stats (public) ─────────────────────────────────────────────────────

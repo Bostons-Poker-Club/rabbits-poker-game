@@ -121,14 +121,16 @@ function chipStack(amount) {
 // ─── Seat Layout (positions as % of oval width/height offset from center) ──
 
 const SEAT_POSITIONS = {
-  2:  [{ x:50, y:85 }, { x:50, y:15 }],
-  3:  [{ x:50, y:82 }, { x:15, y:20 }, { x:85, y:20 }],
-  4:  [{ x:50, y:82 }, { x:5,  y:50 }, { x:50, y:10 }, { x:95, y:50 }],
-  5:  [{ x:50, y:82 }, { x:10, y:65 }, { x:20, y:15 }, { x:80, y:15 }, { x:90, y:65 }],
-  6:  [{ x:50, y:82 }, { x:8,  y:65 }, { x:8,  y:30 }, { x:50, y:8 }, { x:92, y:30 }, { x:92, y:65 }],
-  7:  [{ x:50, y:82 }, { x:10, y:68 }, { x:5,  y:32 }, { x:25, y:8 }, { x:75, y:8 }, { x:95, y:32 }, { x:90, y:68 }],
-  8:  [{ x:50, y:82 }, { x:12, y:72 }, { x:3,  y:42 }, { x:12, y:12 }, { x:50, y:5 }, { x:88, y:12 }, { x:97, y:42 }, { x:88, y:72 }],
-  9:  [{ x:50, y:82 }, { x:15, y:75 }, { x:3,  y:50 }, { x:10, y:20 }, { x:35, y:5 }, { x:65, y:5 }, { x:90, y:20 }, { x:97, y:50 }, { x:85, y:75 }]
+  // x/y are % of seats-container (which has inset:-60px desktop / -20px mobile).
+  // Top seats must stay ≥20% so they clear the 66px mobile header.
+  2:  [{ x:50, y:85 }, { x:50, y:20 }],
+  3:  [{ x:50, y:82 }, { x:18, y:22 }, { x:82, y:22 }],
+  4:  [{ x:50, y:82 }, { x:5,  y:50 }, { x:50, y:20 }, { x:95, y:50 }],
+  5:  [{ x:50, y:82 }, { x:10, y:65 }, { x:22, y:22 }, { x:78, y:22 }, { x:90, y:65 }],
+  6:  [{ x:50, y:82 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:20 }, { x:92, y:27 }, { x:92, y:73 }],
+  7:  [{ x:50, y:82 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:21 }, { x:75, y:21 }, { x:95, y:48 }, { x:90, y:75 }],
+  8:  [{ x:50, y:82 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:23 }, { x:50, y:20 }, { x:85, y:23 }, { x:97, y:50 }, { x:88, y:75 }],
+  9:  [{ x:50, y:82 }, { x:15, y:78 }, { x:3,  y:52 }, { x:10, y:26 }, { x:35, y:20 }, { x:65, y:20 }, { x:90, y:26 }, { x:97, y:52 }, { x:85, y:78 }]
 };
 
 screen.orientation.lock('landscape-primary').catch(() => {});
@@ -150,6 +152,17 @@ if (window.innerWidth < 900 || window.innerHeight < 900) {
   const overlay = document.getElementById('enter-fullscreen');
   if (overlay) overlay.style.display = 'flex';
 }
+
+// Re-render seats on viewport changes (browser resize, device rotation)
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { if (gameState) renderTable(gameState); }, 150);
+});
+window.addEventListener('orientationchange', () => {
+  // orientationchange fires before the layout reflows; wait for it to settle
+  setTimeout(() => { if (gameState) renderTable(gameState); }, 300);
+});
 
 // Tap outside chat panel to close it on mobile
 document.addEventListener('click', (e) => {
@@ -515,9 +528,14 @@ function connect() {
     hideHandResult();
     const myCards = document.getElementById('my-hole-cards');
     if (myCards) myCards.innerHTML = '<div style="color:var(--text-dim);font-size:.85rem;align-self:center">Dealing…</div>';
-    // Server sends cards_dealt before hand_started — re-render immediately so
-    // hand_started's "Dealing…" placeholder doesn't wipe already-rendered cards.
-    if (_myDealtCards?.length) renderMyHoleCards(_myDealtCards);
+    // Restore hole cards immediately: prefer cards_dealt buffer, fall back to myState
+    // (both my_state and cards_dealt are sent before hand_started, but direct-socket
+    // events can be dropped if userSockets is stale while room broadcasts still arrive)
+    if (_myDealtCards?.length) {
+      renderMyHoleCards(_myDealtCards);
+    } else if (myState) {
+      renderMyCards(myState);
+    }
     _myDealtCards = null;
   });
 
@@ -616,8 +634,9 @@ function connect() {
     toast(`✅ +${fmt(amount)} chips added to player`);
   });
 
-  socket.on('chips_received', ({ amount, from, newTotal }) => {
+  socket.on('chips_received', ({ amount, from, newTotal, isRebuy }) => {
     toast(`🪙 +${fmt(amount)} chips added by ${from}`);
+    if (isRebuy) return; // chips go to table stack via game_state broadcast — don't touch bank balance
     // Update localStorage so the next join_table emit uses the correct balance
     try {
       const u = getUser();
@@ -1095,6 +1114,15 @@ function renderTable(state) {
   renderSeats(state);
   renderHostControls(state);
   _updateSeatVideos(); // re-attach video elements after DOM rebuild
+  // Re-pin hole cards on every active-hand game_state so they survive any
+  // "Dealing…" wipe from hand_started when direct-socket events were dropped
+  if (state.handActive && myState) renderMyCards(myState);
+  // Show rebuy button only when the current user is seated
+  const rebuyBtn = document.getElementById('btn-rebuy');
+  if (rebuyBtn) {
+    const isSeated = state.players?.some(p => p.userId === user.id);
+    rebuyBtn.style.display = isSeated ? '' : 'none';
+  }
 }
 
 function renderHostControls(state) {
@@ -1288,14 +1316,9 @@ function _seatAvatarHtml(player) {
 
 function renderSeats(state) {
   const container = document.getElementById('seats-container');
-  const oval = document.getElementById('poker-oval');
-  const maxPlayers = state.players?.length
-    ? Math.max(state.players.length, (gameState?.maxPlayers || 9))
-    : 9;
+  const maxPlayers = state.maxPlayers || 9;
 
   const positions = SEAT_POSITIONS[Math.min(maxPlayers, 9)] || SEAT_POSITIONS[9];
-  const ovalRect = oval.getBoundingClientRect();
-  const wrapRect = oval.parentElement.getBoundingClientRect();
 
   // Build a map of seatNumber -> player
   const seatMap = {};
@@ -1582,6 +1605,77 @@ function stayAtTable() {
 function takeSeat(seatNumber) {
   if (!confirm(`Sit in Seat ${seatNumber}?`)) return;
   socket.emit('join_table', { tableId, seatNumber, buyInChips: buyIn });
+}
+
+// ─── Rebuy / Add Chips ────────────────────────────────────────────────────
+
+function _tableMinBuyIn() {
+  const sb = gameState?.smallBlind || 1;
+  const bb = gameState?.bigBlind  || 2;
+  const gt = gameState?.gameType  || 'nlh';
+  if (gt === 'plo') return (sb === 2 && bb === 2) ? 100 : bb * 50;
+  if (sb === 1 && bb === 3)  return 60;
+  if (sb === 2 && bb === 5)  return 200;
+  if (sb === 5 && bb === 5)  return 500;
+  if (sb === 5 && bb === 10) return 500;
+  return bb * 20;
+}
+
+function openRebuyModal() {
+  const mySeat = gameState?.players?.find(p => p.userId === user.id);
+  const minBuyIn = _tableMinBuyIn();
+  const amtEl = document.getElementById('rebuy-amount');
+  amtEl.value  = minBuyIn;
+  amtEl.min    = minBuyIn;
+  const currentStack = mySeat?.chips ?? 0;
+  document.getElementById('rebuy-amount-hint').textContent =
+    `Min: $${fmt(minBuyIn)} · Your current stack: $${fmt(currentStack)}`;
+  document.getElementById('rebuy-error').style.display = 'none';
+  document.getElementById('rebuy-notes').value = '';
+  document.querySelectorAll('.rebuy-pay-btn').forEach(b => b.classList.remove('selected'));
+  openModal('rebuy-modal');
+}
+
+function selectRebuyPay(btn) {
+  document.querySelectorAll('.rebuy-pay-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  document.getElementById('rebuy-error').style.display = 'none';
+}
+
+async function submitRebuy() {
+  const amount = parseInt(document.getElementById('rebuy-amount').value);
+  const method = document.querySelector('.rebuy-pay-btn.selected')?.dataset.method;
+  const notes  = document.getElementById('rebuy-notes').value.trim();
+  const errEl  = document.getElementById('rebuy-error');
+
+  const minBuyIn = _tableMinBuyIn();
+  if (!amount || amount < minBuyIn) {
+    errEl.textContent = `Minimum rebuy is $${fmt(minBuyIn)}`;
+    errEl.style.display = '';
+    return;
+  }
+  if (!method) {
+    errEl.textContent = 'Please select a payment method';
+    errEl.style.display = '';
+    return;
+  }
+
+  const submitBtn = document.querySelector('#rebuy-modal .btn-gold');
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending…'; }
+
+  try {
+    await apiFetch('/api/buyin-request', {
+      method: 'POST',
+      body: { amount, paymentMethod: method, notes, tableId, isRebuy: true }
+    });
+    closeModal('rebuy-modal');
+    toast('✅ Rebuy request sent — waiting for admin approval');
+  } catch (e) {
+    errEl.textContent = e.message || 'Failed to send request';
+    errEl.style.display = '';
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Request Rebuy'; }
+  }
 }
 
 // ─── Shot Clock ───────────────────────────────────────────────────────────
