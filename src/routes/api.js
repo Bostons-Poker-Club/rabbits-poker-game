@@ -1529,6 +1529,7 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
   if (updateErr) return res.status(500).json({ error: updateErr.message });
   _markResetCooldown(id);
   console.log(`[admin reset-password] Temp password set for ${user.username} (${user.email})`);
+  console.log(`[admin reset-password] TEMP PASSWORD FOR ${user.username}: ${tempPassword}`);
 
   try {
     await sendPlayerEmail({
