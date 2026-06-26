@@ -1499,9 +1499,11 @@ function renderLiveTableOverview(tables) {
   grid.innerHTML = tables.map(t => {
     const streetLabel = { preflop: 'Preflop', flop: 'Flop', turn: 'Turn', river: 'River' }[t.currentStreet] || '—';
     const playerRows = t.players.map(p =>
-      `<div style="display:flex;justify-content:space-between;font-size:.78rem;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)">
+      `<div style="display:flex;align-items:center;gap:4px;font-size:.78rem;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.05)">
         <span style="color:${p.hasFolded ? '#666' : 'var(--text)'}">🪑${p.seatNumber} ${esc(p.username)}</span>
-        <span style="color:var(--gold)">$${fmt(p.chips)}</span>
+        <span style="color:var(--gold);margin-right:auto">$${fmt(p.chips)}</span>
+        <button style="font-size:.58rem;padding:1px 5px;background:#2ecc71;color:#000;border:none;cursor:pointer;border-radius:3px;line-height:1.4" onclick="adminRemovePlayer('${t.tableId}','${p.userId}','${esc(p.username)}',true)" title="Remove with cashout — chips returned">💰</button>
+        <button style="font-size:.58rem;padding:1px 5px;background:#e63946;color:#fff;border:none;cursor:pointer;border-radius:3px;line-height:1.4" onclick="adminRemovePlayer('${t.tableId}','${p.userId}','${esc(p.username)}',false)" title="Remove without cashout — chips forfeited">✕</button>
       </div>`
     ).join('');
     return `
@@ -1535,6 +1537,18 @@ function renderLiveTableOverview(tables) {
 
 function spectateTable(tableId) {
   window.open(`/table.html?tableId=${tableId}&spectate=1`, '_blank');
+}
+
+function adminRemovePlayer(tableId, userId, username, cashout) {
+  if (cashout) {
+    if (!confirm(`Remove ${username} from the table with cashout?\n\nChips will be returned to their account balance.`)) return;
+    adminSocket?.emit('admin_action', { action: 'remove_with_cashout', tableId, targetUserId: userId });
+    toast(`${username} removed — chips returned`);
+  } else {
+    if (!confirm(`⚠️ REMOVE WITHOUT CASHOUT\n\nRemove ${username} for a rule violation?\n\nChips will be FORFEITED. This cannot be undone.`)) return;
+    adminSocket?.emit('admin_action', { action: 'remove_without_cashout', tableId, targetUserId: userId });
+    toast(`${username} removed — chips forfeited`, 'error');
+  }
 }
 
 function adminPauseTable(tableId) {

@@ -2261,6 +2261,46 @@ function setupSocketHandlers(io) {
           try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tId).eq('user_id', targetUserId); } catch {}
           break;
         }
+        case 'remove_with_cashout': {
+          const tId = tableId;
+          const game = activeGames.get(tId);
+          const player = game?.getPlayer(targetUserId);
+          const chipsToReturn = player?.chips || 0;
+          const targetSid = userSockets.get(targetUserId);
+          if (targetSid) {
+            io.to(targetSid).emit('kicked', { message: 'You have been removed from the table by an admin. Your chips have been returned to your account.' });
+          }
+          if (game) {
+            game.removePlayer(targetUserId);
+            broadcastGameState(io, tId, game);
+          }
+          if (chipsToReturn > 0) {
+            try {
+              const { data: u } = await supabaseAdmin.from('users').select('chips').eq('id', targetUserId).single();
+              if (u) {
+                const newTotal = u.chips + chipsToReturn;
+                await supabaseAdmin.from('users').update({ chips: newTotal }).eq('id', targetUserId);
+                if (targetSid) io.to(targetSid).emit('chips_received', { amount: chipsToReturn, from: 'Admin', newTotal });
+              }
+            } catch {}
+          }
+          try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tId).eq('user_id', targetUserId); } catch {}
+          break;
+        }
+        case 'remove_without_cashout': {
+          const tId = tableId;
+          const targetSid = userSockets.get(targetUserId);
+          if (targetSid) {
+            io.to(targetSid).emit('kicked', { message: 'You have been removed from the table for a rule violation. Chips have been forfeited.' });
+          }
+          const game = activeGames.get(tId);
+          if (game) {
+            game.removePlayer(targetUserId);
+            broadcastGameState(io, tId, game);
+          }
+          try { await supabaseAdmin.from('table_seats').delete().eq('table_id', tId).eq('user_id', targetUserId); } catch {}
+          break;
+        }
         case 'add_chips': {
           const game = activeGames.get(tableId);
           if (game) {

@@ -1162,7 +1162,8 @@ function renderHostControls(state) {
       <span style="color:var(--text)">${esc(p.username)}</span>
       <span style="color:var(--chip-green);font-size:.7rem">${fmt(p.chips)}</span>
       <button class="btn btn-sm btn-gold" style="padding:2px 7px;font-size:.7rem" onclick="hostAddChips('${p.userId}','${esc(p.username)}')">+Chips</button>
-      <button class="btn btn-sm btn-outline" style="padding:2px 7px;font-size:.7rem;color:var(--red)" onclick="hostCashOutPlayer('${p.userId}','${esc(p.username)}')">Cash Out</button>
+      <button class="btn btn-sm btn-outline" style="padding:2px 7px;font-size:.7rem;color:var(--chip-green)" onclick="hostCashOutPlayer('${p.userId}','${esc(p.username)}')">💰 Cash Out</button>
+      <button class="btn btn-sm btn-red" style="padding:2px 7px;font-size:.7rem" onclick="hostRemoveViolation('${p.userId}','${esc(p.username)}')">✕ Forfeit</button>
     </div>`).join('') +
     // Pause / Resume control
     `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)">
@@ -1232,8 +1233,13 @@ function hostResumeGame() {
 }
 
 function hostCashOutPlayer(targetUserId, targetUsername) {
-  if (!confirm(`Cash out ${targetUsername} from this table?`)) return;
-  socket.emit('admin_action', { action: 'kick', tableId, targetUserId });
+  if (!confirm(`Cash out ${targetUsername} from the table?\n\nChips will be returned to their account balance.`)) return;
+  socket.emit('admin_action', { action: 'remove_with_cashout', tableId, targetUserId });
+}
+
+function hostRemoveViolation(targetUserId, targetUsername) {
+  if (!confirm(`⚠️ Remove ${targetUsername} for a rule violation?\n\nChips will be FORFEITED — this cannot be undone.`)) return;
+  socket.emit('admin_action', { action: 'remove_without_cashout', tableId, targetUserId });
 }
 
 function dropPuck(autoDropMinutes) {
