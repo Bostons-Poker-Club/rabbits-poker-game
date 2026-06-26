@@ -40,6 +40,25 @@ function _prunePending2FA() {
   }
 }
 
+// ─── Password-reset cooldown ──────────────────────────────────────────────────
+// Prevents runaway loops (browser network retries, admin double-clicks) from
+// overwriting a user's password hash multiple times in quick succession.
+// Map: userId → timestamp of last successful hash write.
+const _pwResetCooldown = new Map(); // userId -> lastResetAt (ms)
+const PW_RESET_COOLDOWN_MS = 90_000; // 90 seconds
+
+function _checkResetCooldown(userId) {
+  const last = _pwResetCooldown.get(userId);
+  if (last && Date.now() - last < PW_RESET_COOLDOWN_MS) return false; // still cooling down
+  return true; // ok to proceed
+}
+
+function _markResetCooldown(userId) {
+  _pwResetCooldown.set(userId, Date.now());
+  // Auto-clean after TTL to avoid unbounded memory growth
+  setTimeout(() => _pwResetCooldown.delete(userId), PW_RESET_COOLDOWN_MS + 5000);
+}
+
 // ─── Login rate limiter ────────────────────────────────────────────────────────
 // Counts only failed attempts (skipSuccessfulRequests). Blocks after 10 failures.
 const loginLimiter = rateLimit({
@@ -432,16 +451,24 @@ router.post('/auth/forgot-password', async (req, res) => {
   // Always return ok — never reveal whether account exists
   if (!user?.email) return res.json({ ok: true });
 
+  // Cooldown: if this user's password was reset within the last 90 seconds,
+  // return ok silently — the first temp password is still valid and in use.
+  if (!_checkResetCooldown(user.id)) {
+    console.log(`[forgot-password] Cooldown active for ${user.username} — skipping duplicate reset`);
+    return res.json({ ok: true });
+  }
+
   // Lowercase hex — no uppercase/case confusion when typing from email
   const tempPassword = crypto.randomBytes(4).toString('hex');
   const hash = await bcrypt.hash(tempPassword, 10);
-  try {
-    await supabaseAdmin.from('users')
-      .update({ password_hash: hash, must_change_password: true })
-      .eq('id', user.id);
-  } catch {
-    await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', user.id);
+  const { error: updateErr } = await supabaseAdmin.from('users')
+    .update({ password_hash: hash, must_change_password: true })
+    .eq('id', user.id);
+  if (updateErr) {
+    console.error('[forgot-password] DB update error:', updateErr.message);
+    return res.json({ ok: true }); // still return ok — don't reveal account existence
   }
+  _markResetCooldown(user.id);
   console.log(`[forgot-password] Temp password set for ${user.username} (${user.email})`);
 
   try {
@@ -1487,16 +1514,20 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
   if (!user) return res.status(404).json({ error: 'User not found' });
   if (!user.email) return res.status(400).json({ error: 'Player has no email on file' });
 
+  // Cooldown: if this user's password was reset within the last 90 seconds,
+  // return a clear error so the admin knows not to click again.
+  if (!_checkResetCooldown(id)) {
+    return res.status(429).json({ error: 'Password was just reset — wait 90 seconds before resetting again.' });
+  }
+
   // Lowercase hex — no uppercase/case confusion when typing from email
   const tempPassword = crypto.randomBytes(4).toString('hex');
   const hash = await bcrypt.hash(tempPassword, 10);
-  try {
-    await supabaseAdmin.from('users')
-      .update({ password_hash: hash, must_change_password: true })
-      .eq('id', id);
-  } catch {
-    await supabaseAdmin.from('users').update({ password_hash: hash }).eq('id', id);
-  }
+  const { error: updateErr } = await supabaseAdmin.from('users')
+    .update({ password_hash: hash, must_change_password: true })
+    .eq('id', id);
+  if (updateErr) return res.status(500).json({ error: updateErr.message });
+  _markResetCooldown(id);
   console.log(`[admin reset-password] Temp password set for ${user.username} (${user.email})`);
 
   try {
