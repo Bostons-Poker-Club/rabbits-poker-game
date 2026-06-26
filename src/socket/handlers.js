@@ -785,15 +785,6 @@ function setupSocketHandlers(io) {
             logTransaction({ userId, username, type: 'table_buyin', amount: chips, tableName: table.name || tableId });
           }
 
-          // Create or update seat record (best-effort — silently skip if DB unavailable)
-          try {
-            await supabaseAdmin.from('table_seats').upsert({
-              table_id: tableId,
-              user_id: userId,
-              seat_number: seatNumber,
-              chips_on_table: chips
-            }, { onConflict: 'table_id,user_id' });
-          } catch (_) {}
         }
 
         console.log('[join_table] Chips determined:', chips, 'for userId:', userId);
@@ -882,6 +873,18 @@ function setupSocketHandlers(io) {
 
         game.addPlayer(userId, username, chips, finalSeat);
         console.log('[join_table] Player added — seat:', finalSeat, 'userId:', userId, 'chips:', chips, 'total in game:', game.players?.size ?? '?');
+
+        // Write seat record now that finalSeat is known (non-tournament only)
+        if (!isTournamentTable) {
+          try {
+            await supabaseAdmin.from('table_seats').upsert({
+              table_id: tableId,
+              user_id: userId,
+              seat_number: finalSeat,
+              chips_on_table: chips
+            }, { onConflict: 'table_id,user_id' });
+          } catch (_) {}
+        }
         playerProfiles.set(userId, { avatarUrl: dbUser?.avatar_url || null, isAdmin, isHost: dbUser?.is_host || false });
 
         // Increment sessions_played on first join to any table this session

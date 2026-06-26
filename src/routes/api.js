@@ -2382,7 +2382,7 @@ router.get('/admin/fee-income', authMiddleware, adminMiddleware, async (req, res
       .reduce((s, p) => s + (p.amount || 0), 0);
 
     const { data: overdueRows } = await supabaseAdmin.from('monthly_fees')
-      .select('id', { count: 'exact' }).eq('is_overdue', true);
+      .select('user_id', { count: 'exact' }).eq('is_overdue', true);
 
     res.json({ total, monthTotal, unpaidCount: (overdueRows || []).length });
   } catch (e) {

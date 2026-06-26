@@ -318,6 +318,35 @@ async function runMigrations() {
     )
   `);
 
+  // ─── Additive column migrations ────────────────────────────────────────────
+  // player_stats: total_lost + last_hand_at were never in the original schema
+  await _create('player_stats add total_lost', `
+    ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS total_lost INTEGER NOT NULL DEFAULT 0
+  `);
+  await _create('player_stats add last_hand_at', `
+    ALTER TABLE player_stats ADD COLUMN IF NOT EXISTS last_hand_at TIMESTAMPTZ
+  `);
+
+  // hands: hand_number, pot, winner_id, best_hand_rank, community_cards, ended_at
+  await _create('hands add hand_number', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS hand_number INTEGER
+  `);
+  await _create('hands add pot', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS pot INTEGER NOT NULL DEFAULT 0
+  `);
+  await _create('hands add winner_id', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS winner_id UUID REFERENCES users(id) ON DELETE SET NULL
+  `);
+  await _create('hands add best_hand_rank', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS best_hand_rank INTEGER
+  `);
+  await _create('hands add community_cards', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS community_cards JSONB DEFAULT '[]'
+  `);
+  await _create('hands add ended_at', `
+    ALTER TABLE hands ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ
+  `);
+
   // Seed jackpot singleton row
   await _create('jackpot seed', `
     INSERT INTO jackpot (id, current_amount, highest_hand_rank)
