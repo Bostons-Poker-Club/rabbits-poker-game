@@ -1967,6 +1967,7 @@ input, select, textarea { font-family: inherit; }
     font-size: 0.7rem;
     border-radius: 5px;
     min-height: unset;
+    touch-action: none;
   }
   body.table-page .mobile-media-bar .ptt-btn.speaking {
     background: rgba(180,20,20,0.9);
