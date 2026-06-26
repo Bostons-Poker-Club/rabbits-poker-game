@@ -2660,15 +2660,29 @@ async function startPTT(e) {
 
   const [audioTrack] = micStream?.getAudioTracks() || [];
   console.log('[MIC] Local stream tracks:', micStream?.getTracks().map(t => `${t.kind}:${t.label}`));
-  console.log('[MIC] Audio track enabled:', audioTrack?.enabled, 'readyState:', audioTrack?.readyState);
+  console.log('[MIC] Audio track enabled:', audioTrack?.enabled, 'readyState:', audioTrack?.readyState, 'id:', audioTrack?.id?.slice(0, 8));
+
+  // ── PTT diagnostic: log full peer + sender state at press time ───────────
+  console.log(`[PTT-DIAG] startPTT — peers: ${pttPeers.size}, micStream: ${!!micStream}`);
   for (const [pid, pc] of pttPeers) {
+    console.log(`[PTT-DIAG] peer ${pid.slice(0,8)} — iceState: ${pc.iceConnectionState} | connState: ${pc.connectionState} | signalingState: ${pc.signalingState}`);
     const senders = pc.getSenders();
+    const senderDesc = senders.map(s =>
+      `${s.track?.kind || 'NO-TRACK'}(enabled=${s.track?.enabled},ready=${s.track?.readyState},id=${s.track?.id?.slice(0,8) || 'null'})`
+    );
+    console.log(`[PTT-DIAG] peer ${pid.slice(0,8)} — senders (${senders.length}):`, senderDesc.join(' | '));
     const audioSender = senders.find(s => s.track?.kind === 'audio');
-    console.log('[MIC] Senders for peer', pid, ':', senders.map(s => s.track?.kind || 'null'));
     if (audioSender && audioSender.track) {
+      const sameRef = audioSender.track === audioTrack;
+      console.log(`[PTT-DIAG] peer ${pid.slice(0,8)} — audioSender FOUND | track.id: ${audioSender.track.id?.slice(0,8)} | sameRef as micTrack: ${sameRef} — enabling`);
       audioSender.track.enabled = true;
+    } else if (audioSender && !audioSender.track) {
+      console.warn(`[PTT-DIAG] peer ${pid.slice(0,8)} — audioSender FOUND but track is NULL — cannot enable`);
+    } else {
+      console.warn(`[PTT-DIAG] peer ${pid.slice(0,8)} — NO audio sender found — mic not in this peer connection`);
     }
   }
+  // ── end diagnostic ────────────────────────────────────────────────────────
 
   micStream.getAudioTracks().forEach(t => { t.enabled = true; });
   pttActive = true;
