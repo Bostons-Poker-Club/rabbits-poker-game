@@ -2360,20 +2360,40 @@ function _initPTTButton() {
   _pttBtnInitialized = true;
 
   btn.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return; // left-click only
-    e.preventDefault(); // suppress any synthetic mouse events the browser would generate
-    btn.setPointerCapture(e.pointerId); // hold pointer on this element through release
-    console.log('[PTT-DIAG] pointerdown — pointerType:', e.pointerType, 'pointerId:', e.pointerId);
+    // UNCONDITIONAL first-line log — fires before any other logic
+    console.log('[PTT-DIAG] pointerdown RAW — pointerType:', e.pointerType, 'button:', e.button, 'pointerId:', e.pointerId, 'isPrimary:', e.isPrimary, 'pressure:', e.pressure);
+    console.log('[PTT-DIAG] computed touch-action:', getComputedStyle(btn).touchAction);
+
+    if (e.pointerType === 'mouse' && e.button !== 0) {
+      console.warn('[PTT-DIAG] EARLY RETURN — non-left mouse button, button=', e.button);
+      return;
+    }
+
+    e.preventDefault();
+
+    try {
+      btn.setPointerCapture(e.pointerId);
+      console.log('[PTT-DIAG] setPointerCapture OK — pointerId:', e.pointerId, 'hasCapture:', btn.hasPointerCapture(e.pointerId));
+    } catch (err) {
+      console.error('[PTT-DIAG] setPointerCapture FAILED:', err.message, '— continuing without capture');
+    }
+
     startPTT(e);
   });
 
   const _release = (e) => {
-    console.log('[PTT-DIAG] pointer released — type:', e?.type, 'pointerType:', e?.pointerType);
+    console.log('[PTT-DIAG] pointer released — type:', e?.type, 'pointerType:', e?.pointerType, 'pointerId:', e?.pointerId);
     stopPTT();
   };
   btn.addEventListener('pointerup', _release);
-  btn.addEventListener('pointercancel', _release);
-  btn.addEventListener('lostpointercapture', _release); // failsafe if capture is lost
+  btn.addEventListener('pointercancel', (e) => {
+    console.warn('[PTT-DIAG] pointercancel fired — pointerType:', e.pointerType, 'pointerId:', e.pointerId);
+    _release(e);
+  });
+  btn.addEventListener('lostpointercapture', (e) => {
+    console.warn('[PTT-DIAG] lostpointercapture fired — pointerId:', e.pointerId);
+    _release(e);
+  });
 
   console.log('[PTT] button wired with pointer events + capture');
 }
