@@ -51,6 +51,7 @@ const pttPending = new Map();   // peerId -> RTCIceCandidate[] (buffered before 
 let adminMuted = false;        // true when admin has muted this client
 let openMicMode = false;       // true when in continuous open-mic mode
 let openMicActive = false;     // true when currently transmitting in open-mic mode
+let _pttBtnInitialized = false; // guard: wire pointer events once only
 
 // ─── Waitlist state ───────────────────────────────────────────────────────
 let _waitlistState = {}; // { active, position, total, seatAvailable }
@@ -1037,11 +1038,11 @@ function connect() {
     openMicMode = (mode === 'openmic');
     const btn = document.getElementById('ptt-btn');
     if (openMicMode) {
-      if (btn) { btn.textContent = '🎙 Open Mic (on)'; btn.style.cursor = 'default'; btn.onmousedown = null; btn.onmouseup = null; btn.ontouchstart = null; btn.ontouchend = null; }
+      if (btn) { btn.textContent = '🎙 Open Mic (on)'; btn.style.cursor = 'default'; }
       if (!adminMuted) _startOpenMic();
     } else {
       _stopOpenMic();
-      if (btn) { btn.textContent = '🎙 Hold to Talk'; btn.style.cursor = ''; btn.onmousedown = (e) => startPTT(e); btn.onmouseup = () => stopPTT(); btn.ontouchstart = (e) => startPTT(e); btn.ontouchend = () => stopPTT(); }
+      if (btn) { btn.textContent = '🎙 Hold to Talk'; btn.style.cursor = ''; }
     }
     renderAdminPttPanel();
   });
@@ -2346,6 +2347,37 @@ function adminDisableAllCams() {
   document.getElementById('cam-grid-modal')?.remove();
 }
 
+// ─── PTT Button Wiring ────────────────────────────────────────────────────────
+// Uses Pointer Events + setPointerCapture instead of mousedown/mouseup.
+// On Mac/Chrome, changing button text/class during mousedown causes a synthetic
+// mouseup to fire immediately (re-hit-test after layout change). Pointer capture
+// pins the element as the target for all pointer events until release, so
+// pointerup only fires on a genuine physical release regardless of re-layouts.
+function _initPTTButton() {
+  if (_pttBtnInitialized) return;
+  const btn = document.getElementById('ptt-btn');
+  if (!btn) return;
+  _pttBtnInitialized = true;
+
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return; // left-click only
+    e.preventDefault(); // suppress any synthetic mouse events the browser would generate
+    btn.setPointerCapture(e.pointerId); // hold pointer on this element through release
+    console.log('[PTT-DIAG] pointerdown — pointerType:', e.pointerType, 'pointerId:', e.pointerId);
+    startPTT(e);
+  });
+
+  const _release = (e) => {
+    console.log('[PTT-DIAG] pointer released — type:', e?.type, 'pointerType:', e?.pointerType);
+    stopPTT();
+  };
+  btn.addEventListener('pointerup', _release);
+  btn.addEventListener('pointercancel', _release);
+  btn.addEventListener('lostpointercapture', _release); // failsafe if capture is lost
+
+  console.log('[PTT] button wired with pointer events + capture');
+}
+
 // ─── PTT Core Helpers ─────────────────────────────────────────────────────────
 
 // Build and wire a fresh RTCPeerConnection for peerId.
@@ -2593,6 +2625,7 @@ async function _pttAcquireMic() {
 
 // Acquire mic then join PTT mesh — called on joined_table
 async function _pttInit() {
+  _initPTTButton(); // wire pointer events once (no-op on subsequent calls)
   await _pttAcquireMic(); // request permission; shows banner on denial
   console.log('[PTT] _pttInit: micStream acquired:', !!micStream, '— emitting ptt:mesh_join');
   socket.emit('ptt:mesh_join'); // join mesh regardless (can receive audio even without mic)
@@ -2686,6 +2719,7 @@ async function startPTT(e) {
 
   micStream.getAudioTracks().forEach(t => { t.enabled = true; });
   pttActive = true;
+  console.log('[PTT-DIAG] pttActive = true — holding open until pointerup');
   const btn = document.getElementById('ptt-btn');
   if (btn) { btn.classList.add('speaking'); btn.textContent = '🔴 Talking…'; }
   socket.emit('ptt:talking');
