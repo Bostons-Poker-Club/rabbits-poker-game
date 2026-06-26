@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260622-v10 | break-cam-fixes');
+console.log('[table.js] build: 20260626-v11 | seat-select+fixes');
 
 requireAuth();
 
@@ -8,6 +8,7 @@ const params = new URLSearchParams(location.search);
 const tableId = params.get('tableId');
 const buyIn = parseInt(params.get('buyIn')) || 200;
 const spectateMode = params.get('spectate') === '1';
+const preferredSeat = parseInt(params.get('seat')) || null;
 
 if (!tableId) window.location.href = '/lobby.html';
 if (spectateMode && !user?.isAdmin) window.location.href = '/lobby.html';
@@ -123,15 +124,16 @@ function chipStack(amount) {
 
 const SEAT_POSITIONS = {
   // x/y are % of seats-container (which has inset:-60px desktop / -20px mobile).
-  // Top seats must stay ≥20% so they clear the 66px mobile header.
-  2:  [{ x:50, y:85 }, { x:50, y:20 }],
-  3:  [{ x:50, y:82 }, { x:18, y:22 }, { x:82, y:22 }],
-  4:  [{ x:50, y:82 }, { x:5,  y:50 }, { x:50, y:20 }, { x:95, y:50 }],
-  5:  [{ x:50, y:82 }, { x:10, y:65 }, { x:22, y:22 }, { x:78, y:22 }, { x:90, y:65 }],
-  6:  [{ x:50, y:82 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:20 }, { x:92, y:27 }, { x:92, y:73 }],
-  7:  [{ x:50, y:82 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:21 }, { x:75, y:21 }, { x:95, y:48 }, { x:90, y:75 }],
-  8:  [{ x:50, y:82 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:23 }, { x:50, y:20 }, { x:85, y:23 }, { x:97, y:50 }, { x:88, y:75 }],
-  9:  [{ x:50, y:82 }, { x:15, y:78 }, { x:3,  y:52 }, { x:10, y:26 }, { x:35, y:20 }, { x:65, y:20 }, { x:90, y:26 }, { x:97, y:52 }, { x:85, y:78 }]
+  // Seat 1 (bottom centre) is at y:88 so its box clears the community-card area.
+  // Top seats sit at y:24-26 to avoid colliding with the 66px mobile header.
+  2:  [{ x:50, y:88 }, { x:50, y:24 }],
+  3:  [{ x:50, y:88 }, { x:18, y:25 }, { x:82, y:25 }],
+  4:  [{ x:50, y:88 }, { x:5,  y:50 }, { x:50, y:24 }, { x:95, y:50 }],
+  5:  [{ x:50, y:88 }, { x:10, y:65 }, { x:22, y:25 }, { x:78, y:25 }, { x:90, y:65 }],
+  6:  [{ x:50, y:88 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:24 }, { x:92, y:27 }, { x:92, y:73 }],
+  7:  [{ x:50, y:88 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:24 }, { x:75, y:24 }, { x:95, y:48 }, { x:90, y:75 }],
+  8:  [{ x:50, y:88 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:26 }, { x:50, y:24 }, { x:85, y:26 }, { x:97, y:50 }, { x:88, y:75 }],
+  9:  [{ x:50, y:88 }, { x:15, y:80 }, { x:3,  y:52 }, { x:10, y:28 }, { x:35, y:24 }, { x:65, y:24 }, { x:90, y:28 }, { x:97, y:52 }, { x:85, y:80 }]
 };
 
 screen.orientation.lock('landscape-primary').catch(() => {});
@@ -442,7 +444,7 @@ function connect() {
       socket.emit('admin:spectate', { tableId });
     } else {
       console.log('[join] Starting join for user:', user.id, 'table:', tableId);
-      socket.emit('join_table', { tableId, buyInChips: buyIn });
+      socket.emit('join_table', { tableId, buyInChips: buyIn, seatNumber: preferredSeat || undefined });
       renderHostControls();
       // If joined_table doesn't arrive within 20s, show a clear error
       _joinTimeoutId = setTimeout(_handleJoinTimeout, 20000);
@@ -1343,8 +1345,9 @@ function renderSeats(state) {
       const isMe = player.userId === user.id;
       const hasPuck = moneyPuck?.holderSeat === seatNum;
       const isStraddler = state.straddlePlayerSeat === seatNum;
-      const holeCardsHtml = player.holeCards?.length
-        ? player.holeCards.map(c => c.rank === '?' ? '<div class="card back"></div>' : cardHtml(c)).join('')
+      const revealedCards = player.holeCards?.filter(c => c.rank !== '?') || [];
+      const holeCardsHtml = revealedCards.length
+        ? revealedCards.map(c => cardHtml(c)).join('')
         : '';
 
       html += `
@@ -1354,7 +1357,7 @@ function renderSeats(state) {
             ${hasPuck ? `<div class="money-puck">💰 $${fmt(moneyPuck.value)}</div>` : ''}
             ${isStraddler ? `<div class="straddle-badge">STR $${fmt(state.bigBlind * 2)}</div>` : ''}
             <div class="seat-avatar" data-cam-uid="${player.userId}">${_seatAvatarHtml(player)}</div>
-            <div class="seat-name" title="${esc(player.username)}">${esc(player.username.length > 10 ? player.username.slice(0,10) + '…' : player.username)}${isMe ? ' (You)' : ''}</div>
+            <div class="seat-name" title="${esc(player.username)}">${esc(player.username.length > 14 ? player.username.slice(0,14) + '…' : player.username)}${isMe ? ' (You)' : ''}</div>
             <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}
@@ -1610,8 +1613,14 @@ function stayAtTable() {
 }
 
 function takeSeat(seatNumber) {
-  if (!confirm(`Sit in Seat ${seatNumber}?`)) return;
-  socket.emit('join_table', { tableId, seatNumber, buyInChips: buyIn });
+  const alreadySeated = gameState?.players?.some(p => p.userId === user.id);
+  if (alreadySeated) {
+    if (!confirm(`Move to Seat ${seatNumber}?`)) return;
+    socket.emit('table:change_seat', { tableId, newSeat: seatNumber });
+  } else {
+    if (!confirm(`Sit in Seat ${seatNumber}?`)) return;
+    socket.emit('join_table', { tableId, seatNumber, buyInChips: buyIn });
+  }
 }
 
 // ─── Rebuy / Add Chips ────────────────────────────────────────────────────

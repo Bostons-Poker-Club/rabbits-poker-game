@@ -343,6 +343,13 @@
     <input type="hidden" id="join-table-id">
     <input type="hidden" id="join-table-bb">
     <input type="hidden" id="join-table-min">
+    <input type="hidden" id="join-seat-number" value="">
+    <div class="form-group">
+      <label>Choose a Seat</label>
+      <div id="join-seat-picker" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;min-height:36px">
+        <span style="color:var(--text-dim);font-size:.8rem">Loading seats…</span>
+      </div>
+    </div>
     <div class="form-group">
       <label>Buy-In Amount (chips)</label>
       <input type="number" id="join-buyin" min="1" style="width:100%;padding:10px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text)">

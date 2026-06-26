@@ -221,7 +221,7 @@ function renderTables(tables) {
     const minBuyIn = getMinBuyIn(t.stakes_small_blind, t.stakes_big_blind, t.game_type);
     const feltColor = t.felt_color || '#1a5c2a';
     return `
-    <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_small_blind}, ${t.stakes_big_blind}, '${t.game_type}')">
+    <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_small_blind}, ${t.stakes_big_blind}, '${t.game_type}', ${t.max_players})">
       <div class="table-card-felt" style="background:${feltColor}"></div>
       <div class="table-card-header">
         <div class="table-name">${esc(t.name)}</div>
@@ -463,7 +463,7 @@ function getMinBuyIn(sb, bb, gameType) {
 
 // ─── Join / Create ─────────────────────────────────────────────────────────
 
-function openJoinModal(tableId, sb, bb, gameType) {
+function openJoinModal(tableId, sb, bb, gameType, maxPlayers) {
   const u = getUser();
   const chips = u.chips || (u.isAdmin ? 100000 : 0);
   const minBuyIn = getMinBuyIn(sb, bb, gameType);
@@ -480,6 +480,7 @@ function openJoinModal(tableId, sb, bb, gameType) {
   document.getElementById('join-table-id').value = tableId;
   document.getElementById('join-table-bb').value = bb;
   document.getElementById('join-table-min').value = minBuyIn;
+  document.getElementById('join-seat-number').value = '';
 
   const input = document.getElementById('join-buyin');
   input.value = minBuyIn;
@@ -492,19 +493,56 @@ function openJoinModal(tableId, sb, bb, gameType) {
     `<strong style="color:var(--chip-green)">Min buy-in: $${fmtChips(minBuyIn)}</strong> &nbsp;·&nbsp; Your balance: $${fmtChips(chips)} &nbsp;·&nbsp; Max: $${fmtChips(chips)}`;
 
   openModal('join-table-modal');
+  _loadSeatPicker(tableId, maxPlayers);
+}
+
+async function _loadSeatPicker(tableId, maxPlayers) {
+  const picker = document.getElementById('join-seat-picker');
+  picker.innerHTML = '<span style="color:var(--text-dim);font-size:.8rem">Loading seats…</span>';
+  document.getElementById('join-seat-number').value = '';
+
+  let seats;
+  try {
+    const data = await apiFetch(`/api/tables/${tableId}/seats`);
+    seats = data.seats;
+    if (!maxPlayers) maxPlayers = data.maxPlayers;
+  } catch {
+    picker.innerHTML = '<span style="color:var(--text-dim);font-size:.8rem">Any open seat</span>';
+    return;
+  }
+
+  picker.innerHTML = seats.map(s => {
+    if (s.occupied) {
+      return `<button class="seat-pick-btn taken" disabled title="${esc(s.username || 'Occupied')}"><span class="sp-num">${s.seatNumber}</span><span class="sp-name">${esc((s.username || '').slice(0,6) || '—')}</span></button>`;
+    }
+    return `<button class="seat-pick-btn open" onclick="_selectSeat(${s.seatNumber}, this)" title="Seat ${s.seatNumber} — open"><span class="sp-num">${s.seatNumber}</span><span class="sp-name">Open</span></button>`;
+  }).join('');
+}
+
+function _selectSeat(seatNumber, btn) {
+  document.querySelectorAll('#join-seat-picker .seat-pick-btn.open').forEach(b => b.classList.remove('selected'));
+  const already = document.getElementById('join-seat-number').value;
+  if (parseInt(already) === seatNumber) {
+    document.getElementById('join-seat-number').value = '';
+  } else {
+    btn.classList.add('selected');
+    document.getElementById('join-seat-number').value = seatNumber;
+  }
 }
 
 function joinTable() {
   const tableId = document.getElementById('join-table-id').value;
   const buyIn = parseInt(document.getElementById('join-buyin').value);
   const minBuyIn = parseInt(document.getElementById('join-table-min').value) || 0;
+  const seat = parseInt(document.getElementById('join-seat-number').value) || '';
 
   if (minBuyIn && buyIn < minBuyIn) {
     showToast(`Minimum buy-in for this table is $${fmtChips(minBuyIn)}`, 'error');
     document.getElementById('join-buyin').value = minBuyIn;
     return;
   }
-  window.location.href = `/table.html?tableId=${tableId}&buyIn=${buyIn}`;
+  const seatParam = seat ? `&seat=${seat}` : '';
+  window.location.href = `/table.html?tableId=${tableId}&buyIn=${buyIn}${seatParam}`;
 }
 
 function openCreateTable() {

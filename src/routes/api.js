@@ -3091,6 +3091,30 @@ router.put('/me/password', authMiddleware, async (req, res) => {
   }
 });
 
+// ─── Table Seats (live occupancy for lobby seat picker) ──────────────────────
+
+router.get('/tables/:id/seats', authMiddleware, async (req, res) => {
+  const tableId = req.params.id;
+  const { data: table, error } = await supabaseAdmin
+    .from('tables')
+    .select('max_players')
+    .eq('id', tableId)
+    .single();
+  if (error || !table) return res.status(404).json({ error: 'Table not found' });
+
+  const maxPlayers = table.max_players || 9;
+  const { activeGames } = require('../socket/handlers');
+  const game = activeGames.get(tableId);
+
+  const seats = [];
+  for (let i = 1; i <= maxPlayers; i++) {
+    const userId = game?.seats?.get(i);
+    const player = userId ? game.players.get(userId) : null;
+    seats.push({ seatNumber: i, occupied: !!player, username: player?.username || null });
+  }
+  res.json({ seats, maxPlayers });
+});
+
 // ─── Table Stats (public) ─────────────────────────────────────────────────────
 
 router.get('/tables/:id/stats', authMiddleware, async (req, res) => {

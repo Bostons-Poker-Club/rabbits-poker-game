@@ -246,6 +246,26 @@ input, select, textarea { font-family: inherit; }
 .modal h2 { color: var(--gold); margin-bottom: 20px; font-size: 1.3rem; }
 .modal-footer { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
 
+/* ─── Lobby Seat Picker ──────────────────────────────────────────────────── */
+.seat-pick-btn {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  flex-direction: column;
+  gap: 1px;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.seat-pick-btn.open  { background: rgba(0,180,80,0.15); border-color: #00b450; color: #00e676; }
+.seat-pick-btn.open:hover { background: rgba(0,180,80,0.3); transform: scale(1.1); }
+.seat-pick-btn.open.selected { background: rgba(0,180,80,0.5); box-shadow: 0 0 10px rgba(0,230,118,0.7); transform: scale(1.15); }
+.seat-pick-btn.taken { background: rgba(180,30,30,0.15); border-color: #b03030; color: #ff6b6b; cursor: not-allowed; opacity: 0.6; }
+.seat-pick-btn .sp-num { font-size: 0.85rem; line-height: 1; }
+.seat-pick-btn .sp-name { font-size: 0.5rem; line-height: 1; max-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* ─── Table Page ─────────────────────────────────────────────────────────── */
 .table-page {
   height: 100vh;
@@ -334,7 +354,8 @@ input, select, textarea { font-family: inherit; }
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 5;
+  position: relative;
+  z-index: 15;
 }
 
 .community-cards {
@@ -476,7 +497,7 @@ input, select, textarea { font-family: inherit; }
 .seat-box.sitting-out { border-color: #666; }
 .seat-box.empty { border: 1px dashed rgba(255,255,255,0.2); color: #555; cursor: pointer; }
 .seat-box.empty:hover { border-color: var(--gold); color: var(--gold); }
-.seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; margin-top: 5px; }
+.seat-name { font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px; margin-top: 5px; }
 .seat-chips { font-size: 0.80rem; line-height: 1.4; position: relative; }
 .seat-bet { color: var(--chip-green); font-size: 0.78rem; min-height: 14px; }
 .seat-cards { display: flex; gap: 2px; justify-content: center; margin-top: 2px; }
@@ -1738,7 +1759,7 @@ input, select, textarea { font-family: inherit; }
     min-width: 80px;
   }
   body.table-page .seat-name {
-    max-width: 72px;
+    max-width: 100px;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */

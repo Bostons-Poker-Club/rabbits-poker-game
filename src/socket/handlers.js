@@ -1735,6 +1735,37 @@ function setupSocketHandlers(io) {
       socket.emit('table:stats', { tableId: finalTId, ...getTableStats(finalTId) });
     });
 
+    // ─── Seat Change (seated player moves to a different open seat) ───────
+    socket.on('table:change_seat', async ({ tableId: tId, newSeat }) => {
+      const tid = tId || socket.currentTableId;
+      if (!tid) return;
+      const game = activeGames.get(tid);
+      if (!game) return socket.emit('error', { message: 'Table not found' });
+
+      const player = game.getPlayer(userId);
+      if (!player) return socket.emit('error', { message: 'You are not seated at this table' });
+      if (game.handActive) return socket.emit('error', { message: 'Cannot change seat during a hand' });
+      if (game.seats.has(newSeat)) return socket.emit('error', { message: 'That seat is already taken' });
+
+      try {
+        game.movePlayer(userId, newSeat);
+      } catch (e) {
+        return socket.emit('error', { message: e.message });
+      }
+
+      // Update the persistent seat record
+      try {
+        await supabaseAdmin.from('table_seats').upsert({
+          table_id: tid,
+          user_id: userId,
+          seat_number: newSeat,
+          chips_on_table: player.chips
+        }, { onConflict: 'table_id,user_id' });
+      } catch (_) {}
+
+      broadcastGameState(io, tid, game);
+    });
+
     // ─── Host Table Requests ──────────────────────────────────────────────
 
     socket.on('table:request', ({ tableName, gameType, sb, bb, maxPlayers, rake }) => {

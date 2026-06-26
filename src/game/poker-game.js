@@ -117,6 +117,16 @@ class PokerGame {
     this.players.delete(userId);
   }
 
+  movePlayer(userId, newSeatNumber) {
+    const player = this.players.get(userId);
+    if (!player) throw new Error('Player not found');
+    if (this.seats.has(newSeatNumber)) throw new Error('Seat already taken');
+    if (newSeatNumber < 1 || newSeatNumber > this.maxPlayers) throw new Error('Invalid seat number');
+    this.seats.delete(player.seatNumber);
+    player.seatNumber = newSeatNumber;
+    this.seats.set(newSeatNumber, userId);
+  }
+
   getPlayer(userId) {
     return this.players.get(userId);
   }
