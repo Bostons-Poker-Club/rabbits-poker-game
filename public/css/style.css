@@ -1786,6 +1786,7 @@ input, select, textarea { font-family: inherit; }
   }
   body.table-page .seat-name {
     max-width: 100px;
+    font-size: 0.72rem;
   }
 
   /* Bottom bar: fixed at absolute bottom, always visible */
@@ -2128,7 +2129,8 @@ input, select, textarea { font-family: inherit; }
     min-width: 68px;
   }
   body.table-page .seat-name {
-    max-width: 60px;
+    max-width: 90px;
+    font-size: 0.7rem;
   }
 
   /* Winner popup: move below the oval so it doesn't cover community cards */
