@@ -874,6 +874,17 @@ function setupSocketHandlers(io) {
         game.addPlayer(userId, username, chips, finalSeat);
         console.log('[join_table] Player added — seat:', finalSeat, 'userId:', userId, 'chips:', chips, 'total in game:', game.players?.size ?? '?');
 
+        // Rule: a player joining during an active hand sits out until it ends.
+        // They are visible at the table but will NOT receive cards this hand.
+        if (game.handActive) {
+          const newPlayer = game.getPlayer(userId);
+          if (newPlayer) {
+            newPlayer.isSittingOut = true;
+            newPlayer.joinedMidHand = true;
+            console.log('[join_table] Hand active — player will wait for next hand:', userId);
+          }
+        }
+
         // Write seat record now that finalSeat is known (non-tournament only)
         if (!isTournamentTable) {
           try {
@@ -1066,14 +1077,33 @@ function setupSocketHandlers(io) {
     });
 
     socket.on('return_from_break', ({ tableId }) => {
-      const game = activeGames.get(tableId || socket.currentTableId);
+      const tid = tableId || socket.currentTableId;
+      const game = activeGames.get(tid);
       if (!game) return;
       try {
         const result = game.returnFromBreak(userId);
         socket.emit('break_ended', result);
-        broadcastGameState(io, tableId || socket.currentTableId, game);
+        broadcastGameState(io, tid, game);
+        // If the player must post a blind, keep them sitting out — don't start a hand yet.
+        // The client will show the "Post Blind" prompt; hand starts after they post.
+        if (!result.mustPostBlind && !game.handActive && game.canStartHand()) {
+          setTimeout(() => startNewHand(io, tid, game), 1000);
+        }
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
+    socket.on('table:post_blind', ({ tableId: tId }) => {
+      const tid = tId || socket.currentTableId;
+      const game = activeGames.get(tid);
+      if (!game) return;
+      try {
+        const result = game.postBlind(userId);
+        broadcastGameState(io, tid, game);
+        socket.emit('blind_posted', { amount: result.amount });
         if (!game.handActive && game.canStartHand()) {
-          setTimeout(() => startNewHand(io, tableId || socket.currentTableId, game), 1000);
+          setTimeout(() => startNewHand(io, tid, game), 1000);
         }
       } catch (err) {
         socket.emit('error', { message: err.message });

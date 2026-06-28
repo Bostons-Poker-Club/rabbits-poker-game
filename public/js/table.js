@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260628-v12 | preserve-video-across-dom-rebuild');
+console.log('[table.js] build: 20260628-v13 | mid-hand-join-wait + missed-blind-post');
 
 requireAuth();
 
@@ -509,14 +509,27 @@ function connect() {
     myState = state;
     renderMyCards(state);
     updateActionButtons(state);
-    // Keep break banner in sync with server state — covers page refresh and reconnects
+    // Keep sitting-out banners in sync with server state (covers page refresh / reconnect)
     const me = state.players?.find(p => p.userId === state.myUserId);
     if (me?.isSittingOut) {
       const el = document.getElementById('btn-break');
       if (el) el.textContent = `☕ Break (${me.breakPassesRemaining ?? 0})`;
-      _showBreakReturnBanner();
+      if (me.mustPostBlind) {
+        // Returned from break but must post the big blind before playing
+        _hideBreakReturnBanner();
+        _showPostBlindBanner(state.bigBlind);
+      } else if (!me.joinedMidHand) {
+        // Normal voluntary break — show "I'm Back" button
+        _hidePostBlindBanner();
+        _showBreakReturnBanner();
+      } else {
+        // Joined mid-hand — waiting for hand to end; no action needed from player
+        _hideBreakReturnBanner();
+        _hidePostBlindBanner();
+      }
     } else {
       _hideBreakReturnBanner();
+      _hidePostBlindBanner();
     }
     console.log('[my_state] isMyTurn:', state.isMyTurn, 'seat:', state.currentPlayerSeat, 'handActive:', state.handActive);
   });
@@ -829,9 +842,21 @@ function connect() {
     _showBreakReturnBanner();
   });
 
-  socket.on('break_ended', () => {
-    toast("Welcome back — you're in the next hand!");
-    _hideBreakReturnBanner();
+  socket.on('break_ended', (result) => {
+    if (result?.mustPostBlind) {
+      // Hands were played while away — player must post the big blind before being dealt in
+      _hideBreakReturnBanner();
+      _showPostBlindBanner(result.mustPostAmount);
+    } else {
+      toast("Welcome back — you're in the next hand!");
+      _hideBreakReturnBanner();
+      _hidePostBlindBanner();
+    }
+  });
+
+  socket.on('blind_posted', ({ amount }) => {
+    _hidePostBlindBanner();
+    chatMsg('system', `You posted the $${fmt(amount)} blind to return to play`);
   });
 
   socket.on('kicked', ({ message }) => {
@@ -1369,7 +1394,13 @@ function renderSeats(state) {
             <div class="seat-chips">${player.chips > 0 ? chipStack(player.chips) : '<span style="color:var(--red);font-size:.7rem">0 – Rebuy?</span>'}</div>
             ${player.currentBet ? `<div class="seat-bet">+$${fmt(player.currentBet)}</div>` : ''}
             ${holeCardsHtml ? `<div class="seat-cards">${holeCardsHtml}</div>` : ''}
-            ${player.isSittingOut ? '<div style="color:#888;font-size:.65rem">away</div>' : ''}
+            ${player.mustPostBlind
+              ? '<div style="color:var(--gold);font-size:.6rem">posts blind</div>'
+              : player.joinedMidHand
+                ? '<div style="color:#888;font-size:.6rem">waiting…</div>'
+                : player.isSittingOut
+                  ? '<div style="color:#888;font-size:.65rem">away</div>'
+                  : ''}
             ${player.isAllIn ? '<div style="color:var(--red);font-size:.65rem;font-weight:bold">ALL IN</div>' : ''}
           </div>
         </div>`;
@@ -1615,6 +1646,49 @@ function _showBreakReturnBanner() {
 
 function _hideBreakReturnBanner() {
   document.getElementById('break-return-banner')?.remove();
+}
+
+function _showPostBlindBanner(amount) {
+  if (document.getElementById('post-blind-banner')) return;
+  const el = document.createElement('div');
+  el.id = 'post-blind-banner';
+  el.style.cssText = [
+    'position:fixed',
+    'bottom:110px',
+    'left:50%',
+    'transform:translateX(-50%)',
+    'z-index:9100',
+    'background:#1a2a5a',
+    'color:#fff',
+    'font-size:0.95rem',
+    'font-weight:700',
+    'padding:14px 24px',
+    'border-radius:12px',
+    'box-shadow:0 4px 24px rgba(0,0,0,.6)',
+    'text-align:center',
+    'touch-action:manipulation',
+    'border:2px solid var(--gold)',
+    'white-space:nowrap',
+    'min-width:260px',
+  ].join(';');
+  el.innerHTML = `
+    <div style="margin-bottom:10px;font-size:0.82rem;font-weight:400;color:rgba(255,255,255,.8)">
+      You missed blinds while away
+    </div>
+    <button onclick="postBlindToReturn()"
+      style="background:var(--gold);color:#111;border:none;border-radius:8px;padding:10px 22px;font-size:1rem;font-weight:700;cursor:pointer;touch-action:manipulation;">
+      Post $${fmt(amount)} Blind to Play
+    </button>`;
+  document.body.appendChild(el);
+}
+
+function _hidePostBlindBanner() {
+  document.getElementById('post-blind-banner')?.remove();
+}
+
+function postBlindToReturn() {
+  socket.emit('table:post_blind', { tableId });
+  _hidePostBlindBanner();
 }
 
 function leaveTable() {

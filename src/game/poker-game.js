@@ -102,6 +102,10 @@ class PokerGame {
       isAllIn: false,
       isSittingOut: false,
       breakPassesUsed: 0,
+      breakStartHandNumber: null, // hand# when they went on break (for missed-blind detection)
+      joinedMidHand: false,       // joined while a hand was active; auto-cleared at next hand start
+      mustPostBlind: false,       // returned from break and must post BB before playing
+      pendingBlindPost: 0,        // BB amount staged to post at next hand start
       isConnected: true
     };
 
@@ -156,11 +160,24 @@ class PokerGame {
   // ─── Hand Start ─────────────────────────────────────────────────────────
 
   canStartHand() {
-    const active = this.getActivePlayers();
-    return active.length >= 2;
+    // Count players who are active OR who joined mid-hand and will be auto-unseated
+    // at the start of the next hand (so 2-player games with a mid-hand joiner still start).
+    const count = Array.from(this.players.values()).filter(
+      p => (!p.isSittingOut || p.joinedMidHand) && p.isConnected
+    ).length;
+    return count >= 2;
   }
 
   startHand(handId = null) {
+    // Auto-unsit players who joined while the previous hand was active.
+    // They sat out that hand and are ready to play now.
+    for (const player of this.players.values()) {
+      if (player.joinedMidHand) {
+        player.joinedMidHand = false;
+        player.isSittingOut = false;
+      }
+    }
+
     if (!this.canStartHand()) {
       throw new Error('Not enough players to start hand');
     }
@@ -285,6 +302,29 @@ class PokerGame {
 
     this.currentBet = bbAmount;
     this.minRaise = bbAmount;
+
+    // Handle returning-from-break players who staged a blind post.
+    // If they're naturally in SB/BB this hand, their regular blind satisfies the
+    // requirement — just clear the pending amount. Otherwise post as dead money.
+    for (const player of orderedPlayers) {
+      if (!player.pendingBlindPost) continue;
+      if (player === sbPlayer || player === bbPlayer) {
+        player.pendingBlindPost = 0; // natural blind already covers it
+      } else {
+        const amount = Math.min(player.pendingBlindPost, player.chips);
+        player.chips -= amount;
+        player.totalBetThisHand += amount;
+        this.pot += amount;
+        this.handHistory.push({
+          street: 'preflop',
+          userId: player.userId,
+          username: player.username,
+          action: 'post_blind',
+          amount
+        });
+        player.pendingBlindPost = 0;
+      }
+    }
 
     // First to act preflop is after BB
     const bbIndex = orderedPlayers.indexOf(bbPlayer);
@@ -846,6 +886,7 @@ class PokerGame {
 
     player.isSittingOut = true;
     player.breakPassesUsed++;
+    player.breakStartHandNumber = this.handNumber; // used to detect missed blinds on return
     return { breakPassesRemaining: 3 - player.breakPassesUsed };
   }
 
@@ -854,8 +895,35 @@ class PokerGame {
     if (!player) throw new Error('Player not found');
     if (!player.isSittingOut) throw new Error('Not sitting out');
 
+    // If hands were played while the player was away, they must post the big blind
+    // before being dealt in (standard poker fairness rule: can't skip blinds).
+    const handsMissed = this.handNumber > (player.breakStartHandNumber ?? this.handNumber);
+    if (handsMissed) {
+      player.mustPostBlind = true;
+      // Stay sitting out until they explicitly post via postBlind()
+      return {
+        breakPassesRemaining: 3 - player.breakPassesUsed,
+        mustPostBlind: true,
+        mustPostAmount: this.bigBlind
+      };
+    }
+
     player.isSittingOut = false;
-    return { breakPassesRemaining: 3 - player.breakPassesUsed };
+    return { breakPassesRemaining: 3 - player.breakPassesUsed, mustPostBlind: false };
+  }
+
+  postBlind(userId) {
+    const player = this.players.get(userId);
+    if (!player) throw new Error('Player not found');
+    if (!player.mustPostBlind) throw new Error('No blind post required');
+    if (this.handActive) throw new Error('Cannot post blind during an active hand');
+
+    // Chips are deducted at hand start in _postBlinds (dead-money entry fee).
+    // Here we just stage the amount and return the player to active status.
+    player.pendingBlindPost = this.bigBlind;
+    player.mustPostBlind = false;
+    player.isSittingOut = false;
+    return { amount: this.bigBlind };
   }
 
   // ─── Jackpot ────────────────────────────────────────────────────────────
@@ -883,6 +951,8 @@ class PokerGame {
       breakPassesRemaining: 3 - p.breakPassesUsed,
       isConnected: p.isConnected,
       cardCount: p.holeCards.length,
+      mustPostBlind: p.mustPostBlind,   // must post BB before next hand
+      joinedMidHand: p.joinedMidHand,   // waiting for current hand to end
       // Don't reveal hole cards in public state
       holeCards: p.hasFolded || !this.handActive ? [] : Array(p.holeCards.length).fill({ rank: '?', suit: '?' })
     }));
