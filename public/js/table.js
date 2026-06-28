@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260626-v11 | seat-select+fixes');
+console.log('[table.js] build: 20260628-v12 | preserve-video-across-dom-rebuild');
 
 requireAuth();
 
@@ -1329,6 +1329,14 @@ function renderSeats(state) {
 
   const positions = SEAT_POSITIONS[Math.min(maxPlayers, 9)] || SEAT_POSITIONS[9];
 
+  // Save live video elements before innerHTML wipe — they keep playing without
+  // restarting, which prevents the opacity-0 flash that looked frosted/black.
+  const savedVids = new Map();
+  container.querySelectorAll('.seat-avatar[data-cam-uid]').forEach(av => {
+    const vid = av.querySelector('video');
+    if (vid) savedVids.set(av.dataset.camUid, { vid, hasVideo: av.classList.contains('has-video') });
+  });
+
   // Build a map of seatNumber -> player
   const seatMap = {};
   (state.players || []).forEach(p => { seatMap[p.seatNumber] = p; });
@@ -1377,6 +1385,17 @@ function renderSeats(state) {
   }
 
   container.innerHTML = html;
+
+  // Re-attach preserved video elements — DOM move keeps them playing at current
+  // frame with has-video intact, so there is no opacity flash on game_state refresh.
+  container.querySelectorAll('.seat-avatar[data-cam-uid]').forEach(av => {
+    const saved = savedVids.get(av.dataset.camUid);
+    if (saved) {
+      av.appendChild(saved.vid);
+      if (saved.hasVideo) av.classList.add('has-video');
+    }
+  });
+
   _updateSeatVideos();
 }
 
