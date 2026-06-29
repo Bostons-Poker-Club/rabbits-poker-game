@@ -7,6 +7,8 @@ let jackpotTimerInterval = null;
 let jackpotData = null;
 let inboxMessages = [];
 const INBOX_READ_KEY = 'rp_inbox_read_at';
+let lobbyTables = [];          // all active tables; kept in sync for jackpot re-renders
+let _runningTimerInterval = null; // interval that ticks running-time labels once per minute
 
 // ─── Init ─────────────────────────────────────────────────────────────────
 
@@ -201,6 +203,7 @@ async function loadTables() {
 }
 
 function renderTables(tables) {
+  lobbyTables = tables; // keep in sync so jackpot re-renders can call renderTables(lobbyTables)
   const el = document.getElementById('tables-grid');
   if (!tables.length) {
     el.innerHTML = '<div class="empty-state">No tables open yet. Ask admin to create one.</div>';
@@ -220,6 +223,10 @@ function renderTables(tables) {
 
     const minBuyIn = getMinBuyIn(t.stakes_small_blind, t.stakes_big_blind, t.game_type);
     const feltColor = t.felt_color || '#1a5c2a';
+    const runningTime = t.created_at ? _formatRunningTime(t.created_at) : null;
+    const runningLine = runningTime
+      ? `<div class="table-running-time" data-started-at="${t.created_at}" style="font-size:.75rem;color:var(--text-dim);margin-top:2px">⏱ Running: ${runningTime}</div>`
+      : '';
     return `
     <div class="table-card" onclick="openJoinModal('${t.id}', ${t.stakes_small_blind}, ${t.stakes_big_blind}, '${t.game_type}', ${t.max_players})">
       <div class="table-card-felt" style="background:${feltColor}"></div>
@@ -229,6 +236,7 @@ function renderTables(tables) {
       </div>
       <div class="table-stakes">$${t.stakes_small_blind}/$${t.stakes_big_blind}</div>
       <div class="table-info">Max Players: ${t.max_players}${(user?.isAdmin || user?.isHost) ? ` | Rake: ${t.rake_percent}%` : ''} | Min: $${fmtChips(minBuyIn)}</div>
+      ${runningLine}
       ${jpLine}
       <div id="lobby-stats-${t.id}" class="lobby-table-stats" style="display:none"></div>
       <div class="player-count">${dots} <span style="margin-left:4px">${seated}/${t.max_players} seated</span></div>
@@ -238,6 +246,27 @@ function renderTables(tables) {
 
   // Fetch live stats for each active table (fire-and-forget)
   tables.forEach(t => _fetchTableStats(t.id));
+  _startRunningTimers();
+}
+
+function _formatRunningTime(isoString) {
+  const ms = Date.now() - new Date(isoString).getTime();
+  if (ms < 0) return null;
+  const totalMin = Math.floor(ms / 60000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+}
+
+function _startRunningTimers() {
+  if (_runningTimerInterval) clearInterval(_runningTimerInterval);
+  _runningTimerInterval = setInterval(() => {
+    document.querySelectorAll('.table-running-time[data-started-at]').forEach(el => {
+      const t = _formatRunningTime(el.dataset.startedAt);
+      if (t) el.textContent = `⏱ Running: ${t}`;
+    });
+  }, 60000); // tick every minute
 }
 
 async function _fetchTableStats(tableId) {
@@ -442,7 +471,7 @@ function handleJackpotState(state) {
     }
   }
   // Re-render table cards so per-table jackpot lines stay current
-  if (allTables && allTables.length) renderTables(allTables);
+  if (lobbyTables && lobbyTables.length) renderTables(lobbyTables);
 }
 
 // ─── Buy-In Rules ──────────────────────────────────────────────────────────

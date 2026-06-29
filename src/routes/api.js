@@ -2966,6 +2966,14 @@ router.get('/me/profile', authMiddleware, async (req, res) => {
     amount: t.amount, tableName: t.table_name, handName: t.notes, date: t.created_at
   }));
 
+  // Total buy-ins: sum all cash put into play (initial buy-ins, rebuys, chip-adds)
+  const { data: buyInTxns } = await supabaseAdmin
+    .from('transactions')
+    .select('amount')
+    .eq('user_id', userId)
+    .in('type', ['table_buyin', 'buyin', 'rebuy', 'buy_in']);
+  const totalBuyIns = (buyInTxns || []).reduce((sum, t) => sum + (t.amount || 0), 0);
+
   // Live table stats if at a table
   let liveStats = null;
   try {
@@ -2981,7 +2989,7 @@ router.get('/me/profile', authMiddleware, async (req, res) => {
   res.json({
     ...data,
     is_host: isHost,
-    stats: { handsWon, biggestPot, totalWon },
+    stats: { handsWon, biggestPot, totalWon, totalBuyIns },
     recentSessions,
     liveStats
   });

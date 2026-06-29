@@ -40,7 +40,7 @@
   </div>
 
   <!-- Stats Cards -->
-  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px" id="stats-grid">
+  <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:28px" id="stats-grid">
     <div class="stat-card">
       <div class="stat-value" id="stat-hands">–</div>
       <div class="stat-label">Hands Won</div>
@@ -52,6 +52,10 @@
     <div class="stat-card">
       <div class="stat-value" id="stat-total">–</div>
       <div class="stat-label">Total Won</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" id="stat-buyins">–</div>
+      <div class="stat-label">Total Buy-Ins</div>
     </div>
   </div>
 
@@ -178,6 +182,7 @@ async function loadProfile() {
     document.getElementById('stat-hands').textContent = (s.handsWon || 0).toLocaleString();
     document.getElementById('stat-biggest').textContent = s.biggestPot > 0 ? `$${s.biggestPot.toLocaleString()}` : '–';
     document.getElementById('stat-total').textContent = s.totalWon > 0 ? `$${s.totalWon.toLocaleString()}` : '–';
+    document.getElementById('stat-buyins').textContent = s.totalBuyIns > 0 ? `$${s.totalBuyIns.toLocaleString()}` : '–';
 
     // Edit fields
     document.getElementById('edit-nickname').value = data.nickname || '';
