@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260628-v13 | mid-hand-join-wait + missed-blind-post');
+console.log('[table.js] build: 20260628-v14 | desktop-controls-confirm + reaction-float-fix + admin-cam-overlay-fix');
 
 requireAuth();
 
@@ -270,22 +270,35 @@ function _checkAdminCamStream() {
   const overlayVid = document.getElementById('admin-cam-video');
   if (!overlay || !overlayVid) return;
 
-  for (const [uid, stream] of peerCamStreams) {
-    const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${uid}"]`);
-    if (avatarEl) continue; // has a seat — handled by normal flow
-    const enabled = peerCamEnabled.get(uid);
-    const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
-    if (enabled || hasLiveVideo) {
-      if (overlayVid.srcObject !== stream) {
-        overlayVid.srcObject = stream;
-        overlayVid.play().catch(() => {});
-      }
-      overlay.style.display = 'block';
-      return;
-    }
+  // Only show the admin cam overlay for the explicitly-announced admin camera user.
+  // Previously this showed for ANY unseated user with a live stream, which caused
+  // the "🎰 Admin" box to appear for regular players whose camera streams outlived
+  // their seat (e.g. player left but WebRTC stream was still active).
+  if (!_adminCamUserId) {
+    overlay.style.display = 'none';
+    return;
   }
-  // No unseat'd cam stream active
-  if (!_adminCamUserId) overlay.style.display = 'none';
+
+  // Admin user must not be seated (seated admins are shown in the normal seat avatar)
+  const avatarEl = document.querySelector(`.seat-avatar[data-cam-uid="${_adminCamUserId}"]`);
+  if (avatarEl) {
+    overlay.style.display = 'none';
+    return;
+  }
+
+  const stream = peerCamStreams.get(_adminCamUserId);
+  const enabled = peerCamEnabled.get(_adminCamUserId);
+  const hasLiveVideo = stream && stream.getVideoTracks().some(t => t.readyState === 'live');
+  if (enabled || hasLiveVideo) {
+    if (stream && overlayVid.srcObject !== stream) {
+      overlayVid.srcObject = stream;
+      overlayVid.play().catch(() => {});
+    }
+    overlay.style.display = 'block';
+    return;
+  }
+
+  overlay.style.display = 'none';
 }
 
 // ─── Screen Recording ─────────────────────────────────────────────────────────
@@ -1161,6 +1174,11 @@ function renderHostControls(state) {
   if (!u?.isHost && !u?.isAdmin) {
     panel.style.display = 'none';
     if (hostFab) hostFab.style.display = 'none';
+    // Ensure mic panel + FAB are also hidden for regular players on every game state
+    const micPanel = document.getElementById('mic-controls-panel');
+    const micFab   = document.getElementById('mic-fab-btn');
+    if (micPanel) micPanel.style.display = 'none';
+    if (micFab)   micFab.style.display   = 'none';
     return;
   }
   const src = state || gameState;
@@ -3605,14 +3623,20 @@ function clearChat() {
 }
 
 function _showReactionFloat(fromUser, emoji) {
-  const pot = document.getElementById('pot-amount');
-  if (!pot) return;
   const el = document.createElement('div');
   el.className = 'reaction-float';
   el.textContent = emoji;
-  const rect = pot.getBoundingClientRect();
-  el.style.left = (rect.left + rect.width / 2) + 'px';
-  el.style.top  = rect.top + 'px';
+  // Anchor to pot if visible, fall back to center of screen
+  const pot = document.getElementById('pot-amount');
+  if (pot) {
+    const rect = pot.getBoundingClientRect();
+    el.style.left = (rect.left + rect.width / 2) + 'px';
+    el.style.top  = rect.top + 'px';
+  } else {
+    el.style.left = '50%';
+    el.style.top  = '50%';
+    el.style.transform = 'translateX(-50%)';
+  }
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 2200);
 }
