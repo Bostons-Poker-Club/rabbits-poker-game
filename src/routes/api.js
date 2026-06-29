@@ -1529,14 +1529,12 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
   if (updateErr) return res.status(500).json({ error: updateErr.message });
   _markResetCooldown(id);
   console.log(`[admin reset-password] Temp password set for ${user.username} (${user.email})`);
-  console.log(`[admin reset-password] TEMP PASSWORD FOR ${user.username}: ${tempPassword}`);
 
-  try {
-    await sendPlayerEmail({
-      to: user.email,
-      subject: 'Your password has been reset — Boston Poker Club',
-      text: `Hi ${user.username},\n\nAn admin has reset your password.\n\nTemporary password: ${tempPassword}\n\nType it exactly as shown (all lowercase). Log in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
-      html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+  await sendPlayerEmail({
+    to: user.email,
+    subject: 'Your password has been reset — Boston Poker Club',
+    text: `Hi ${user.username},\n\nAn admin has reset your password.\n\nTemporary password: ${tempPassword}\n\nType it exactly as shown (all lowercase). Log in at rabbsroom.com and you will be prompted to set a new password.\n\n— Boston Poker Club`,
+    html: `<div style="font-family:sans-serif;max-width:480px;margin:0 auto">
         <h2 style="color:#c8a84b">🔑 Password Reset by Admin</h2>
         <p>Hi <strong>${user.username}</strong>,</p>
         <p>An admin has reset your account password.</p>
@@ -1545,10 +1543,8 @@ router.post('/admin/players/:id/reset-password', authMiddleware, adminMiddleware
         <p style="color:#666;font-size:.88rem">Log in at <a href="https://rabbsroom.com" style="color:#1a7a3f">rabbsroom.com</a> and you will be prompted to set a permanent password immediately.</p>
         <p style="color:#999;font-size:.8rem">— Boston Poker Club</p>
       </div>`
-    });
-  } catch (e) {
-    console.error('[admin reset-password] Email error:', e.message);
-  }
+  });
+  console.log(`[admin reset-password] Email dispatched to ${user.email}`);
 
   res.json({ ok: true, email: user.email });
 });
