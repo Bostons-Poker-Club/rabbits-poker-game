@@ -71,7 +71,7 @@ async function runBackup() {
   const token = process.env.GITHUB_GIST_TOKEN;
   if (!token) {
     // !! OPERATOR ACTION REQUIRED !!
-    // This message prints every 6 hours until the token is configured.
+    // This message prints every 1 hour until the token is configured.
     // Backups are currently LOCAL ONLY and will be lost on redeploy.
     console.error('');
     console.error('╔══════════════════════════════════════════════════════════════╗');
@@ -190,9 +190,9 @@ function _pushGist(token, json) {
 function startBackupScheduler() {
   // First backup 3 minutes after boot (let migrations finish)
   setTimeout(() => runBackup().catch(e => console.error('[backup] Unhandled error:', e)), 3 * 60 * 1000);
-  // Then every 6 hours
-  setInterval(() => runBackup().catch(e => console.error('[backup] Unhandled error:', e)), 6 * 60 * 60 * 1000);
-  console.log('[backup] Scheduler started — first run in 3 min, then every 6 h');
+  // Then every 1 hour
+  setInterval(() => runBackup().catch(e => console.error('[backup] Unhandled error:', e)), 1 * 60 * 60 * 1000);
+  console.log('[backup] Scheduler started — first run in 3 min, then every 1 h');
 }
 
 module.exports = { startBackupScheduler, runBackup };
