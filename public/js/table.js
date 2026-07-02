@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260628-v14 | desktop-controls-confirm + reaction-float-fix + admin-cam-overlay-fix');
+console.log('[table.js] build: 20260701-v15 | bet-vs-raise-label + mobile-landscape-cards + showdown-timeout');
 
 requireAuth();
 
@@ -42,6 +42,7 @@ let tableInboxMessages = [];
 // Raise limits — updated each time it becomes the player's turn
 let currentMaxRaise = 0;
 let currentMinRaise = 0;
+let _currentRaiseAction = 'raise'; // 'bet' when no bet on street, 'raise' otherwise
 
 // ─── WebRTC PTT state ──────────────────────────────────────────────────────────
 let micStream = null;           // MediaStream; track.enabled = true/false toggles PTT
@@ -1477,6 +1478,12 @@ function updateActionButtons(state) {
   btnRaise.disabled = !isMyTurn;
   if (btnAllIn) btnAllIn.disabled = !isMyTurn;
 
+  // BET vs RAISE: opening action on a street with no prior bet → BET
+  const isBet = (state.currentBet || 0) === 0;
+  _currentRaiseAction = isBet ? 'bet' : 'raise';
+  const raiseLabelEl = document.getElementById('raise-label');
+  if (raiseLabelEl) raiseLabelEl.textContent = isBet ? 'BET' : 'RAISE';
+
   const allinAmountEl = document.getElementById('allin-amount');
 
   if (isMyTurn) {
@@ -1540,11 +1547,11 @@ function actTouch(action, event) {
   else act(action);
 }
 
-// On mobile, first RAISE tap reveals the slider; second tap submits.
+// On mobile, first BET/RAISE tap reveals the slider; second tap submits.
 function tapRaise(event) {
   if (event) event.preventDefault();
   const rc = document.getElementById('raise-controls');
-  if (!rc) { act('raise'); return; }
+  if (!rc) { act(_currentRaiseAction); return; }
 
   if (!_raiseSliderVisible) {
     _raiseSliderVisible = true;
@@ -1552,7 +1559,7 @@ function tapRaise(event) {
     return;
   }
 
-  // Second tap: submit raise
+  // Second tap: submit
   if (_actTouchLock) return;
   _actTouchLock = true;
   setTimeout(() => { _actTouchLock = false; }, 800);
@@ -1562,30 +1569,30 @@ function tapRaise(event) {
   });
   _raiseSliderVisible = false;
   rc.classList.remove('visible');
-  act('raise');
+  act(_currentRaiseAction);
 }
 
 function act(action) {
   if (!socket) return;
   let amount = undefined;
-  if (action === 'raise') {
+  if (action === 'raise' || action === 'bet') {
     amount = parseInt(document.getElementById('raise-input').value) || 0;
-    if (!amount) return toast('Enter raise amount', 'error');
+    if (!amount) return toast('Enter amount', 'error');
     if (currentMaxRaise > 0 && amount > currentMaxRaise) {
-      return toast(`Maximum raise is $${fmt(currentMaxRaise)}`, 'error');
+      return toast(`Maximum is $${fmt(currentMaxRaise)}`, 'error');
     }
     if (currentMinRaise > 0 && amount < currentMinRaise && amount < currentMaxRaise) {
-      return toast(`Minimum raise is $${fmt(currentMinRaise)}`, 'error');
+      return toast(`Minimum is $${fmt(currentMinRaise)}`, 'error');
     }
   }
   // Immediate local sound — others hear it via player_acted broadcast
   if (window.Sound) {
-    const isAllIn = action === 'raise' && currentMaxRaise > 0 && amount >= currentMaxRaise;
+    const isAllIn = (action === 'raise' || action === 'bet') && currentMaxRaise > 0 && amount >= currentMaxRaise;
     if (isAllIn)          Sound.allIn();
     else if (action === 'fold')  Sound.fold();
     else if (action === 'check') Sound.check();
     else if (action === 'call')  Sound.call();
-    else if (action === 'raise') Sound.raise(amount);
+    else if (action === 'raise' || action === 'bet') Sound.raise(amount);
   }
   socket.emit('player_action', { tableId, action, amount });
 }
@@ -1879,7 +1886,7 @@ function showHandResult(result) {
   }
 
   overlay.classList.remove('hidden');
-  setTimeout(() => overlay.classList.add('hidden'), isSplit ? 6000 : 4000);
+  setTimeout(() => overlay.classList.add('hidden'), isSplit ? 6000 : 5000);
 }
 
 function hideHandResult() {

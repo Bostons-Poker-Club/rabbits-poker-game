@@ -2138,6 +2138,13 @@ input, select, textarea { font-family: inherit; }
     top: auto;
     bottom: 115px;
   }
+
+  /* Hole cards: larger so they're readable in landscape layout */
+  body.table-page .card.large {
+    width: 44px;
+    height: 64px;
+    font-size: 1rem;
+  }
 }
 
 /* ─── Desktop: shrink avatars so side seats don't overlap on standard 700px oval ── */

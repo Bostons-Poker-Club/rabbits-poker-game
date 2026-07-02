@@ -404,8 +404,9 @@ class PokerGame {
       case 'call':
         this._processCall(player);
         break;
+      case 'bet':
       case 'raise':
-        this._processRaise(player, amount);
+        this._processRaise(player, amount, action);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);
@@ -464,7 +465,7 @@ class PokerGame {
     this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: player.isAllIn ? 'all_in' : 'call', amount: callAmount });
   }
 
-  _processRaise(player, totalAmount) {
+  _processRaise(player, totalAmount, actionLabel = 'raise') {
     // totalAmount is the total bet amount (not the raise increment)
     const callAmount = this.currentBet - player.currentBet;
 
@@ -504,7 +505,7 @@ class PokerGame {
       player.isAllIn = true;
       this.allInPlayers.add(player.userId);
     }
-    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: player.isAllIn ? 'all_in' : 'raise', amount: player.currentBet });
+    this.handHistory.push({ street: this.currentStreet, userId: player.userId, username: player.username, action: player.isAllIn ? 'all_in' : actionLabel, amount: player.currentBet });
   }
 
   _bettingComplete() {
