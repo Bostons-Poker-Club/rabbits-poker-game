@@ -705,7 +705,7 @@ function connect() {
       const potEl = document.getElementById('pot-amount');
       const potLabel = potEl?.nextElementSibling; // .pot-label
       if (potEl) {
-        potEl.textContent = `Rake: $${fmt(result.rakeCollected)}`;
+        potEl.textContent = `Donation: $${fmt(result.rakeCollected)}`;
         potEl.style.color = 'var(--red)';
         potEl.style.fontSize = '1rem';
         if (potLabel) potLabel.textContent = '🏦 DEDUCTED';
@@ -723,7 +723,7 @@ function connect() {
     }
 
     if (result.winners?.length) {
-      const rakeTag = _canSeeRake && result.rakeCollected ? ` | Rake: $${fmt(result.rakeCollected)}` : '';
+      const rakeTag = _canSeeRake && result.rakeCollected ? ` | Donation: $${fmt(result.rakeCollected)}` : '';
       if (result.isSplitPot) {
         const names = result.winners.map(w => `${w.username} +$${fmt(w.amount)}`).join(', ');
         chatMsg('system', `🤝 Split Pot: ${names}${rakeTag}`);
@@ -1880,7 +1880,7 @@ function showHandResult(result) {
       footerText = result.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ');
     }
     if (result.rakeCollected && (user?.isAdmin || user?.isHost)) {
-      footerText += (footerText ? '  •  ' : '') + `Rake: $${fmt(result.rakeCollected)}`;
+      footerText += (footerText ? '  •  ' : '') + `Donation: $${fmt(result.rakeCollected)}`;
     }
     rakeEl.textContent = footerText;
   }
@@ -3301,7 +3301,7 @@ function openHandHistory() {
       histHtml += `<div class="hh-pots">${lastHandResult.potBreakdown.map(p => `${p.label}: $${fmt(p.amount)}`).join('  •  ')}</div>`;
     }
     if (lastHandResult.rakeCollected && (user?.isAdmin || user?.isHost)) {
-      histHtml += `<div style="color:rgba(255,255,255,.4);font-size:.75rem;margin-top:4px">Rake: $${fmt(lastHandResult.rakeCollected)}</div>`;
+      histHtml += `<div style="color:rgba(255,255,255,.4);font-size:.75rem;margin-top:4px">Donation: $${fmt(lastHandResult.rakeCollected)}</div>`;
     }
   }
 
