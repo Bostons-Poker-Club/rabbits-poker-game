@@ -622,7 +622,14 @@ class PokerGame {
       const eligiblePlayers = pot.eligiblePlayers;
 
       if (eligiblePlayers.length === 1) {
-        results.push({ winner: eligiblePlayers[0], amount: pot.amount, isMainPot: pot.isMain });
+        const soloPlayer = eligiblePlayers[0];
+        let soloHand = null;
+        try {
+          soloHand = this.gameType === 'plo'
+            ? evaluatePLOHand(soloPlayer.holeCards, this.communityCards)
+            : evaluateBestHand(soloPlayer.holeCards, this.communityCards);
+        } catch (_) {}
+        results.push({ winner: soloPlayer, amount: pot.amount, handResult: soloHand, isMainPot: pot.isMain });
         continue;
       }
 

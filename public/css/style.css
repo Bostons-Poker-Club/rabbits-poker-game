@@ -847,7 +847,7 @@ input, select, textarea { font-family: inherit; }
   max-width: 360px;
 }
 .hand-result-box .winner-name { font-size: 1.5rem; color: var(--gold); font-weight: bold; }
-.hand-result-box .hand-name { color: var(--text-dim); margin: 6px 0; }
+.hand-result-box .hand-name { color: rgba(255,255,255,0.85); font-size: 1rem; margin: 4px 0; letter-spacing: 0.03em; }
 .hand-result-box .won-amount { font-size: 2rem; color: var(--chip-green); font-weight: bold; margin: 8px 0; }
 .hand-result-box .winner-cards { display: flex; gap: 6px; justify-content: center; margin-top: 10px; }
 
@@ -1973,7 +1973,7 @@ input, select, textarea { font-family: inherit; }
     border-radius: 8px;
   }
   body.table-page .hand-result-box .winner-name { font-size: 0.88rem; }
-  body.table-page .hand-result-box .hand-name   { font-size: 0.7rem; margin: 1px 0; }
+  body.table-page .hand-result-box .hand-name   { font-size: 0.82rem; margin: 1px 0; }
   body.table-page .hand-result-box .won-amount  { font-size: 1.05rem; margin: 2px 0; }
   body.table-page .hand-result-box .winner-cards { display: none; }
   body.table-page .hand-result-box #hr-rake     { display: none; }

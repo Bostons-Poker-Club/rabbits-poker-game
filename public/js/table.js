@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260701-v15 | bet-vs-raise-label + mobile-landscape-cards + showdown-timeout');
+console.log('[table.js] build: 20260701-v16 | showdown-seat-cards + hand-name-visible');
 
 requireAuth();
 
@@ -43,6 +43,7 @@ let tableInboxMessages = [];
 let currentMaxRaise = 0;
 let currentMinRaise = 0;
 let _currentRaiseAction = 'raise'; // 'bet' when no bet on street, 'raise' otherwise
+let _showdownRevealCards = null;   // allHoleCards object kept alive during showdown window
 
 // ─── WebRTC PTT state ──────────────────────────────────────────────────────────
 let micStream = null;           // MediaStream; track.enabled = true/false toggles PTT
@@ -510,6 +511,8 @@ function connect() {
     updateHeader(state);
     // Re-apply revealed cards during all-in runout (game_state shows ? face-down)
     if (currentRunoutCards) _revealAllSeatsCards(currentRunoutCards);
+    // Re-apply showdown reveals so game_state re-renders don't wipe them
+    if (_showdownRevealCards) _revealAllSeatsCards(_showdownRevealCards);
     // Keep header chip count in sync with table stack
     const me = state.players?.find(p => p.userId === user.id);
     if (me != null) {
@@ -553,6 +556,7 @@ function connect() {
     if (window.DealerVoice) DealerVoice.onHandStarted({ handNumber, dealerSeat }, gameState);
     _clearShowdownHighlights();
     currentRunoutCards = null;
+    _showdownRevealCards = null;
     if (window.Sound) Sound.newHand();
     chatMsg('system', `Hand #${handNumber} started`);
     hideHandResult();
@@ -689,9 +693,15 @@ function connect() {
     lastHandResult = result;
     _rabbitAvailable = false;
     _hideRabbitButton();
-    // Reveal all hole cards at showdown
-    if (result.allHoleCards) _revealAllSeatsCards(result.allHoleCards);
-    if (result.allHoleCards && !result.folded) _highlightWinners(result.winners);
+    // Reveal all hole cards at showdown — re-applied after each game_state re-render for 5 s
+    if (result.allHoleCards && !result.folded) {
+      _showdownRevealCards = result.allHoleCards;
+      _revealAllSeatsCards(result.allHoleCards, true);
+      _highlightWinners(result.winners);
+      setTimeout(() => { _showdownRevealCards = null; }, 5000);
+    } else if (result.allHoleCards) {
+      _revealAllSeatsCards(result.allHoleCards, true);
+    }
     if (window.Sound) {
       Sound.potSlide();
       const iWon = result.winners?.some(w => w.userId === user.id);
@@ -3229,7 +3239,7 @@ function _clearShowdownHighlights() {
 }
 
 // Show all hole cards on their seat boxes (all-in runout + showdown reveal)
-function _revealAllSeatsCards(allHoleCards) {
+function _revealAllSeatsCards(allHoleCards, appear = false) {
   if (!allHoleCards) return;
   for (const [userId, cards] of Object.entries(allHoleCards)) {
     const seatBox = document.querySelector(`.seat-box[data-user-id="${userId}"]`);
@@ -3240,7 +3250,7 @@ function _revealAllSeatsCards(allHoleCards) {
       cardsEl.className = 'seat-cards';
       seatBox.appendChild(cardsEl);
     }
-    cardsEl.innerHTML = cards.map(c => cardHtml(c)).join('');
+    cardsEl.innerHTML = cards.map(c => cardHtml(c, appear)).join('');
   }
 }
 
