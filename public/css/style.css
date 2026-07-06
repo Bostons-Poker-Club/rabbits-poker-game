@@ -1739,14 +1739,11 @@ input, select, textarea { font-family: inherit; }
     margin: 0;
   }
 
-  /* Oval: width drives sizing; height is derived from aspect-ratio: 2/1 (no explicit
-     height here — setting both width AND height would override aspect-ratio, producing
-     a 3:1+ flat oval in landscape that breaks all SEAT_POSITIONS coordinates).
-     Formula: take the smaller of 90vw or 2× the available poker-area height so the
-     oval always fits vertically (poker-area = 100dvh - 66px header - 110px action bar). */
   body.table-page .poker-table-oval {
-    width: min(90vw, calc((100dvh - 176px) * 2));
-    max-height: calc(100dvh - 176px);
+    width: 90%;
+    height: 90%;
+    max-width: 85vw;
+    max-height: 75dvh;
     margin-top: -35px;
   }
 
@@ -2145,6 +2142,15 @@ input, select, textarea { font-family: inherit; }
     width: 44px;
     height: 64px;
     font-size: 1rem;
+  }
+
+  /* Compact bottom bar so more vertical space goes to the table */
+  body.table-page .my-cards-area {
+    height: 64px;
+    min-height: 64px;
+  }
+  body.table-page .poker-area {
+    bottom: 74px;
   }
 }
 
