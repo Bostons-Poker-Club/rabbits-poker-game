@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260706-v17 | oval-revert + seat1-y93 + landscape-btn-height');
+console.log('[table.js] build: 20260706-v18 | top-seat-positions + chat-toggle');
 
 requireAuth();
 
@@ -21,7 +21,7 @@ let _reconnectTimer = null;
 let _reconnectTapTimer = null;
 let _joinTimeoutId = null;
 let shotClockEnd = 0;
-let chatOpen = false;
+let chatOpen = window.innerWidth > 900; // desktop: panel starts open; mobile: starts closed
 let chatUnread = 0;
 let _raiseSliderVisible = false;
 let prevBets = {};       // seatNumber -> last known currentBet
@@ -128,14 +128,14 @@ const SEAT_POSITIONS = {
   // x/y are % of seats-container (which has inset:-60px desktop / -20px mobile).
   // Seat 1 (bottom centre) is at y:88 so its box clears the community-card area.
   // Top seats sit at y:24-26 to avoid colliding with the 66px mobile header.
-  2:  [{ x:50, y:93 }, { x:50, y:24 }],
-  3:  [{ x:50, y:93 }, { x:18, y:25 }, { x:82, y:25 }],
-  4:  [{ x:50, y:93 }, { x:5,  y:50 }, { x:50, y:24 }, { x:95, y:50 }],
-  5:  [{ x:50, y:93 }, { x:10, y:65 }, { x:22, y:25 }, { x:78, y:25 }, { x:90, y:65 }],
-  6:  [{ x:50, y:93 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:24 }, { x:92, y:27 }, { x:92, y:73 }],
-  7:  [{ x:50, y:93 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:24 }, { x:75, y:24 }, { x:95, y:48 }, { x:90, y:75 }],
-  8:  [{ x:50, y:93 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:26 }, { x:50, y:24 }, { x:85, y:26 }, { x:97, y:50 }, { x:88, y:75 }],
-  9:  [{ x:50, y:93 }, { x:15, y:80 }, { x:3,  y:52 }, { x:10, y:28 }, { x:35, y:24 }, { x:65, y:24 }, { x:90, y:28 }, { x:97, y:52 }, { x:85, y:80 }]
+  2:  [{ x:50, y:93 }, { x:50, y:7 }],
+  3:  [{ x:50, y:93 }, { x:18, y:19 }, { x:82, y:19 }],
+  4:  [{ x:50, y:93 }, { x:5,  y:50 }, { x:50, y:7 }, { x:95, y:50 }],
+  5:  [{ x:50, y:93 }, { x:10, y:65 }, { x:22, y:16 }, { x:78, y:16 }, { x:90, y:65 }],
+  6:  [{ x:50, y:93 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:7 }, { x:92, y:27 }, { x:92, y:73 }],
+  7:  [{ x:50, y:93 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:14 }, { x:75, y:14 }, { x:95, y:48 }, { x:90, y:75 }],
+  8:  [{ x:50, y:93 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:26 }, { x:50, y:7 }, { x:85, y:26 }, { x:97, y:50 }, { x:88, y:75 }],
+  9:  [{ x:50, y:93 }, { x:15, y:80 }, { x:3,  y:52 }, { x:10, y:28 }, { x:35, y:9 }, { x:65, y:9 }, { x:90, y:28 }, { x:97, y:52 }, { x:85, y:80 }]
 };
 
 screen.orientation.lock('landscape-primary').catch(() => {});
@@ -178,6 +178,14 @@ document.addEventListener('click', (e) => {
     toggleChat();
   }
 });
+
+// Sync chat-toggle button and table-main class to initial chatOpen state
+(function initChatState() {
+  const tableMain = document.querySelector('.table-main');
+  if (tableMain) tableMain.classList.toggle('chat-hidden', !chatOpen);
+  const toggleBtn = document.getElementById('chat-toggle');
+  if (toggleBtn) toggleBtn.classList.toggle('active', chatOpen);
+})();
 
 // Initialise sound engine (reads mute preference from localStorage)
 if (window.Sound) Sound.init();
@@ -2081,6 +2089,10 @@ document.getElementById('chat-input').addEventListener('keydown', e => {
 function toggleChat() {
   chatOpen = !chatOpen;
   document.getElementById('chat-panel').classList.toggle('open', chatOpen);
+  const tableMain = document.querySelector('.table-main');
+  if (tableMain) tableMain.classList.toggle('chat-hidden', !chatOpen);
+  const toggleBtn = document.getElementById('chat-toggle');
+  if (toggleBtn) toggleBtn.classList.toggle('active', chatOpen);
   if (chatOpen) {
     chatUnread = 0;
     _updateChatBadge();

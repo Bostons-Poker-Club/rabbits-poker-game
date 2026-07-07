@@ -2163,6 +2163,21 @@ input, select, textarea { font-family: inherit; }
   body.table-page .seat-initials {
     font-size: 1.8rem;
   }
+
+  /* Chat panel toggle: collapse grid column when hidden */
+  .table-main.chat-hidden {
+    grid-template-columns: 1fr;
+  }
+  .table-main.chat-hidden .chat-panel {
+    display: none;
+  }
+}
+
+/* Chat toggle button: highlight when panel is open */
+#chat-toggle.active {
+  background: rgba(212,175,55,0.2);
+  border-color: var(--gold);
+  color: var(--gold);
 }
 
 /* ─── Seat Avatar / Camera ──────────────────────────────────────────────── */
