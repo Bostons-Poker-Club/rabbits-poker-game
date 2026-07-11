@@ -1741,10 +1741,11 @@ input, select, textarea { font-family: inherit; }
 
   body.table-page .poker-table-oval {
     width: 90%;
-    height: 90%;
     max-width: 85vw;
     max-height: 75dvh;
     margin-top: -35px;
+    /* height intentionally omitted: aspect-ratio:2/1 (base CSS) keeps oval
+       landscape-shaped in both portrait and landscape orientations */
   }
 
   /* Seats: tighter inset so top seats don't extend into the header */
