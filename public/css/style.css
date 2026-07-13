@@ -2101,8 +2101,10 @@ input, select, textarea { font-family: inherit; }
  *   3. Tighten seats-container inset to keep seats close to the smaller oval
  */
 @media (max-width: 900px) and (orientation: landscape) {
-  /* Cap oval width at 75vw so seat 8 (x:97%) stays within screen edges */
+  /* Explicit width + aspect-ratio so oval is correctly sized in landscape */
   body.table-page .poker-table-oval {
+    width: 75vw;
+    aspect-ratio: 2/1;
     max-width: 75vw;
   }
 

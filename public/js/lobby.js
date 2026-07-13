@@ -700,7 +700,7 @@ function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
 const PAYMENT_DETAILS = {
   'CashApp $rabbsroom':                   { label: 'CashApp', detail: '$rabbsroom',                    qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://cash.app/$rabbsroom' },
   'Venmo @Roger-Depina':                  { label: 'Venmo',   detail: '@Rabbsroom',                   qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://venmo.com/Rabbsroom' },
-  'Zelle rogerio.depinaslabor@gmail.com': { label: 'Zelle',   detail: 'rogerio.depinaslabor@gmail.com', qr: 'https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=rogerio.depinaslabor@gmail.com' },
+  'Zelle':                                 { label: 'Zelle',   detail: 'Contact Admin' },
   'Cash':                                 { label: 'Cash',    detail: 'in person' }
 };
 
