@@ -139,6 +139,10 @@ const SEAT_POSITIONS = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.documentElement.classList.add('table-page-html');
+  window.addEventListener('pagehide', () => {
+    document.documentElement.classList.remove('table-page-html');
+  });
   try { screen.orientation.lock('landscape-primary').catch(() => {}); } catch (_) {}
 });
 

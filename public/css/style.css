@@ -2632,3 +2632,27 @@ input, select, textarea { font-family: inherit; }
 @media (max-width: 768px) {
   .form-group input { font-size: 16px; }  /* prevents iOS zoom on all mobile */
 }
+
+/* ─── CSS landscape rotation fallback (table page only) ──────────────────────
+   Applies when device is in portrait and orientation lock is unavailable
+   (broken sensor, unsupported browser, non-PWA iOS Safari).
+   html.table-page-html is added by table.js DOMContentLoaded and removed on
+   pagehide, so no other page is affected. */
+@media screen and (max-width: 900px) and (orientation: portrait) {
+  html.table-page-html {
+    transform: rotate(90deg) translateX(0) translateY(-100%);
+    transform-origin: top left;
+    width: 100vh;
+    height: 100vw;
+    position: fixed;
+    top: 0;
+    left: 0;
+    overflow: hidden;
+  }
+
+  html.table-page-html body.table-page {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+}
