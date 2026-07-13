@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260711-v19 | top-seat-y-lower');
+console.log('[table.js] build: 20260713-v20 | orientation-lock-domready + rebuy-guard');
 
 requireAuth();
 
@@ -138,11 +138,13 @@ const SEAT_POSITIONS = {
   9:  [{ x:50, y:93 }, { x:15, y:80 }, { x:3,  y:52 }, { x:10, y:28 }, { x:35, y:13 }, { x:65, y:13 }, { x:90, y:28 }, { x:97, y:52 }, { x:85, y:80 }]
 };
 
-screen.orientation.lock('landscape-primary').catch(() => {});
+document.addEventListener('DOMContentLoaded', () => {
+  try { screen.orientation.lock('landscape-primary').catch(() => {}); } catch (_) {}
+});
 
 function enterTable() {
   function _afterEnter() {
-    screen.orientation.lock('landscape-primary').catch(() => {});
+    try { screen.orientation.lock('landscape-primary').catch(() => {}); } catch (_) {}
     document.getElementById('enter-fullscreen').style.display = 'none';
     setTimeout(() => {
       window.dispatchEvent(new Event('resize'));
@@ -1177,11 +1179,12 @@ function renderTable(state) {
   // Re-pin hole cards on every active-hand game_state so they survive any
   // "Dealing…" wipe from hand_started when direct-socket events were dropped
   if (state.handActive && myState) renderMyCards(myState);
-  // Show rebuy button only when the current user is seated
+  // Show rebuy button only between hands, when seated and chips are below minimum
   const rebuyBtn = document.getElementById('btn-rebuy');
   if (rebuyBtn) {
-    const isSeated = state.players?.some(p => p.userId === user.id);
-    rebuyBtn.style.display = isSeated ? '' : 'none';
+    const me = state.players?.find(p => p.userId === user.id);
+    const needsChips = me && me.chips < _tableMinBuyIn();
+    rebuyBtn.style.display = (me && !state.handActive && needsChips) ? '' : 'none';
   }
 }
 
