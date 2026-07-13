@@ -140,9 +140,16 @@ const SEAT_POSITIONS = {
 
 document.addEventListener('DOMContentLoaded', () => {
   document.documentElement.classList.add('table-page-html');
-  window.addEventListener('pagehide', () => {
-    document.documentElement.classList.remove('table-page-html');
+
+  // Remove landscape-rotation class via every available exit signal so iOS Safari
+  // does not cache the swapped width:100vh layout and bleed it into the next page.
+  const _rmClass = () => document.documentElement.classList.remove('table-page-html');
+  window.addEventListener('pagehide', _rmClass);
+  window.addEventListener('beforeunload', _rmClass);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') _rmClass();
   });
+
   try { screen.orientation.lock('landscape-primary').catch(() => {}); } catch (_) {}
 });
 
