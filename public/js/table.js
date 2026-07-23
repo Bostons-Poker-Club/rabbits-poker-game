@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260713-v20 | orientation-lock-domready + rebuy-guard');
+console.log('[table.js] build: 20260723-v21 | cashout-label');
 
 requireAuth();
 
