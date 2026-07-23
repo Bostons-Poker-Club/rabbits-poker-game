@@ -461,6 +461,20 @@ input, select, textarea { font-family: inherit; }
   to   { transform: rotateY(0) scale(1); opacity: 1; }
 }
 
+/* Community card: shovel/slide from dealer area (top-left of card area) */
+.card-deal { animation: cardDeal 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes cardDeal {
+  from { transform: translate(-70px, -40px) rotate(-15deg) scale(0.65); opacity: 0; }
+  to   { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+}
+
+/* Hole cards: slide down from table center to player's hand */
+.card-deal-hole { animation: cardDealHole 0.4s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+@keyframes cardDealHole {
+  from { transform: translateY(-70px) scale(0.7); opacity: 0; }
+  to   { transform: translateY(0) scale(1); opacity: 1; }
+}
+
 /* ─── Player Seats ───────────────────────────────────────────────────────── */
 .seats-container {
   position: absolute;

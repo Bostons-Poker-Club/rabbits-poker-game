@@ -197,19 +197,25 @@ window.DealerVoice = (() => {
   function onPlayerActed({ action, username, isAllIn, amount }) {
     if (!username) return;
     if (isAllIn) {
-      speak(`${username} is all in`);
+      speak(`${username} is all in`, true);
     } else if (action === 'fold') {
       speak(`${username} folds`);
-    } else if (action === 'raise' && amount) {
+    } else if (action === 'check') {
+      speak(`${username} checks`);
+    } else if (action === 'call') {
+      speak(`${username} calls`);
+    } else if ((action === 'raise' || action === 'bet') && amount) {
+      speak(`${username} raises to ${amount}`);
+    } else if (action === 'raise' || action === 'bet') {
       speak(`${username} raises`);
     }
   }
 
   function onStreetChanged({ street }) {
     switch (street) {
-      case 'flop':  speak('Dealing the flop', true); break;
-      case 'turn':  speak('Turn card', true);        break;
-      case 'river': speak('The river', true);        break;
+      case 'flop':  speak('The flop', true);      break;
+      case 'turn':  speak('The turn', true);      break;
+      case 'river': speak('And the river', true); break;
     }
   }
 

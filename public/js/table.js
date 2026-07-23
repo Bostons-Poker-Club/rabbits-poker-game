@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260723-v22 | seats-outside-oval + cam-autostart');
+console.log('[table.js] build: 20260723-v23 | card-deal-anim + dealer-voice-actions');
 
 requireAuth();
 
@@ -612,7 +612,7 @@ function connect() {
   });
 
   socket.on('player_acted', ({ action, amount, username: actorName, isAllIn }) => {
-    if (window.DealerVoice) DealerVoice.onPlayerActed({ action, username: actorName, isAllIn });
+    if (window.DealerVoice) DealerVoice.onPlayerActed({ action, username: actorName, isAllIn, amount });
     if (!window.Sound) return;
     if (isAllIn) { Sound.allIn(); return; }
     switch (action) {
@@ -1383,10 +1383,24 @@ function renderCommunityCards(cards) {
     el.innerHTML = Array(5).fill('<div class="card placeholder"></div>').join('');
     return;
   }
+  // Capture how many real cards are already rendered before wiping
+  const prevCount = el.querySelectorAll('.card:not(.placeholder,.back)').length;
   const placeholders = Math.max(0, 5 - cards.length);
+  // Render without appear class — deal animation applied below
   el.innerHTML =
-    cards.map(c => cardHtml(c, true)).join('') +
+    cards.map(c => cardHtml(c, false)).join('') +
     Array(placeholders).fill('<div class="card placeholder"></div>').join('');
+  // Animate only cards that are new (beyond prevCount), staggered 130 ms apart
+  if (cards.length > prevCount) {
+    requestAnimationFrame(() => {
+      el.querySelectorAll('.card:not(.placeholder,.back)').forEach((cardEl, i) => {
+        if (i >= prevCount) {
+          cardEl.style.animationDelay = `${(i - prevCount) * 130}ms`;
+          cardEl.classList.add('card-deal');
+        }
+      });
+    });
+  }
 }
 
 function _seatAvatarHtml(player) {
@@ -1490,7 +1504,17 @@ function renderMyCards(state) {
 function renderMyHoleCards(cards) {
   const el = document.getElementById('my-hole-cards');
   if (!cards?.length || cards[0]?.rank === '?') return;
-  el.innerHTML = cards.map(c => cardHtml(c, true, true)).join('');
+  const alreadyShown = el.querySelectorAll('.card:not(.back)').length > 0;
+  el.innerHTML = cards.map(c => cardHtml(c, false, true)).join('');
+  // Animate slide-from-table only on initial deal, not on re-renders
+  if (!alreadyShown) {
+    requestAnimationFrame(() => {
+      el.querySelectorAll('.card').forEach((cardEl, i) => {
+        cardEl.style.animationDelay = `${i * 150}ms`;
+        cardEl.classList.add('card-deal-hole');
+      });
+    });
+  }
 }
 
 function updateActionButtons(state) {
