@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260723-v21 | cashout-label');
+console.log('[table.js] build: 20260723-v22 | seats-outside-oval + cam-autostart');
 
 requireAuth();
 
@@ -128,14 +128,14 @@ const SEAT_POSITIONS = {
   // x/y are % of seats-container (which has inset:-60px desktop / -20px mobile).
   // Seat 1 (bottom centre) is at y:88 so its box clears the community-card area.
   // Top seats sit at y:24-26 to avoid colliding with the 66px mobile header.
-  2:  [{ x:50, y:93 }, { x:50, y:11 }],
-  3:  [{ x:50, y:93 }, { x:18, y:23 }, { x:82, y:23 }],
-  4:  [{ x:50, y:93 }, { x:5,  y:50 }, { x:50, y:11 }, { x:95, y:50 }],
-  5:  [{ x:50, y:93 }, { x:10, y:65 }, { x:22, y:20 }, { x:78, y:20 }, { x:90, y:65 }],
-  6:  [{ x:50, y:93 }, { x:8,  y:73 }, { x:8,  y:27 }, { x:50, y:11 }, { x:92, y:27 }, { x:92, y:73 }],
-  7:  [{ x:50, y:93 }, { x:10, y:75 }, { x:5,  y:48 }, { x:25, y:18 }, { x:75, y:18 }, { x:95, y:48 }, { x:90, y:75 }],
-  8:  [{ x:50, y:93 }, { x:12, y:75 }, { x:3,  y:50 }, { x:15, y:26 }, { x:50, y:11 }, { x:85, y:26 }, { x:97, y:50 }, { x:88, y:75 }],
-  9:  [{ x:50, y:93 }, { x:15, y:80 }, { x:3,  y:52 }, { x:10, y:28 }, { x:35, y:13 }, { x:65, y:13 }, { x:90, y:28 }, { x:97, y:52 }, { x:85, y:80 }]
+  2:  [{ x:50, y:93 }, { x:50, y:8  }],
+  3:  [{ x:50, y:93 }, { x:16, y:21 }, { x:84, y:21 }],
+  4:  [{ x:50, y:93 }, { x:4,  y:50 }, { x:50, y:8  }, { x:96, y:50 }],
+  5:  [{ x:50, y:93 }, { x:9,  y:65 }, { x:19, y:16 }, { x:81, y:16 }, { x:91, y:65 }],
+  6:  [{ x:50, y:93 }, { x:6,  y:74 }, { x:6,  y:26 }, { x:50, y:8  }, { x:94, y:26 }, { x:94, y:74 }],
+  7:  [{ x:50, y:93 }, { x:8,  y:76 }, { x:3,  y:48 }, { x:21, y:14 }, { x:79, y:14 }, { x:97, y:48 }, { x:92, y:76 }],
+  8:  [{ x:50, y:93 }, { x:10, y:76 }, { x:2,  y:50 }, { x:13, y:24 }, { x:50, y:8  }, { x:87, y:24 }, { x:98, y:50 }, { x:90, y:76 }],
+  9:  [{ x:50, y:93 }, { x:13, y:81 }, { x:2,  y:52 }, { x:8,  y:27 }, { x:31, y:9  }, { x:69, y:9  }, { x:92, y:27 }, { x:98, y:52 }, { x:87, y:81 }]
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -2417,28 +2417,9 @@ function _expandCamVideo(vid, userId) {
 
 function _showCamPrompt() {
   if (camStream) return;
-  if (localStorage.getItem('rp_cam_opt_in') === '1') { _camEnable(); return; }
-  // Persisted skip: localStorage so the choice survives browser restart
-  if (localStorage.getItem('rp_cam_skip') === '1') return;
-  if (document.getElementById('cam-prompt-banner')) return;
-
-  // Non-blocking banner at the bottom — never covers the table
-  const banner = document.createElement('div');
-  banner.id = 'cam-prompt-banner';
-  banner.style.cssText = [
-    'position:fixed;bottom:80px;left:50%;transform:translateX(-50%)',
-    'z-index:8000;background:rgba(10,20,14,.96);border:1px solid rgba(200,168,75,.4)',
-    'border-radius:12px;padding:12px 18px;display:flex;align-items:center',
-    'gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.6);max-width:92vw;font-size:.88rem'
-  ].join(';');
-  banner.innerHTML = `
-    <span style="color:var(--text-dim)">📷 Share your camera?</span>
-    <button class="btn btn-sm btn-outline" onclick="_camPromptSkip()" style="font-size:.78rem;padding:4px 10px">Not now</button>
-    <button class="btn btn-sm btn-gold"    onclick="_camPromptEnable()" style="font-size:.78rem;padding:4px 10px">Enable</button>`;
-  document.body.appendChild(banner);
-
-  // Auto-dismiss after 8s if the player doesn't respond
-  setTimeout(() => _camPromptSkip(false), 8000);
+  // Auto-start camera on join. Browser permission dialog fires if not yet granted.
+  // _camEnable() handles NotAllowedError with a toast — no prompt banner needed.
+  _camEnable();
 }
 
 function _camPromptSkip(persist = true) {

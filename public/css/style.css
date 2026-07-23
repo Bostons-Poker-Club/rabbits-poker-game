@@ -1748,9 +1748,11 @@ input, select, textarea { font-family: inherit; }
        landscape-shaped in both portrait and landscape orientations */
   }
 
-  /* Seats: tighter inset so top seats don't extend into the header */
+  /* Seats: inset gives clearance outside the oval for seat avatars.
+     -35px means SC extends 35px beyond oval on each side — enough for
+     a 52px avatar center to clear the oval border on all positions. */
   body.table-page #seats-container {
-    inset: -20px;
+    inset: -35px;
   }
 
   /* Occupied seats: strip the rectangular panel — avatar floats on felt */
@@ -2108,9 +2110,9 @@ input, select, textarea { font-family: inherit; }
     max-width: 75vw;
   }
 
-  /* Match inset to main block so seats don't overshoot the smaller oval */
+  /* Match inset to main mobile block */
   body.table-page #seats-container {
-    inset: -20px;
+    inset: -35px;
   }
 
   body.table-page .seat-avatar {
