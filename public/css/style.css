@@ -2672,3 +2672,207 @@ input, select, textarea { font-family: inherit; }
     overflow: hidden;
   }
 }
+
+/* ─── Mobile Casino Visual Polish ────────────────────────────────────────────
+ * All rules scoped to body.table-page inside (max-width: 900px) media queries.
+ * Desktop (≥901px) is completely unaffected.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* Pulsing gold ring for active player — declared at global scope for broad browser compat */
+@keyframes mobileActiveSeatGlow {
+  from { box-shadow: 0 0 0 2px rgba(245,208,96,0.35), 0 0 8px rgba(245,208,96,0.55); }
+  to   { box-shadow: 0 0 0 4px rgba(245,208,96,0.82), 0 0 26px rgba(245,208,96,1); }
+}
+
+@media (max-width: 900px) {
+
+  /* ── 1. Page background ── */
+  body.table-page {
+    background: #071510;
+  }
+
+  /* ── 2. Poker table felt — casino texture + wood rail ── */
+  body.table-page .poker-table-oval {
+    background: radial-gradient(ellipse at 50% 44%,
+      #2f8048 0%,
+      #1d5c33 38%,
+      #0d3820 72%,
+      #071c0e 100%
+    );
+    border: 10px solid #3d1f0a;
+    box-shadow:
+      0 0 0 2px #7a4a18,
+      inset 0 0 0 3px rgba(255,255,255,0.04),
+      inset 0 6px 32px rgba(0,0,0,0.52),
+      0 12px 52px rgba(0,0,0,0.88);
+  }
+
+  /* ── 3. Pot display — prominent gold pill ── */
+  body.table-page .pot-display {
+    background: rgba(0,0,0,0.48);
+    border: 1px solid rgba(212,175,55,0.42);
+    border-radius: 14px;
+    padding: 2px 11px 3px;
+    margin-top: 2px;
+  }
+  body.table-page .pot-display::before {
+    content: 'POT';
+    display: block;
+    font-size: 0.5rem;
+    letter-spacing: 0.12em;
+    color: rgba(255,255,255,0.42);
+    font-weight: 700;
+    text-align: center;
+    line-height: 1;
+    margin-bottom: 1px;
+  }
+  body.table-page .pot-display .pot-amount {
+    font-size: 0.95rem;
+    font-weight: 900;
+    color: #f5d060;
+    text-shadow: 0 0 10px rgba(212,175,55,0.65), 0 1px 3px rgba(0,0,0,1);
+    letter-spacing: 0.03em;
+  }
+
+  /* ── 4. Community cards — crisp drop shadow ── */
+  body.table-page .community-cards .card {
+    box-shadow: 2px 3px 10px rgba(0,0,0,0.82), 0 0 0 1px rgba(0,0,0,0.1);
+    border-radius: 5px;
+  }
+
+  /* ── 5. Hole cards — larger in portrait, stacked overlap ── */
+  body.table-page .card.large {
+    width: 40px;
+    height: 58px;
+    font-size: 0.78rem;
+    box-shadow: 2px 4px 14px rgba(0,0,0,0.88);
+  }
+  body.table-page .my-hole-cards {
+    gap: 0;
+  }
+  body.table-page .my-hole-cards .card {
+    box-shadow: 3px 4px 14px rgba(0,0,0,0.88);
+  }
+  body.table-page .my-hole-cards .card:not(:first-child) {
+    margin-left: -8px;
+    box-shadow: -2px 0 4px rgba(0,0,0,0.55), 3px 4px 14px rgba(0,0,0,0.88);
+  }
+
+  /* ── 6. Active player — pulsing gold ring on avatar ── */
+  body.table-page .seat-box.active-player .seat-avatar {
+    border-color: #f5d060;
+    border-width: 3px;
+    animation: mobileActiveSeatGlow 1s ease-in-out infinite alternate;
+  }
+
+  /* ── 7. Folded — dimmed + slight desaturate ── */
+  body.table-page .seat-box.folded {
+    opacity: 0.34;
+    filter: grayscale(0.35);
+  }
+
+  /* ── 8. Empty seat — faint dashed circle, low distraction ── */
+  body.table-page .seat-box.empty {
+    background: rgba(255,255,255,0.03);
+    border: 2px dashed rgba(255,255,255,0.18);
+    border-radius: 50%;
+    width: 52px;
+    height: 52px;
+    min-width: 52px;
+    padding: 0;
+    opacity: 0.52;
+    font-size: 0.45rem;
+    color: rgba(255,255,255,0.48);
+    overflow: hidden;
+    line-height: 1.3;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  body.table-page .seat-box.empty:hover,
+  body.table-page .seat-box.empty:active {
+    border-color: rgba(212,175,55,0.65);
+    opacity: 0.88;
+    background: rgba(212,175,55,0.06);
+    color: var(--gold);
+  }
+
+  /* ── 9. Seat name + chips — sharp white text on green felt ── */
+  body.table-page .seat-name {
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 5px rgba(0,0,0,1), 0 0 10px rgba(0,0,0,0.95);
+  }
+  body.table-page .seat-bet {
+    font-size: 0.72rem;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.92);
+  }
+
+  /* ── 10. Action buttons — casino colors + 3D press effect ── */
+  body.table-page .action-btn {
+    border-radius: 10px;
+    font-weight: 900;
+    letter-spacing: 0.04em;
+  }
+  body.table-page .action-btn:active:not(:disabled) {
+    transform: scale(0.91) translateY(2px);
+    filter: brightness(0.8);
+    box-shadow: none !important;
+  }
+
+  /* FOLD — deep red */
+  body.table-page .btn-fold {
+    background: linear-gradient(170deg, #e03030, #9e1010);
+    box-shadow: 0 4px 0 #680a0a, 0 4px 12px rgba(220,50,50,0.38);
+  }
+  /* CHECK — steel blue */
+  body.table-page .btn-check {
+    background: linear-gradient(170deg, #2980b9, #1a5e8e);
+    color: #fff;
+    box-shadow: 0 4px 0 #0f3a5c, 0 4px 12px rgba(41,128,185,0.36);
+  }
+  /* CALL — rich green */
+  body.table-page .btn-call {
+    background: linear-gradient(170deg, #27ae60, #187a3e);
+    box-shadow: 0 4px 0 #0c4824, 0 4px 12px rgba(39,174,96,0.36);
+  }
+  /* BET / RAISE — gold, dark text */
+  body.table-page .btn-raise {
+    background: linear-gradient(170deg, #e9a20a, #c07c04);
+    color: #1a0800;
+    box-shadow: 0 4px 0 #7a5000, 0 4px 12px rgba(233,162,10,0.38);
+  }
+  /* ALL IN — deep purple */
+  body.table-page .btn-allin {
+    background: linear-gradient(170deg, #9b59b6, #7d3c98);
+    color: #fff;
+    box-shadow: 0 4px 0 #4e1f72, 0 4px 12px rgba(155,89,182,0.38);
+  }
+
+  /* ── 11. Header — crisp dark bar ── */
+  body.table-page .table-header {
+    background: rgba(0,0,0,0.96);
+    border-bottom: 1px solid rgba(212,175,55,0.22);
+  }
+
+  /* ── 12. Bottom action bar — premium dark ── */
+  body.table-page .my-cards-area {
+    background: rgba(4,8,5,0.98);
+    border-top: 1px solid rgba(212,175,55,0.26);
+  }
+}
+
+/* Restore landscape hole card size after portrait override above */
+@media (max-width: 900px) and (orientation: landscape) {
+  body.table-page .card.large {
+    width: 44px;
+    height: 64px;
+    font-size: 1rem;
+  }
+  body.table-page .my-hole-cards .card:not(:first-child) {
+    margin-left: -10px;
+  }
+}
