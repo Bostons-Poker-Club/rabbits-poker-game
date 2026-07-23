@@ -152,7 +152,7 @@ function hostMiddleware(req, res, next) {
 // ─── Auth Routes ────────────────────────────────────────────────────────────
 
 router.post('/auth/register', async (req, res) => {
-  const { username, email, password, full_name, nickname, phone } = req.body;
+  const { username, email, password, full_name, nickname, phone, ref } = req.body;
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Username, email and password are required' });
   }
@@ -202,6 +202,28 @@ router.post('/auth/register', async (req, res) => {
 
   // Force chips to 0 regardless of DB default — belt-and-suspenders
   await supabaseAdmin.from('users').update({ chips: 0 }).eq('id', data.id);
+
+  // Handle referral bonus — $5 chips to both parties if ref is a valid UUID
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (ref && UUID_RE.test(ref) && ref !== data.id) {
+    try {
+      const { data: referrer } = await supabaseAdmin.from('users').select('id, username, chips').eq('id', ref).single();
+      if (referrer) {
+        const BONUS = 5;
+        await supabaseAdmin.from('users').update({ chips: referrer.chips + BONUS }).eq('id', referrer.id);
+        await supabaseAdmin.from('users').update({ chips: BONUS, referred_by: referrer.id }).eq('id', data.id);
+        try { logTransaction({ userId: referrer.id, username: referrer.username, type: 'referral_bonus', amount: BONUS, tableName: 'signup', notes: `Referred ${username}` }); } catch {}
+        try { logTransaction({ userId: data.id, username, type: 'referral_bonus', amount: BONUS, tableName: 'signup', notes: `Referred by ${referrer.username}` }); } catch {}
+        try {
+          appEvents.emit('admin:notif', {
+            type: 'referral',
+            title: 'Referral Bonus',
+            body: `${username} signed up via ${referrer.username}'s referral link. Both received $${BONUS} chips.`
+          });
+        } catch {}
+      }
+    } catch {}
+  }
 
   const token = jwt.sign({ id: data.id, username: data.username, isAdmin: data.is_admin }, JWT_SECRET, { expiresIn: '7d' });
   appEvents.emit('player:registered', { userId: data.id, username: data.username, nickname: nickname || null, phone: phone || null });
@@ -2989,6 +3011,16 @@ router.get('/me/profile', authMiddleware, async (req, res) => {
     recentSessions,
     liveStats
   });
+});
+
+router.get('/me/referrals', authMiddleware, async (req, res) => {
+  const userId = req.user.id;
+  const { data, count } = await supabaseAdmin
+    .from('users')
+    .select('id, username, created_at', { count: 'exact' })
+    .eq('referred_by', userId)
+    .order('created_at', { ascending: false });
+  res.json({ referrals: data || [], count: count || 0 });
 });
 
 router.put('/me/profile', authMiddleware, async (req, res) => {

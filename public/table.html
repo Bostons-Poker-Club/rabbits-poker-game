@@ -206,6 +206,7 @@
     <button id="btn-hand-rankings" class="btn btn-sm btn-outline" onclick="openHandRankings()" title="Hand rankings" style="font-size:.75rem;padding:4px 8px">🃏</button>
     <button id="btn-hand-history" class="btn btn-sm btn-outline" onclick="openHandHistory()" title="Last hand history" style="font-size:.75rem;padding:4px 8px">📋</button>
     <button id="btn-rebuy" class="btn btn-sm btn-gold" onclick="openRebuyModal()" style="display:none;margin-left:auto">+ Rebuy</button>
+    <button id="btn-tip" class="btn btn-sm btn-outline" onclick="openTipModal()" style="display:none" title="Tip the dealer/host">💰 Tip</button>
     <button id="action-leave-btn" class="btn btn-sm btn-outline" onclick="leaveTable()">Cash Out</button>
   </div>
 </div>
@@ -314,6 +315,31 @@
     <div class="modal-footer" style="justify-content:flex-end;gap:10px">
       <button class="btn btn-outline" onclick="closeModal('rebuy-modal')">Cancel</button>
       <button class="btn btn-gold" onclick="submitRebuy()">Request Rebuy</button>
+    </div>
+  </div>
+</div>
+
+<!-- Tip Modal -->
+<div class="modal-overlay hidden" id="tip-modal">
+  <div class="modal" style="max-width:340px">
+    <h2 style="color:var(--gold);margin-bottom:4px">💰 Tip the Dealer</h2>
+    <p style="color:var(--text-dim);font-size:.85rem;margin-bottom:18px">Chips go directly to the host. Tips are voluntary.</p>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+      <button class="btn btn-outline tip-preset" onclick="selectTip(1)">$1</button>
+      <button class="btn btn-outline tip-preset" onclick="selectTip(2)">$2</button>
+      <button class="btn btn-outline tip-preset" onclick="selectTip(5)">$5</button>
+      <button class="btn btn-outline tip-preset" onclick="selectTip(10)">$10</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:18px">
+      <label style="color:var(--text-dim);font-size:.85rem;white-space:nowrap">Custom:</label>
+      <input type="number" id="tip-custom-input" inputmode="numeric" min="1" max="500" placeholder="amount"
+        style="flex:1;padding:8px;background:rgba(255,255,255,.08);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:.95rem"
+        oninput="selectTipCustom(this.value)">
+    </div>
+    <div id="tip-selected-display" style="text-align:center;font-size:1.1rem;font-weight:700;color:var(--gold);min-height:1.4em;margin-bottom:16px"></div>
+    <div class="modal-footer" style="justify-content:flex-end;gap:10px">
+      <button class="btn btn-outline" onclick="closeModal('tip-modal')">Cancel</button>
+      <button class="btn btn-gold" id="btn-confirm-tip" onclick="confirmTip()" disabled>Send Tip</button>
     </div>
   </div>
 </div>

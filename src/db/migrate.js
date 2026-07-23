@@ -301,6 +301,9 @@ async function runMigrations() {
       )
     `);
 
+    // Add referral tracking column (idempotent)
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by UUID REFERENCES users(id) ON DELETE SET NULL`);
+
     // Seed admin account on first run
     await client.query(`
       INSERT INTO users (username, email, password_hash, chips, is_admin)

@@ -126,6 +126,17 @@
     </div>
   </div>
 
+  <!-- Referral -->
+  <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:24px">
+    <h3 style="color:var(--gold);margin:0 0 6px;font-size:1rem">🎁 Refer a Friend</h3>
+    <p style="color:var(--text-dim);font-size:.82rem;margin:0 0 14px">Share your link — you both get <strong style="color:var(--gold)">$5 free chips</strong> when they sign up.</p>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="referral-link" readonly class="form-input" style="flex:1;font-size:.8rem;color:var(--text-dim)" value="Loading…">
+      <button class="btn btn-outline" style="white-space:nowrap;padding:8px 14px;font-size:.82rem" onclick="copyReferralLink()">Copy</button>
+    </div>
+    <div id="referral-count" style="margin-top:10px;font-size:.82rem;color:var(--text-dim)">Loading referral stats…</div>
+  </div>
+
   <!-- Recent Sessions -->
   <div style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:var(--radius);padding:20px">
     <h3 style="color:var(--gold);margin:0 0 14px;font-size:1rem">📋 Recent Wins</h3>
@@ -344,7 +355,41 @@ function logout() {
   location.href = '/index.html';
 }
 
+async function loadReferrals() {
+  const linkEl = document.getElementById('referral-link');
+  const countEl = document.getElementById('referral-count');
+  if (linkEl) {
+    const base = `${location.protocol}//${location.host}/index.html`;
+    linkEl.value = `${base}?ref=${user.id}`;
+  }
+  try {
+    const res = await fetch('/api/me/referrals', {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await res.json();
+    if (countEl) {
+      const n = data.count || 0;
+      countEl.textContent = n === 0
+        ? 'No referrals yet — share your link to earn chips!'
+        : `${n} player${n === 1 ? '' : 's'} referred · $${n * 5} chips earned`;
+    }
+  } catch {
+    if (countEl) countEl.textContent = '';
+  }
+}
+
+function copyReferralLink() {
+  const inp = document.getElementById('referral-link');
+  if (!inp) return;
+  navigator.clipboard?.writeText(inp.value).then(() => {
+    inp.select();
+    const btn = inp.nextElementSibling;
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2000); }
+  }).catch(() => { inp.select(); document.execCommand('copy'); });
+}
+
 loadProfile();
+loadReferrals();
 </script>
 
 <script src="/js/maintenance-banner.js"></script>

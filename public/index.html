@@ -556,12 +556,14 @@
 
     try {
       console.log('[doRegister] fetching /api/auth/register');
+      var refParam = new URLSearchParams(location.search).get('ref') || null;
       var res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username: username, email: email, password: password,
-          nickname: nickname, phone: phone, full_name: firstName + ' ' + lastName
+          nickname: nickname, phone: phone, full_name: firstName + ' ' + lastName,
+          ref: refParam
         })
       });
       var data = await res.json();

@@ -1592,6 +1592,45 @@ function setupSocketHandlers(io) {
       ).catch(() => {});
     });
 
+    // ─── Tip ──────────────────────────────────────────────────────────────
+
+    socket.on('table:tip', async ({ tableId: tId, amount }) => {
+      const tIdFinal = tId || socket.currentTableId;
+      const game = tIdFinal ? activeGames.get(tIdFinal) : null;
+      const player = game?.getPlayer(userId);
+      if (!player) return socket.emit('error', { message: 'Not seated at table' });
+      if (game.handActive) return socket.emit('error', { message: 'Cannot tip during a hand' });
+
+      const tipAmount = Math.floor(Number(amount));
+      if (!tipAmount || tipAmount < 1 || tipAmount > 500) return socket.emit('error', { message: 'Invalid tip amount' });
+      if (player.chips < tipAmount) return socket.emit('error', { message: 'Not enough chips' });
+
+      const tableName = game.tableName || tIdFinal || 'unknown';
+
+      // Deduct from player in game
+      player.chips -= tipAmount;
+
+      // Credit to DB bank (admin/house chips)
+      try {
+        const { data: adminUser } = await supabaseAdmin.from('users').select('id, chips').eq('is_admin', true).order('created_at').limit(1).single();
+        if (adminUser) {
+          await supabaseAdmin.from('users').update({ chips: adminUser.chips + tipAmount }).eq('id', adminUser.id);
+        }
+        logTransaction({ userId, username, type: 'tip', amount: tipAmount, tableName, paymentMethod: 'chips', notes: `Tip from ${username}` });
+      } catch {}
+
+      broadcastGameState(io, tIdFinal, game);
+      socket.emit('tip_confirmed', { amount: tipAmount });
+      io.to(tIdFinal).emit('chat', { username: 'system', message: `💰 ${username} tipped $${tipAmount.toLocaleString()} 🙏` });
+
+      pushAdminNotif(io, {
+        type: 'tip',
+        title: 'Player Tip',
+        body: `${username} tipped $${tipAmount.toLocaleString()} at ${tableName}`,
+        data: { userId, username, amount: tipAmount, tableId: tIdFinal, tableName }
+      });
+    });
+
     // ─── Rail / Waiting Room ──────────────────────────────────────────────
 
     socket.on('rail:join', async ({ buyin }) => {

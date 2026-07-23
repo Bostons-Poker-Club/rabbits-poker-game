@@ -1,5 +1,5 @@
 'use strict';
-console.log('[table.js] build: 20260723-v23 | card-deal-anim + dealer-voice-actions');
+console.log('[table.js] build: 20260723-v24 | tip-button + referral-system');
 
 requireAuth();
 
@@ -769,6 +769,10 @@ function connect() {
     setTimeout(() => window.location.href = '/lobby.html', 1500);
   });
 
+  socket.on('tip_confirmed', ({ amount }) => {
+    toast(`💰 Tip of $${fmt(amount)} sent — thank you!`);
+  });
+
   // ─── Money Puck ───────────────────────────────────────────────────────────
 
   socket.on('puck:state', (state) => {
@@ -1191,11 +1195,16 @@ function renderTable(state) {
   // "Dealing…" wipe from hand_started when direct-socket events were dropped
   if (state.handActive && myState) renderMyCards(myState);
   // Show rebuy button only between hands, when seated and chips are below minimum
+  const me = state.players?.find(p => p.userId === user.id);
   const rebuyBtn = document.getElementById('btn-rebuy');
   if (rebuyBtn) {
-    const me = state.players?.find(p => p.userId === user.id);
     const needsChips = me && me.chips < _tableMinBuyIn();
     rebuyBtn.style.display = (me && !state.handActive && needsChips) ? '' : 'none';
+  }
+  // Show tip button between hands when seated
+  const tipBtn = document.getElementById('btn-tip');
+  if (tipBtn) {
+    tipBtn.style.display = (me && !state.handActive) ? '' : 'none';
   }
 }
 
@@ -1866,6 +1875,56 @@ async function submitRebuy() {
   } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Request Rebuy'; }
   }
+}
+
+// ─── Tip ──────────────────────────────────────────────────────────────────
+
+let _tipAmount = 0;
+
+function openTipModal() {
+  _tipAmount = 0;
+  document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('selected'));
+  const inp = document.getElementById('tip-custom-input');
+  if (inp) inp.value = '';
+  const disp = document.getElementById('tip-selected-display');
+  if (disp) disp.textContent = '';
+  const confirmBtn = document.getElementById('btn-confirm-tip');
+  if (confirmBtn) confirmBtn.disabled = true;
+  openModal('tip-modal');
+}
+
+function selectTip(amount) {
+  _tipAmount = amount;
+  document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('selected'));
+  const inp = document.getElementById('tip-custom-input');
+  if (inp) inp.value = '';
+  event?.currentTarget?.classList?.add('selected');
+  document.querySelectorAll('.tip-preset').forEach(b => {
+    if (parseInt(b.textContent.replace('$', '')) === amount) b.classList.add('selected');
+  });
+  const disp = document.getElementById('tip-selected-display');
+  if (disp) disp.textContent = `Tipping $${amount}`;
+  const confirmBtn = document.getElementById('btn-confirm-tip');
+  if (confirmBtn) confirmBtn.disabled = false;
+}
+
+function selectTipCustom(val) {
+  const amount = Math.floor(parseFloat(val) || 0);
+  _tipAmount = (amount >= 1 && amount <= 500) ? amount : 0;
+  document.querySelectorAll('.tip-preset').forEach(b => b.classList.remove('selected'));
+  const disp = document.getElementById('tip-selected-display');
+  if (disp) disp.textContent = _tipAmount > 0 ? `Tipping $${_tipAmount}` : '';
+  const confirmBtn = document.getElementById('btn-confirm-tip');
+  if (confirmBtn) confirmBtn.disabled = _tipAmount < 1;
+}
+
+async function confirmTip() {
+  if (!_tipAmount || _tipAmount < 1) return;
+  const confirmBtn = document.getElementById('btn-confirm-tip');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Sending…'; }
+  socket.emit('table:tip', { tableId, amount: _tipAmount });
+  closeModal('tip-modal');
+  if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Send Tip'; }
 }
 
 // ─── Shot Clock ───────────────────────────────────────────────────────────
